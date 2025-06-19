@@ -39,7 +39,7 @@ button:disabled {
     display: flex; /* La classe .view--active MOSTRA la vista come contenitore flex */
 }
 
-/* Vista Calendario */
+/* Vista Calendario  */
 .week-navigation {
     display: flex;
     justify-content: space-between;

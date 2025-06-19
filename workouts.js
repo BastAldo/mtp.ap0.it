@@ -4,7 +4,7 @@
 //  LIBRERIA DEGLI ESERCIZI
 // ===================================================================================
 // Qui si possono aggiungere o modificare gli esercizi.
-// type: 'reps' per esercizi a ripetizioni, 'time' per esercizi a tempo (es. plank)
+// type: 'reps' per esercizi a ripetizioni, 't ime' per esercizi a tempo (es. plank)
 
 
 export const WORKOUTS = [

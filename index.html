@@ -5,77 +5,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mio Trainer Personale</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#2c3e50">
 </head>
 <body>
 
-    <div id="app-container">
-
-        <header class="app-header">
-            <h1>Mio Trainer Personale</h1>
-        </header>
-
-        <div id="calendar-view" class="view">
-            <div class="calendar-header">
-                <button id="prev-week-btn">&lt; Sett. Prec.</button>
-                <h2 id="week-display"></h2>
-                <button id="next-week-btn">Sett. Succ. &gt;</button>
-            </div>
-            <div id="calendar-grid" class="calendar-grid"></div>
+    <div id="calendar-view" class="view">
+        <h1 class="main-title">Mio Trainer Personale</h1>
+        <div class="week-navigation">
+            <button id="prev-week-btn">&lt; Sett. Prec.</button>
+            <h2 id="week-display"></h2>
+            <button id="next-week-btn">Sett. Succ. &gt;</button>
         </div>
-
-        <div id="trainer-view" class="view">
-            <div class="trainer-container">
-                <div class="trainer-header">
-                    <h2 id="trainer-exercise-name">Nome Esercizio</h2>
-                    <div class="trainer-stats">
-                        <span id="trainer-rep-count">Rip: 1 / 10</span>
-                        <span class="stats-divider">|</span>
-                        <span id="trainer-set-count">Serie: 1 / 3</span>
-                    </div>
-                </div>
-                <div class="trainer-main-display">
-                    <div id="trainer-action-wrapper">
-                        <span id="trainer-current-action">PREPARATI</span>
-                    </div>
-                    <div id="trainer-timer-wrapper">
-                        <span id="trainer-main-timer">--</span>
-                    </div>
-                </div>
-                <div class="trainer-footer">
-                    <p id="trainer-exercise-desc">Descrizione dell'esercizio e istruzioni dettagliate.</p>
-                    <div id="trainer-controls">
-                        <button id="start-exercise-btn" class="btn">AVVIA</button>
-                        <button id="next-set-btn" class="btn" style="display: none;">INIZIA SERIE SUCCESSIVA</button>
-                        <button id="next-exercise-btn" class="btn" style="display: none;">ESERCIZIO SUCCESSIVO</button>
-                        <button id="end-workout-btn" class="btn btn-secondary" style="display: none;">TERMINA ALLENAMENTO</button>
-                    </div>
-                </div>
+        <div id="calendar-days" class="week-grid">
             </div>
-        </div>
-
-
-        <div id="debriefing-view" class="view">
-            <h2>Sessione Completata</h2>
-            <div class="debriefing-content">
-                <h3>Riepilogo</h3>
-                <pre id="debriefing-summary"></pre>
-                <button id="copy-for-coach-btn" class="btn">Copia per il Coach</button>
-                <div class="debriefing-controls">
-                     <button id="return-to-calendar-btn" class="btn">Torna al Calendario</button>
-                </div>
-            </div>
-        </div>
-
     </div>
 
-    <div id="routine-editor-modal" class="modal">
-        </div>
+    <div id="trainer-view" class="view">
+        <h2>Nome Esercizio</h2>
+        <p>Rip: 1 / 10 | Serie: 1 / 3</p>
+        <div class="status-message">PREPARATI</div>
+        <p>Descrizione dell'esercizio e istruzioni dettagliate.</p>
+        <button>AVVIA</button>
+    </div>
 
-    <div id="exercise-library-modal" class="modal">
-        </div>
+    <div id="debriefing-view" class="view">
+        <h2>Sessione Completata</h2>
+    </div>
 
     <script type="module" src="app.js"></script>
+
 </body>
 </html>
