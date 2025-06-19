@@ -76,7 +76,7 @@ function renderCalendar() {
 
         const dayCell = document.createElement('div');
         dayCell.className = 'day-cell';
-        dayCell.dataset.date = dateString; // Aggiungo la data come data-attribute
+        dayCell.dataset.date = dateString;
 
         dayCell.innerHTML = `
             <div>
@@ -93,13 +93,22 @@ function renderCalendar() {
 }
 
 function renderTrainer() {
-    if (!state.activeWorkout) return;
-    const firstExercise = state.activeWorkout[0].name;
-    dom.trainer.instruction.textContent = `Prossimo: ${firstExercise}`;
+    // Codice reso più robusto per gestire dati mancanti o corrotti
+    if (!state.activeWorkout || state.activeWorkout.length === 0) {
+        dom.trainer.instruction.textContent = 'Nessun allenamento da avviare.';
+        return;
+    }
+    
+    const firstExercise = state.activeWorkout[0];
+    
+    if (firstExercise && firstExercise.name) {
+        dom.trainer.instruction.textContent = `Prossimo: ${firstExercise.name}`;
+    } else {
+        dom.trainer.instruction.textContent = 'Errore: Esercizio non valido.';
+    }
 }
 
 function updateUI() {
-    // A seconda della vista attiva, renderizza cose diverse
     if (dom.views.calendar.classList.contains('view--active')) {
         renderCalendar();
     }
@@ -113,22 +122,18 @@ function setupEventListeners() {
     dom.calendar.prevWeekBtn.addEventListener('click', goToPrevWeek);
     dom.calendar.nextWeekBtn.addEventListener('click', goToNextWeek);
 
-    // Event Delegation per i click sulla griglia del calendario
     dom.calendar.grid.addEventListener('click', (event) => {
         const target = event.target;
         
-        // Controlla se il click è su un pulsante "INIZIA"
         if (target.classList.contains('start-btn-small')) {
             const dayCell = target.closest('.day-cell');
             if (dayCell && dayCell.dataset.date) {
                 startWorkout(dayCell.dataset.date);
             }
         }
-        // Altrimenti, se il click è su una cella (ma non sul bottone)
         else if (target.closest('.day-cell')) {
             const dayCell = target.closest('.day-cell');
             console.log(`Apertura editor per il giorno: ${dayCell.dataset.date}`);
-            // Qui in futuro si aprirà il modale di modifica
         }
     });
 }
