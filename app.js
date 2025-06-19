@@ -1,6 +1,5 @@
 import { WORKOUTS } from './workouts.js';
 
-// --- ELEMENTI DEL DOM ---
 const dom = {
     views: {
         calendar: document.getElementById('calendar-view'),
@@ -18,10 +17,7 @@ const dom = {
         counters: document.getElementById('trainer-counters'),
         display: document.getElementById('trainer-main-display'),
         description: document.getElementById('exercise-description'),
-        controls: document.getElementById('trainer-controls'),
-        startBtn: document.getElementById('start-exercise-btn'),
-        nextSetBtn: document.getElementById('next-set-btn'),
-        nextExerciseBtn: document.getElementById('next-exercise-btn'),
+        mainActionBtn: document.getElementById('main-action-btn'),
         endWorkoutBtn: document.getElementById('end-workout-btn'),
         nextExercisePreview: document.getElementById('next-exercise-preview'),
     },
@@ -43,28 +39,25 @@ const dom = {
     }
 };
 
-// --- STATO GLOBALE ---
 let trainerInterval = null;
 let audioContext;
+const REP_PHASES = ['up', 'hold', 'down'];
 
 const state = {
     currentWeekOffset: 0,
     workoutRoutines: JSON.parse(localStorage.getItem('workoutRoutines')) || {},
     workoutHistory: JSON.parse(localStorage.getItem('workoutHistory')) || [],
-    
     activeWorkout: null,
     editingDate: null,
-    
-    // State machine del trainer
-    trainerStatus: 'idle', // idle, ready, preparing, action, rest
+    trainerStatus: 'idle',
     currentExerciseIndex: 0,
     currentSeries: 1,
     currentRep: 1,
-    countdownValue: 3,
+    currentRepPhaseIndex: 0,
+    countdownValue: 0,
     completedExercises: [],
 };
 
-// --- AUDIO ---
 function initAudio() {
     try {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -87,7 +80,6 @@ function playTick() {
     oscillator.stop(audioContext.currentTime + 0.2);
 }
 
-// --- LOGICA PRINCIPALE ---
 function saveRoutines() { localStorage.setItem('workoutRoutines', JSON.stringify(state.workoutRoutines)); }
 function saveHistory() { localStorage.setItem('workoutHistory', JSON.stringify(state.workoutHistory)); }
 
@@ -95,82 +87,41 @@ function startWorkout(date) {
     const routine = state.workoutRoutines[date];
     if (!routine || routine.length === 0) return;
     
-    state.activeWorkout = JSON.parse(JSON.stringify(routine)); // Deep copy
+    state.activeWorkout = JSON.parse(JSON.stringify(routine));
     state.currentExerciseIndex = 0;
     state.completedExercises = [];
     
-    advanceWorkoutState(); // Inizia dal primo esercizio
+    advanceWorkout();
     showView('trainer');
 }
 
-function advanceWorkoutState() {
+function advanceWorkout() {
     const exercise = state.activeWorkout?.[state.currentExerciseIndex];
-
     if (!exercise) {
-        // Workout Finito
         state.trainerStatus = 'finished';
         updateUI();
         return;
     }
-
-    // Se è un nuovo esercizio
-    if (state.trainerStatus !== 'rest') {
-        state.currentSeries = 1;
-        state.currentRep = 1;
-    }
+    state.currentSeries = 1;
     state.trainerStatus = 'ready';
-    updateUI();
-}
-
-// --- MOTORE DEL TRAINER ---
-function trainerTick() {
-    state.countdownValue--;
-    playTick();
-    
-    if (state.countdownValue <= 0) {
-        if(state.trainerStatus === 'preparing') {
-            state.trainerStatus = 'action';
-            const exercise = state.activeWorkout[state.currentExerciseIndex];
-            if (exercise.type === 'time') {
-                state.countdownValue = exercise.defaultParams.duration;
-            } else {
-                clearInterval(trainerInterval);
-                trainerInterval = null;
-            }
-        } else if (state.trainerStatus === 'rest') {
-            // Fine del riposo, passa all'azione successiva
-             clearInterval(trainerInterval);
-             trainerInterval = null;
-             state.currentSeries++;
-             state.trainerStatus = 'ready';
-             handleTrainerAction(); // Simula il click per ripartire
-        } else if (state.trainerStatus === 'action' && state.activeWorkout[state.currentExerciseIndex].type === 'time') {
-            // Fine di un esercizio a tempo
-            clearInterval(trainerInterval);
-            trainerInterval = null;
-            handleSetCompletion();
-        }
-    }
     updateUI();
 }
 
 function handleSetCompletion() {
     const exercise = state.activeWorkout[state.currentExerciseIndex];
-    
-    if (state.currentSeries < exercise.defaultParams.series) {
-        // Ci sono altre serie, vai in pausa
+    if (state.currentSeries < exercise.defaultSets) {
         state.trainerStatus = 'rest';
-        state.countdownValue = exercise.defaultParams.rest;
-        if(state.countdownValue > 0) {
-            if (trainerInterval) clearInterval(trainerInterval);
-            trainerInterval = setInterval(trainerTick, 1000);
+        state.countdownValue = exercise.defaultRest;
+        if (state.countdownValue > 0) startTimer();
+        else { // Se il riposo è 0, passa subito alla prossima serie
+            state.currentSeries++;
+            state.trainerStatus = 'ready';
+            handleTrainerAction();
         }
     } else {
-        // Serie finite, esercizio completato
         logCompletedExercise();
         state.currentExerciseIndex++;
-        state.trainerStatus = 'idle'; // Stato intermedio prima di 'ready'
-        advanceWorkoutState();
+        advanceWorkout();
     }
     updateUI();
 }
@@ -179,9 +130,9 @@ function logCompletedExercise() {
     const exercise = state.activeWorkout[state.currentExerciseIndex];
     const log = {
         name: exercise.name,
-        sets: exercise.defaultParams.series,
-        reps: exercise.defaultParams.reps,
-        duration: exercise.defaultParams.duration,
+        sets: exercise.defaultSets,
+        reps: exercise.defaultReps,
+        duration: exercise.defaultDuration,
         completedAt: new Date().toISOString()
     };
     state.completedExercises.push(log);
@@ -189,7 +140,84 @@ function logCompletedExercise() {
     saveHistory();
 }
 
-// --- FUNZIONI DI RENDER ---
+function startTimer() {
+    if (trainerInterval) clearInterval(trainerInterval);
+    trainerInterval = setInterval(trainerTick, 1000);
+}
+
+function trainerTick() {
+    state.countdownValue--;
+    playTick();
+
+    if (state.countdownValue < 0) {
+        clearInterval(trainerInterval);
+        trainerInterval = null;
+        if (state.trainerStatus === 'preparing') {
+            state.trainerStatus = 'action';
+            startPhase();
+        } else if (state.trainerStatus === 'rest') {
+            state.currentSeries++;
+            state.trainerStatus = 'ready';
+            handleTrainerAction();
+        } else if (state.trainerStatus === 'action' && state.activeWorkout[state.currentExerciseIndex].type === 'time') {
+            handleSetCompletion();
+        }
+    }
+    updateUI();
+}
+
+function startPhase() {
+    const exercise = state.activeWorkout[state.currentExerciseIndex];
+    if (exercise.type === 'time') {
+        state.countdownValue = exercise.defaultDuration;
+        startTimer();
+    } else if (exercise.type === 'reps') {
+        state.currentRep = 1;
+        state.currentRepPhaseIndex = 0;
+        runRepPhase();
+    }
+    updateUI();
+}
+
+function runRepPhase() {
+    const exercise = state.activeWorkout[state.currentExerciseIndex];
+    const phaseName = REP_PHASES[state.currentRepPhaseIndex];
+    const duration = exercise.defaultTempo[phaseName];
+    state.countdownValue = duration;
+    
+    if (duration > 0) {
+        playTick();
+        if (trainerInterval) clearInterval(trainerInterval);
+        trainerInterval = setInterval(repPhaseTick, 1000);
+    } else {
+        repPhaseTick();
+    }
+    updateUI();
+}
+
+function repPhaseTick() {
+    if (state.countdownValue > 0) state.countdownValue--;
+    
+    if (state.countdownValue <= 0) {
+        clearInterval(trainerInterval);
+        trainerInterval = null;
+        state.currentRepPhaseIndex++;
+
+        if (state.currentRepPhaseIndex >= REP_PHASES.length) {
+            state.currentRep++;
+            const exercise = state.activeWorkout[state.currentExerciseIndex];
+            if (state.currentRep > exercise.defaultReps) {
+                handleSetCompletion();
+                return;
+            }
+            state.currentRepPhaseIndex = 0;
+        }
+        playTick(); // Tick per l'inizio della nuova fase
+        runRepPhase();
+    }
+    updateUI();
+}
+
 function showView(viewId) {
     for (const id in dom.views) {
         if (dom.views[id]) dom.views[id].classList.toggle('view--active', id === viewId);
@@ -199,48 +227,42 @@ function showView(viewId) {
 function renderTrainer() {
     const exercise = state.activeWorkout?.[state.currentExerciseIndex];
     if (!exercise) return;
-
-    const params = exercise.defaultParams;
+    
     dom.trainer.name.textContent = exercise.name;
     dom.trainer.description.textContent = exercise.description;
-    dom.trainer.counters.textContent = `Serie: ${state.currentSeries} / ${params.series} | ${params.reps ? `Rip: ${params.reps}` : `Tempo: ${params.duration}s`}`;
+    dom.trainer.counters.textContent = `Serie: ${state.currentSeries} / ${exercise.defaultSets} | Rip: ${exercise.type === 'reps' ? `${state.currentRep} / ${exercise.defaultReps}` : '-'}`;
     
-    // Mostra/nasconde i pulsanti
-    const show = (btn) => btn.style.display = 'inline-block';
-    const hide = (btn) => btn.style.display = 'none';
-    [dom.trainer.startBtn, dom.trainer.nextSetBtn, dom.trainer.nextExerciseBtn, dom.trainer.endWorkoutBtn].forEach(hide);
-
+    dom.trainer.mainActionBtn.style.display = 'none';
     dom.trainer.display.classList.remove('is-flashing');
 
     switch (state.trainerStatus) {
         case 'ready':
-            show(dom.trainer.startBtn);
-            dom.trainer.display.textContent = 'PREPARATI';
+            dom.trainer.display.textContent = `Serie ${state.currentSeries}`;
+            dom.trainer.mainActionBtn.textContent = 'INIZIA';
+            dom.trainer.mainActionBtn.style.display = 'inline-block';
             break;
         case 'preparing':
             dom.trainer.display.textContent = state.countdownValue;
             dom.trainer.display.classList.add('is-flashing');
             break;
         case 'action':
-            if (exercise.type === 'time') {
-                dom.trainer.display.textContent = state.countdownValue;
+            if (exercise.type === 'reps') {
+                const phaseName = REP_PHASES[state.currentRepPhaseIndex].toUpperCase();
+                dom.trainer.display.textContent = `${phaseName} (${state.countdownValue}s)`;
             } else {
-                dom.trainer.display.textContent = `ESEGUI ${params.reps} RIPETIZIONI`;
-                show(dom.trainer.nextSetBtn);
-                dom.trainer.nextSetBtn.textContent = "SERIE COMPLETATA";
+                dom.trainer.display.textContent = state.countdownValue;
+                dom.trainer.mainActionBtn.textContent = "FATTO";
+                dom.trainer.mainActionBtn.style.display = 'inline-block';
             }
             break;
         case 'rest':
-            show(dom.trainer.nextSetBtn);
-            dom.trainer.nextSetBtn.textContent = `INIZIA SERIE (${state.countdownValue}s)`;
-            dom.trainer.display.textContent = 'RECUPERO';
+            dom.trainer.display.textContent = `RECUPERO (${state.countdownValue}s)`;
             break;
         case 'finished':
             renderDebrief();
             showView('debriefing');
             break;
     }
-
     const nextExercise = state.activeWorkout?.[state.currentExerciseIndex + 1];
     dom.trainer.nextExercisePreview.textContent = nextExercise ? `Prossimo: ${nextExercise.name}` : 'Ultimo esercizio!';
 }
@@ -248,7 +270,7 @@ function renderTrainer() {
 function renderDebrief() {
     let summary = `<h3>Riepilogo Allenamento</h3><ul>`;
     state.completedExercises.forEach(ex => {
-        summary += `<li>✅ ${ex.name} (${ex.sets} x ${ex.reps || `${ex.duration}s`})</li>`;
+        summary += `<li>✅ ${ex.name} (${ex.sets} x ${ex.reps ? ex.reps : `${ex.duration}s`})</li>`;
     });
     summary += `</ul>`;
     dom.debrief.summaryContainer.innerHTML = summary;
@@ -260,7 +282,6 @@ function renderDebrief() {
     dom.debrief.textArea.value = textReport;
 }
 
-// ... tutte le altre funzioni di render (calendario, modali) ...
 function renderCalendar() {
     if (!dom.calendar.grid) return;
     const today = new Date();
@@ -281,28 +302,30 @@ function renderCalendar() {
         const dateString = day.toISOString().split('T')[0];
         const dayCell = document.createElement('div');
         dayCell.className = 'day-cell';
+        dayCell.dataset.date = dateString; // Data attribute per l'event delegation
         if (day.toDateString() === new Date().toDateString()) dayCell.classList.add('today');
         
-        const routine = state.workoutRoutines[dateString];
+        const routine = state.workoutRoutines[dateString] || [];
         dayCell.innerHTML = `
-            <div class="day-header">${day.toLocaleDateString('it-IT', { weekday: 'short' })}</div>
-            <div class="day-number">${day.getDate()}</div>
-            ${routine && routine.length > 0 ? `<div class="workout-summary">${routine.length} esercizi</div><button class="start-btn-small">INIZIA</button>` : ''}
+            <div>
+                <div class="day-header">${day.toLocaleDateString('it-IT', { weekday: 'short' }).toUpperCase()}</div>
+                <div class="day-number">${day.getDate()}</div>
+            </div>
+            ${routine.length > 0 ? `
+            <div>
+                <div class="workout-summary">${routine.length} esercizi</div>
+                <button class="start-btn-small">INIZIA</button>
+            </div>` : ''}
         `;
-        dayCell.onclick = (e) => {
-            if (e.target.classList.contains('start-btn-small')) {
-                startWorkout(dateString);
-            } else {
-                openWorkoutEditor(dateString);
-            }
-        };
+        // RIMOSSO: dayCell.onclick
         dom.calendar.grid.appendChild(dayCell);
     }
 }
+
 function renderDailyWorkoutList() {
-    const routine = state.workoutRoutines[state.editingDate] || [];
     const listEl = dom.modals.dailyWorkoutsList;
     if (!listEl) return;
+    const routine = state.workoutRoutines[state.editingDate] || [];
     listEl.innerHTML = '';
     if (routine.length === 0) {
         listEl.innerHTML = `<p class="empty-list-placeholder">Nessun esercizio. Aggiungine uno!</p>`;
@@ -315,6 +338,7 @@ function renderDailyWorkoutList() {
         listEl.appendChild(item);
     });
 }
+
 function renderExerciseLibrary() {
     const listEl = dom.modals.exerciseLibraryList;
     if (!listEl) return;
@@ -329,45 +353,83 @@ function renderExerciseLibrary() {
 }
 
 function updateUI() {
-    switch (state.trainerStatus) {
-        case 'idle':
-        case 'finished':
-            renderCalendar();
-            break;
-        default:
-            renderTrainer();
-            break;
-    }
+    if(dom.views.trainer.classList.contains('view--active')) renderTrainer();
+    else renderCalendar();
 }
 
-// --- EVENT HANDLERS & INITIALIZATION ---
-function handleTrainerAction(event) {
-    const action = event.target.id;
-    const currentStatus = state.trainerStatus;
-
-    if (currentStatus === 'ready' && action === 'start-exercise-btn') {
+function handleTrainerAction() {
+    if (state.trainerStatus === 'ready') {
         state.trainerStatus = 'preparing';
         state.countdownValue = 3;
-        if (trainerInterval) clearInterval(trainerInterval);
-        trainerInterval = setInterval(trainerTick, 1000);
-    } else if (currentStatus === 'action' && exercise.type === 'ripetizioni' && action === 'next-set-btn') {
+        startTimer();
+    } else if (state.trainerStatus === 'action' && state.activeWorkout[state.currentExerciseIndex].type !== 'time') {
         handleSetCompletion();
-    } else if (currentStatus === 'rest' && action === 'next-set-btn') {
-        // Salta il resto del recupero
-        clearInterval(trainerInterval);
-        trainerInterval = null;
-        state.currentSeries++;
-        state.trainerStatus = 'ready';
-        handleTrainerAction({ target: { id: 'start-exercise-btn' } });
     }
     updateUI();
+}
+
+function openWorkoutEditor(date) {
+    state.editingDate = date;
+    const dateObj = new Date(date);
+    const userTimezoneOffset = dateObj.getTimezoneOffset() * 60000;
+    const adjustedDate = new Date(dateObj.getTime() + userTimezoneOffset);
+    dom.modals.editorTitle.textContent = `Allenamento del ${adjustedDate.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}`;
+    renderDailyWorkoutList();
+    dom.modals.editor.classList.add('visible');
+}
+
+function closeWorkoutEditor() {
+    state.editingDate = null;
+    dom.modals.editor.classList.remove('visible');
+    updateUI();
+}
+
+function openLibraryModal() {
+    renderExerciseLibrary();
+    dom.modals.library.classList.add('visible');
+}
+
+function closeLibraryModal() {
+    dom.modals.library.classList.remove('visible');
+}
+
+function addExerciseToRoutine(exerciseName) {
+    const exerciseData = WORKOUTS.find(ex => ex.name === exerciseName);
+    if (!exerciseData || !state.editingDate) return;
+    if (!state.workoutRoutines[state.editingDate]) {
+        state.workoutRoutines[state.editingDate] = [];
+    }
+    state.workoutRoutines[state.editingDate].push({ ...exerciseData });
+    saveRoutines();
+    renderDailyWorkoutList();
+    closeLibraryModal();
+}
+
+function removeExerciseFromRoutine(index) {
+    if (!state.editingDate || !state.workoutRoutines[state.editingDate]) return;
+    state.workoutRoutines[state.editingDate].splice(index, 1);
+    saveRoutines();
+    renderDailyWorkoutList();
 }
 
 function setupEventListeners() {
     dom.calendar.prevWeekBtn?.addEventListener('click', () => { state.currentWeekOffset--; updateUI(); });
     dom.calendar.nextWeekBtn?.addEventListener('click', () => { state.currentWeekOffset++; updateUI(); });
     
-    dom.trainer.controls?.addEventListener('click', handleTrainerAction);
+    dom.calendar.grid?.addEventListener('click', (e) => {
+        const dayCell = e.target.closest('.day-cell');
+        if (!dayCell || !dayCell.dataset.date) return;
+        const date = dayCell.dataset.date;
+        if (e.target.classList.contains('start-btn-small')) startWorkout(date);
+        else openWorkoutEditor(date);
+    });
+
+    dom.trainer.mainActionBtn?.addEventListener('click', handleTrainerAction);
+    dom.trainer.endWorkoutBtn?.addEventListener('click', () => {
+        if (trainerInterval) clearInterval(trainerInterval);
+        state.trainerStatus = 'finished';
+        updateUI();
+    });
     
     dom.debrief.backToCalendarBtn?.addEventListener('click', () => { state.trainerStatus = 'idle'; showView('calendar'); updateUI(); });
     dom.debrief.copyBtn?.addEventListener('click', () => {
@@ -375,9 +437,9 @@ function setupEventListeners() {
         document.execCommand('copy');
     });
 
-    dom.modals.closeEditorBtn?.addEventListener('click', () => { state.editingDate = null; dom.modals.editor.classList.remove('visible'); updateUI(); });
-    dom.modals.addExerciseBtn?.addEventListener('click', () => dom.modals.library.classList.add('visible'));
-    dom.modals.closeLibraryBtn?.addEventListener('click', () => dom.modals.library.classList.remove('visible'));
+    dom.modals.closeEditorBtn?.addEventListener('click', closeWorkoutEditor);
+    dom.modals.addExerciseBtn?.addEventListener('click', openLibraryModal);
+    dom.modals.closeLibraryBtn?.addEventListener('click', closeLibraryModal);
 
     dom.modals.exerciseLibraryList?.addEventListener('click', e => {
         const target = e.target.closest('.library-item');

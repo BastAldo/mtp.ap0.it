@@ -65,6 +65,7 @@ body {
 #trainer-counters { font-size: 1.2em; color: var(--text-secondary); margin: 10px 0; }
 #trainer-main-display { font-size: 3rem; font-weight: bold; color: var(--primary-color); margin: 20px 0; min-height: 50px; }
 #exercise-description { font-size: 0.9em; color: var(--text-secondary); margin-top: 15px; padding: 10px; border-top: 1px solid #444; max-width: 600px;}
+#trainer-controls { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
 #trainer-controls button { width: 80%; max-width: 400px; padding: 15px; font-size: 1.2rem; margin: 5px; }
 .trainer-footer { margin-top: 20px; color: var(--text-secondary); }
 
@@ -76,4 +77,4 @@ body {
 
 /* Animazioni */
 @keyframes flash { 50% { opacity: 0.3; } }
-.is-flashing { animation: flash 0.8s infinite ease-in-out; }
+.is-flashing { animation: flash 0.4s infinite ease-in-out alternate; }
