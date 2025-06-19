@@ -1,305 +1,336 @@
-import { EXERCISE_LIBRARY } from './workouts.js';
+import { WORKOUTS } from './workouts.js';
 
-// STATO GLOBALE
-let state = {
-    currentDate: new Date(),
-    dailyRoutines: {},
-    history: [],
-    currentEditingDate: null,
-};
-let trainerState = {};
-let trainerInterval, tickerInterval;
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-let debriefData = null;
+document.addEventListener('DOMContentLoaded', () => {
+    // --- STATE ---
+    let currentWeekOffset = 0;
+    let workoutRoutines = JSON.parse(localStorage.getItem('workoutRoutines')) || {};
+    let workoutHistory = JSON.parse(localStorage.getItem('workoutHistory')) || [];
+    let currentRoutine = [];
+    let currentExerciseIndex = 0;
+    let timerInterval = null;
+    let audioContext;
+    const DELAY_BEFORE_ACTION = 800; // ms
 
-// FUNZIONI DI UTILITÀ E STORAGE
-const utils = {
-    generateId: () => `w_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    toISODateString: (d) => { const y=d.getFullYear(),m=(d.getMonth()+1).toString().padStart(2,'0'),a=d.getDate().toString().padStart(2,'0'); return `${y}-${m}-${a}`; },
-    formatDate: (d) => d.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}),
-    getWeekStart: (d) => { const D=new Date(d);D.setHours(0,0,0,0);const day=D.getDay(),diff=D.getDate()-day+(day===0?-6:1);return new Date(D.setDate(diff)); },
-    getRoutineForDate: (date) => state.dailyRoutines[utils.toISODateString(date)],
-    switchView: (viewId) => { document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden')); document.getElementById(viewId).classList.remove('hidden'); }
-};
+    // --- DOM ELEMENTS ---
+    const views = {
+        calendar: document.getElementById('calendar-view'),
+        trainer: document.getElementById('trainer-view'),
+        debriefing: document.getElementById('debriefing-view'),
+    };
+    // ... (other DOM elements)
+    const weekDisplay = document.getElementById('week-display');
+    const calendarGrid = document.getElementById('calendar-grid');
+    const prevWeekBtn = document.getElementById('prev-week-btn');
+    const nextWeekBtn = document.getElementById('next-week-btn');
+    const routineEditorModal = document.getElementById('routine-editor-modal');
+    const exerciseLibraryModal = document.getElementById('exercise-library-modal');
+    const modalDateDisplay = document.getElementById('modal-date-display');
+    
+    // Trainer UI Elements
+    const trainerElements = {
+        name: document.getElementById('trainer-exercise-name'),
+        repCount: document.getElementById('trainer-rep-count'),
+        setCount: document.getElementById('trainer-set-count'),
+        currentAction: document.getElementById('trainer-current-action'),
+        mainTimer: document.getElementById('trainer-main-timer'),
+        description: document.getElementById('trainer-exercise-desc'),
+        controls: {
+            start: document.getElementById('start-exercise-btn'),
+            nextSet: document.getElementById('next-set-btn'),
+            nextExercise: document.getElementById('next-exercise-btn'),
+            endWorkout: document.getElementById('end-workout-btn'),
+        }
+    };
 
-const storage = {
-    load() {
-        const routines = localStorage.getItem('workoutRoutines');
-        const history = localStorage.getItem('workoutHistory');
-        state.dailyRoutines = routines ? JSON.parse(routines) : {};
-        state.history = history ? JSON.parse(history) : [];
-    },
-    saveRoutines() { localStorage.setItem('workoutRoutines', JSON.stringify(state.dailyRoutines)); },
-    saveHistory() { localStorage.setItem('workoutHistory', JSON.stringify(state.history)); }
-};
+    // --- INITIALIZATION ---
+    function init() {
+        setupEventListeners();
+        renderCalendar();
+        showView('calendar');
+        try {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+            console.warn('Web Audio API is not supported in this browser.');
+        }
+    }
 
-// FUNZIONI CALENDARIO
-function renderCalendar() {
-    const date = state.currentDate;
-    const weekStart = utils.getWeekStart(date);
-    const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6);
-    document.getElementById('week-display').textContent = `${utils.formatDate(weekStart)} - ${utils.formatDate(weekEnd)}`;
-    const grid = document.getElementById('week-grid'); grid.innerHTML = '';
-    for (let i = 0; i < 7; i++) {
-        const dayDate = new Date(weekStart); dayDate.setDate(weekStart.getDate() + i);
-        const dayCell = document.createElement('div');
-        dayCell.className = 'day-cell';
-        dayCell.onclick = () => openEditor(dayDate);
-        const dayHeader = document.createElement('div');
-        dayHeader.className = 'day-header';
-        dayHeader.textContent = `${dayDate.toLocaleDateString('it-IT', {weekday: 'short'})} ${dayDate.getDate()}`;
-        dayCell.appendChild(dayHeader);
-        const routine = utils.getRoutineForDate(dayDate);
-        if (routine && routine.length > 0) {
-            routine.forEach(workout => {
-                const libraryItem = EXERCISE_LIBRARY.find(ex => ex.id === workout.exerciseId);
-                if (!libraryItem) return;
+    // --- AUDIO ---
+    function playTick() {
+        if (!audioContext) return;
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
+        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.2);
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.2);
+    }
+    
+    // --- VIEWS ---
+    function showView(viewName) {
+        Object.values(views).forEach(view => view.style.display = 'none');
+        if (views[viewName]) {
+            views[viewName].style.display = 'block';
+        }
+    }
+
+    // --- CALENDAR ---
+    function renderCalendar() {
+        calendarGrid.innerHTML = '';
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const startOfWeek = getStartOfWeek(new Date());
+        startOfWeek.setDate(startOfWeek.getDate() + currentWeekOffset * 7);
+
+        const formatter = new Intl.DateTimeFormat('it-IT', { month: 'long', day: 'numeric' });
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(endOfWeek.getDate() + 6);
+        weekDisplay.textContent = `${formatter.format(startOfWeek)} - ${formatter.format(endOfWeek)}`;
+
+        for (let i = 0; i < 7; i++) {
+            const day = new Date(startOfWeek);
+            day.setDate(day.getDate() + i);
+            const dateString = day.toISOString().split('T')[0];
+
+            const dayCell = document.createElement('div');
+            dayCell.className = 'day-cell';
+            if (day.toDateString() === today.toDateString()) {
+                dayCell.classList.add('today');
+            }
+
+            const dayName = day.toLocaleDateString('it-IT', { weekday: 'long' });
+            const dayNumber = day.getDate();
+            dayCell.innerHTML = `<div class="day-name">${dayName}</div><div class="day-number">${dayNumber}</div>`;
+            
+            const routine = workoutRoutines[dateString];
+            if (routine && routine.length > 0) {
                 const summary = document.createElement('div');
                 summary.className = 'workout-summary';
-                summary.innerHTML = `<div class="title">${libraryItem.name}</div>`;
+                summary.textContent = `${routine.length} esercizi`;
                 dayCell.appendChild(summary);
-            });
-            const startBtn = document.createElement('button');
-            startBtn.className = 'start-btn-small';
-            startBtn.textContent = 'INIZIA ROUTINE';
-            startBtn.onclick = (e) => { e.stopPropagation(); window.startTrainer(dayDate); };
-            dayCell.appendChild(startBtn);
-        }
-        grid.appendChild(dayCell);
-    }
-}
 
-function changeWeek(offset) {
-    state.currentDate.setDate(state.currentDate.getDate() + (7 * offset));
-    renderCalendar();
-}
-
-// FUNZIONI EDITOR
-function openEditor(date) {
-    state.currentEditingDate = date;
-    document.getElementById('editor-modal').classList.remove('hidden');
-    renderDailyList();
-}
-
-function closeEditor() {
-    document.getElementById('editor-modal').classList.add('hidden');
-}
-
-function renderDailyList() {
-    const dateString = utils.toISODateString(state.currentEditingDate);
-    const routine = state.dailyRoutines[dateString] || [];
-    const listEl = document.getElementById('daily-workouts-list');
-    listEl.innerHTML = '';
-    if (routine.length === 0) { listEl.innerHTML = '<p>Nessun esercizio per oggi.</p>'; return; }
-    routine.forEach((workout, index) => {
-        const libraryItem = EXERCISE_LIBRARY.find(ex => ex.id === workout.exerciseId);
-        const itemEl = document.createElement('div');
-        itemEl.className = 'workout-item';
-        const details = libraryItem.type === 'reps' ? `${workout.reps} reps` : `${workout.duration}s`;
-        itemEl.innerHTML = `<div class="workout-item-details"><strong>${libraryItem.name}</strong><br><span>${workout.sets}x${details}</span></div><div class="workout-item-actions"><button onclick="window.removeExercise(${index})">🗑️</button></div>`;
-        listEl.appendChild(itemEl);
-    });
-}
-
-function removeExercise(index) {
-    const dateString = utils.toISODateString(state.currentEditingDate);
-    if (state.dailyRoutines[dateString]) {
-        state.dailyRoutines[dateString].splice(index, 1);
-        if (state.dailyRoutines[dateString].length === 0) delete state.dailyRoutines[dateString];
-        storage.saveRoutines();
-        renderDailyList();
-        renderCalendar();
-    }
-}
-
-function openExerciseSelector() {
-    const listEl = document.getElementById('exercise-library-list'); listEl.innerHTML = '';
-    EXERCISE_LIBRARY.forEach(ex => {
-        const itemEl = document.createElement('div');
-        itemEl.className = 'library-item';
-        itemEl.innerHTML = `<strong>${ex.name}</strong><p style="margin:5px 0 0; font-size:0.9em;">${ex.description}</p>`;
-        itemEl.onclick = () => addExercise(ex.id);
-        listEl.appendChild(itemEl);
-    });
-    document.getElementById('exercise-selector-modal').classList.remove('hidden');
-}
-
-function closeExerciseSelector() {
-    document.getElementById('exercise-selector-modal').classList.add('hidden');
-}
-
-function addExercise(exerciseId) {
-    const dateString = utils.toISODateString(state.currentEditingDate);
-    if (!state.dailyRoutines[dateString]) state.dailyRoutines[dateString] = [];
-    const libraryItem = EXERCISE_LIBRARY.find(ex => ex.id === exerciseId);
-    const newWorkout = {
-        instanceId: utils.generateId(), exerciseId: libraryItem.id, sets: libraryItem.defaultSets,
-        reps: libraryItem.defaultReps, duration: libraryItem.defaultDuration, tempo: libraryItem.defaultTempo,
-    };
-    state.dailyRoutines[dateString].push(newWorkout);
-    storage.saveRoutines();
-    renderDailyList();
-    renderCalendar();
-    closeExerciseSelector();
-}
-
-// FUNZIONI TRAINER
-function startTrainer(date) {
-    const routine = utils.getRoutineForDate(date);
-    if (!routine || routine.length === 0) { alert('Nessuna routine per oggi!'); return; }
-    trainerState = { routine: routine, currentExerciseIndex: 0, phase: 'ready_to_start' };
-    setupNextExercise();
-}
-
-function setupNextExercise() {
-    const workoutData = trainerState.routine[trainerState.currentExerciseIndex];
-    const libraryItem = EXERCISE_LIBRARY.find(ex => ex.id === workoutData.exerciseId);
-    trainerState.workout = { ...libraryItem, ...workoutData };
-    trainerState = { ...trainerState, currentSet: 1, currentRep: 1, currentLeg: 'Destra', timeLeft: 0, nextPhaseName: '' };
-    utils.switchView('trainer-view');
-    document.getElementById('trainer-title').textContent = trainerState.workout.name;
-    document.getElementById('trainer-description').textContent = trainerState.workout.description;
-    document.getElementById('trainer-instruction').textContent = "Pronto?";
-    document.getElementById('trainer-timer').textContent = "0.0";
-    updateTrainerUI();
-}
-
-function beginWorkout() {
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    prepareFor(trainerState.workout.type === 'reps' ? 'up' : 'work');
-    trainerInterval = setInterval(trainerLoop, 100);
-}
-
-function trainerLoop() {
-    if (!['up_running','hold_running','down_running','work_running','prepare','leg_change'].includes(trainerState.phase)) return;
-    trainerState.timeLeft -= 0.1;
-    document.getElementById('trainer-timer').textContent = trainerState.timeLeft.toFixed(1);
-    if (trainerState.timeLeft <= 0) nextTrainerPhase();
-}
-
-function nextTrainerPhase() {
-    clearInterval(tickerInterval);
-    const w = trainerState.workout;
-    const instructionEl = document.getElementById('trainer-instruction');
-    const legText = (w.unilateral && w.type ==='reps') ? `(${trainerState.currentLeg.substring(0,2)})` : '';
-    if (trainerState.phase === 'prepare') { trainerState.phase = trainerState.nextPhaseName; trainerState.nextPhaseName = ''; }
-    switch(trainerState.phase) {
-        case 'up': instructionEl.textContent = `SALI ${legText}`; trainerState.timeLeft = w.tempo.up; beep(880); trainerState.phase = 'up_running'; break;
-        case 'up_running': prepareFor('hold'); break;
-        case 'hold': instructionEl.textContent = "PAUSA"; trainerState.timeLeft = w.tempo.hold; beep(1046); trainerState.phase = 'hold_running'; break;
-        case 'hold_running': prepareFor('down'); break;
-        case 'down': instructionEl.textContent = "SCENDI"; trainerState.timeLeft = w.tempo.down; beep(440); trainerState.phase = 'down_running'; break;
-        case 'down_running':
-            if (trainerState.currentRep < w.reps) { trainerState.currentRep++; prepareFor('up'); } 
-            else {
-                if (w.unilateral && trainerState.currentLeg === 'Destra') { trainerState.currentLeg = 'Sinistra'; trainerState.currentRep = 1; trainerState.phase = 'leg_change'; trainerState.timeLeft = 5; instructionEl.textContent = "CAMBIO GAMBA"; beep(300); } 
-                else { (trainerState.currentSet < w.sets) ? (trainerState.phase = 'waiting', instructionEl.textContent = `Serie ${trainerState.currentSet} completata!`, beep(261, 300)) : finishExercise(); }
+                const startBtn = document.createElement('button');
+                startBtn.className = 'btn btn-small';
+                startBtn.textContent = 'INIZIA';
+                startBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    startWorkout(routine);
+                };
+                dayCell.appendChild(startBtn);
             }
-            break;
-        case 'leg_change': prepareFor('up'); break;
-        case 'work': instructionEl.textContent = "MANTIENI"; trainerState.timeLeft = w.duration; beep(880); trainerState.phase = 'work_running'; break;
-        case 'work_running': (trainerState.currentSet < w.sets) ? (trainerState.phase = 'waiting', instructionEl.textContent = `Serie ${trainerState.currentSet} completata!`, beep(261, 300)) : finishExercise(); break;
+
+            dayCell.onclick = () => openRoutineEditor(dateString);
+            calendarGrid.appendChild(dayCell);
+        }
     }
-    updateTrainerUI();
-}
 
-function prepareFor(nextPhaseName) {
-    trainerState.phase = 'prepare'; trainerState.nextPhaseName = nextPhaseName; trainerState.timeLeft = 0.8;
-    const w = trainerState.workout;
-    const legText = (w.unilateral && w.type === 'reps') ? `(${trainerState.currentLeg.substring(0,2)})` : '';
-    const instructionMap = { 'up': `SALI ${legText}`, 'hold': 'PAUSA', 'down': 'SCENDI', 'work': 'MANTIENI' };
-    document.getElementById('trainer-instruction').textContent = instructionMap[nextPhaseName] || '...';
-    tickerInterval = setInterval(() => beep(1318, 50, 0.2), 200);
-}
+    // --- TRAINER ---
+    function startWorkout(routine) {
+        currentRoutine = JSON.parse(JSON.stringify(routine)); // Deep copy
+        currentExerciseIndex = 0;
+        showView('trainer');
+        runCurrentExercise();
+    }
 
-function startNextSet() {
-    trainerState.currentSet++; trainerState.currentRep = 1; trainerState.currentLeg = 'Destra';
-    prepareFor(trainerState.workout.type === 'reps' ? 'up' : 'work');
-}
+    function runCurrentExercise() {
+        if (currentExerciseIndex >= currentRoutine.length) {
+            endWorkout();
+            return;
+        }
+        const exercise = currentRoutine[currentExerciseIndex];
+        exercise.currentSet = 1;
+        updateTrainerUI(exercise, 'initial');
+    }
 
-function finishExercise() {
-    clearInterval(trainerInterval); clearInterval(tickerInterval);
-    const summaryData = { date: utils.toISODateString(new Date()), title: trainerState.workout.name, sets: trainerState.workout.sets, reps: trainerState.workout.reps, duration: trainerState.workout.duration, type: trainerState.workout.type };
-    addHistory(summaryData);
-    const hasNext = trainerState.currentExerciseIndex < trainerState.routine.length - 1;
-    showDebrief(summaryData, hasNext);
-}
+    function runExercisePhase(exercise) {
+        if (exercise.type === 'ripetizioni') {
+            runRepetitionPhase(exercise, 0);
+        } else if (exercise.type === 'tempo') {
+            runTimedPhase(exercise, 0);
+        }
+    }
+    
+    function runRepetitionPhase(exercise, phaseIndex) {
+        const phases = ['salita', 'tenuta_s', 'discesa', 'tenuta_g'];
+        if (phaseIndex >= phases.length) {
+            // Repetition complete
+            if (exercise.currentRep < exercise.reps) {
+                exercise.currentRep++;
+                updateTrainerUI(exercise, 'rep_change');
+                runRepetitionPhase(exercise, 0); // Start next rep
+            } else {
+                // All reps for the set complete
+                endOfSet(exercise);
+            }
+            return;
+        }
+    
+        const phaseName = phases[phaseIndex];
+        const duration = exercise[phaseName];
+    
+        if (duration > 0) {
+            playPhase(phaseName.toUpperCase(), duration, () => runRepetitionPhase(exercise, phaseIndex + 1));
+        } else {
+            runRepetitionPhase(exercise, phaseIndex + 1); // Skip zero-duration phases
+        }
+    }
 
-function goToNextExercise() {
-    trainerState.currentExerciseIndex++;
-    setupNextExercise();
-}
+    function runTimedPhase(exercise) {
+        playPhase("TENUTA", exercise.duration, () => endOfSet(exercise));
+    }
+    
+    function playPhase(name, duration, onComplete) {
+        // Fase di preparazione (lampeggio)
+        trainerElements.currentAction.textContent = name;
+        trainerElements.currentAction.classList.add('is-flashing');
+        trainerElements.mainTimer.textContent = ''; // Pulisci il timer
+        playTick();
 
-function resetTrainer() {
-    clearInterval(trainerInterval); clearInterval(tickerInterval);
-    trainerInterval = null; tickerInterval = null;
-    utils.switchView('calendar-view');
-}
+        setTimeout(() => {
+            // Fase di azione (countdown)
+            trainerElements.currentAction.classList.remove('is-flashing');
+            let timeLeft = duration;
+            
+            // Aggiorna subito il timer al valore iniziale intero
+            trainerElements.mainTimer.textContent = Math.floor(timeLeft);
 
-function updateTrainerUI() {
-    const w = trainerState.workout;
-    document.getElementById('rep-counter').textContent = w.type === 'reps' ? `Ripetizione: ${trainerState.currentRep} / ${w.reps}` : '';
-    document.getElementById('set-counter').textContent = `Serie: ${trainerState.currentSet} / ${w.sets}`;
-    const controls = document.getElementById('trainer-controls');
-    const instructionEl = document.getElementById('trainer-instruction');
-    const phase = trainerState.phase;
-    instructionEl.classList.toggle('flashing', phase === 'prepare');
-    if(phase === 'prepare' || phase === 'leg_change') { instructionEl.textContent = phase === 'leg_change' ? 'CAMBIO GAMBA' : '...'; }
-    if (phase === 'ready_to_start') { controls.innerHTML = `<button class="btn btn-secondary" onclick="window.beginWorkout()">AVVIA</button><button class="btn btn-grey" onclick="window.resetTrainer()">Indietro</button>`; }
-    else if (phase === 'waiting') { controls.innerHTML = `<button class="btn btn-secondary" onclick="window.startNextSet()">INIZIA SERIE ${trainerState.currentSet + 1}</button><button class="btn btn-danger" onclick="window.resetTrainer()">TERMINA</button>`; }
-    else if (phase !== 'finished') { controls.innerHTML = `<button class="btn btn-danger" onclick="window.resetTrainer()">INTERROMPI</button>`; } 
-    else { controls.innerHTML = ''; }
-}
+            timerInterval = setInterval(() => {
+                timeLeft -= 0.1;
+                // Aggiorna il display solo quando il numero intero cambia
+                const currentDisplay = parseInt(trainerElements.mainTimer.textContent);
+                const newIntTime = Math.floor(timeLeft);
+                if (newIntTime < currentDisplay) {
+                    trainerElements.mainTimer.textContent = newIntTime > 0 ? newIntTime : 0;
+                }
 
-function beep(freq=523, duration=100, vol=0.3) {
-    if (!audioCtx) return;
-    try { if (audioCtx.state === 'suspended') audioCtx.resume(); const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.connect(g);g.connect(audioCtx.destination);g.gain.value=vol;o.frequency.value=freq;o.type="sine";o.start(audioCtx.currentTime);o.stop(audioCtx.currentTime+duration/1000); } catch (e) { console.error("Audio playback failed:", e); }
-}
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                    onComplete();
+                }
+            }, 100);
 
-function addHistory(summaryData) { state.history.push(summaryData); storage.saveHistory(); }
+        }, DELAY_BEFORE_ACTION);
+    }
+    
+    function endOfSet(exercise) {
+        if (exercise.currentSet < exercise.sets) {
+            // Show 'Next Set' button
+            trainerElements.controls.start.style.display = 'none';
+            trainerElements.controls.nextSet.style.display = 'inline-block';
+            trainerElements.currentAction.textContent = 'RECUPERO';
+            trainerElements.mainTimer.textContent = '⏸️';
 
-function showHistory() {
-    const list = document.getElementById('history-list'); list.innerHTML = '';
-    if (state.history.length === 0) { list.innerHTML = '<li>Nessun allenamento completato.</li>'; }
-    else { [...state.history].reverse().forEach(h => { const i = document.createElement('li'); i.innerHTML = `<strong>${utils.formatDate(new Date(h.date.replace(/-/g,'/')))}</strong><br>${h.title} - ${h.sets}x${h.type === 'reps' ? h.reps + ' reps' : h.duration + 's'}`; list.appendChild(i); }); }
-    document.getElementById('history-modal').classList.remove('hidden');
-}
+        } else {
+            // Exercise complete, show 'Next Exercise' or 'End'
+            const isLastExercise = currentExerciseIndex === currentRoutine.length - 1;
+            trainerElements.controls.nextExercise.style.display = isLastExercise ? 'none' : 'inline-block';
+            trainerElements.controls.endWorkout.style.display = isLastExercise ? 'inline-block' : 'none';
+            
+            trainerElements.controls.start.style.display = 'none';
+            trainerElements.controls.nextSet.style.display = 'none';
+            
+            trainerElements.currentAction.textContent = 'COMPLETATO';
+            trainerElements.mainTimer.textContent = '✅';
 
-function closeHistory() { document.getElementById('history-modal').classList.add('hidden'); }
+            // Log history
+            logWorkout(exercise);
+        }
+    }
 
-function showDebrief(summaryData, hasNext) {
-    debriefData = summaryData;
-    utils.switchView('debriefing-view');
-    document.getElementById('summary-content').innerHTML = `Esercizio <strong>${summaryData.title}</strong> completato!<br>Hai fatto <strong>${summaryData.sets}</strong> serie.`;
-    const actions = document.getElementById('summary-actions');
-    actions.innerHTML = ``;
-    const copyBtn = document.createElement('button'); copyBtn.className = 'btn btn-primary'; copyBtn.textContent = 'Copia Riepilogo'; copyBtn.onclick = copyDebrief; actions.appendChild(copyBtn);
-    const chatBtn = document.createElement('button'); chatBtn.className = 'btn btn-secondary'; chatBtn.textContent = 'Apri Chat Allenatore'; chatBtn.onclick = openChat; actions.appendChild(chatBtn);
-    if (hasNext) { const nextBtn = document.createElement('button'); nextBtn.className = 'btn btn-success'; nextBtn.textContent = 'Passa al Prossimo Esercizio'; nextBtn.onclick = goToNextExercise; actions.appendChild(nextBtn); }
-    const backBtn = document.createElement('button'); backBtn.className = 'btn btn-grey'; backBtn.textContent = 'Torna al Calendario'; backBtn.onclick = resetTrainer; actions.appendChild(backBtn);
-}
+    function endWorkout() {
+        // Implement debriefing view logic here
+        console.log("Workout ended");
+        showView('calendar'); // For now, just go back to calendar
+    }
 
-function copyDebrief() {
-    if (!debriefData) return;
-    const w = debriefData;
-    const details = w.type === 'reps' ? `${w.reps} ripetizioni` : `${w.duration} secondi`;
-    const text = `--- Riepilogo Allenamento ---\nData: ${utils.formatDate(new Date(w.date.replace(/-/g,'/')))}\nEsercizio: ${w.title}\nCompletato: ${w.sets} serie x ${details}\n\n`;
-    navigator.clipboard.writeText(text).then(() => alert('Riepilogo copiato!'), () => alert('Errore nella copia.'));
-}
+    function logWorkout(exercise) {
+        const historyEntry = {
+            date: new Date().toISOString(),
+            exercise: exercise.name,
+            sets: exercise.sets,
+            reps: exercise.reps,
+            duration: exercise.duration
+        };
+        workoutHistory.push(historyEntry);
+        localStorage.setItem('workoutHistory', JSON.stringify(workoutHistory));
+    }
+    
+    function updateTrainerUI(exercise, stage) {
+        const { controls } = trainerElements;
+        
+        if (stage === 'initial') {
+            exercise.currentRep = 1;
+            trainerElements.name.textContent = exercise.name;
+            trainerElements.description.textContent = exercise.description;
+            controls.start.style.display = 'inline-block';
+            controls.nextSet.style.display = 'none';
+            controls.nextExercise.style.display = 'none';
+            controls.endWorkout.style.display = 'none';
+            trainerElements.currentAction.textContent = 'PREPARATI';
+            trainerElements.mainTimer.textContent = '--';
+        }
 
-function openChat() { window.open('https://gemini.google.com/gem/3ddd32ed1a1a/644b02d78c11a9ed', '_blank'); }
+        // Update stats regardless of stage
+        trainerElements.setCount.textContent = `Serie: ${exercise.currentSet} / ${exercise.sets}`;
+        if (exercise.type === 'ripetizioni') {
+            trainerElements.repCount.textContent = `Rip: ${exercise.currentRep} / ${exercise.reps}`;
+            trainerElements.repCount.style.display = 'inline-block';
+        } else {
+            trainerElements.repCount.style.display = 'none';
+        }
+    }
 
-// ===================================================================================
-// Rendi le funzioni accessibili globalmente per gli onclick
-// ===================================================================================
-window.openEditor = openEditor;
-window.startTrainer = startTrainer;
-window.removeExercise = removeExercise;
-window.addExercise = addExercise;
-window.beginWorkout = beginWorkout;
-window.resetTrainer = resetTrainer;
-window.startNextSet = startNextSet;
-window.goToNextExercise = goToNextExercise;
+    // --- EVENT LISTENERS ---
+    function setupEventListeners() {
+        prevWeekBtn.addEventListener('click', () => {
+            currentWeekOffset--;
+            renderCalendar();
+        });
 
-// INIZIALIZZAZIONE DELL'APP
-document.addEventListener('DOMContentLoaded', init);
+        nextWeekBtn.addEventListener('click', () => {
+            currentWeekOffset++;
+            renderCalendar();
+        });
+        
+        // Start button for the first set
+        trainerElements.controls.start.addEventListener('click', () => {
+            const exercise = currentRoutine[currentExerciseIndex];
+            trainerElements.controls.start.style.display = 'none';
+            runExercisePhase(exercise);
+        });
+
+        // Next set button
+        trainerElements.controls.nextSet.addEventListener('click', () => {
+            const exercise = currentRoutine[currentExerciseIndex];
+            exercise.currentSet++;
+            exercise.currentRep = 1;
+            updateTrainerUI(exercise, 'set_change');
+            trainerElements.controls.nextSet.style.display = 'none';
+            runExercisePhase(exercise);
+        });
+        
+        // Next exercise button
+        trainerElements.controls.nextExercise.addEventListener('click', () => {
+            currentExerciseIndex++;
+            runCurrentExercise();
+        });
+
+        // End workout button
+        trainerElements.controls.endWorkout.addEventListener('click', endWorkout);
+    }
+    
+    // Utility functions (getStartOfWeek, etc.) should be here
+    function getStartOfWeek(date) {
+        const d = new Date(date);
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+        return new Date(d.setDate(diff));
+    }
+    
+    // --- RUN ---
+    init();
+});
