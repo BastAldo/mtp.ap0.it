@@ -1,17 +1,32 @@
+// ===================================================================================
+//  LIBRERIA DEGLI ESERCIZI
+// ===================================================================================
+// Qui puoi aggiungere o modificare tutti gli esercizi che vuoi.
+// type: 'reps' per esercizi a ripetizioni, 'time' per esercizi a tempo (es. plank)
+
 export const EXERCISE_LIBRARY = [
     {
         id: 'ex_calf_raises',
         name: "Calf Raises (2 Gambe)",
-        description: "Sollevamento sui polpacci. Contrazione massima in alto e discesa controllata.",
+        description: "Sollevamento sui polpacci a due gambe. Concentrati sulla contrazione massima in alto e su una discesa controllata.",
         type: 'reps',
         defaultSets: 3,
         defaultReps: 20,
         defaultTempo: { up: 2, hold: 1, down: 2 }
     },
     {
+        id: 'ex_calf_raises_tempo',
+        name: "Calf Raises (Tempo Lento)",
+        description: "Focus sulla fase di discesa. Scendi molto lentamente (4 secondi) per massimizzare la tensione muscolare.",
+        type: 'reps',
+        defaultSets: 3,
+        defaultReps: 15,
+        defaultTempo: { up: 2, hold: 1, down: 4 }
+    },
+    {
         id: 'ex_calf_raises_uni',
         name: "Calf Raises (1 Gamba)",
-        description: "Sollevamento su un polpaccio alla volta. Mantieni l'equilibrio.",
+        description: "Sollevamento su un polpaccio alla volta. Mantieni l'equilibrio e controlla il movimento.",
         type: 'reps',
         defaultSets: 3,
         defaultReps: 15,
@@ -19,8 +34,8 @@ export const EXERCISE_LIBRARY = [
     },
     {
         id: 'ex_calf_hops',
-        name: "Calf Hops",
-        description: "Saltelli esplosivi sui polpacci. Spingi con forza e ammortizza.",
+        name: "Calf Hops (Saltelli Esplosivi)",
+        description: "Saltelli esplosivi sui polpacci. Spingi con forza e ammortizza l'atterraggio.",
         type: 'reps',
         defaultSets: 4,
         defaultReps: 15,
@@ -29,7 +44,7 @@ export const EXERCISE_LIBRARY = [
     {
         id: 'ex_squat',
         name: "Squat a Corpo Libero",
-        description: "Scendi come se ti sedessi, schiena dritta e petto in fuori.",
+        description: "Scendi come se ti stessi sedendo su una sedia, mantenendo la schiena dritta e il petto in fuori.",
         type: 'reps',
         defaultSets: 3,
         defaultReps: 15,
