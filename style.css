@@ -20,34 +20,30 @@ body {
 
 /* ARCHITETTURA DELLE VISTE */
 .view { display: none; width: 100%; max-width: 1200px; margin: 0 auto; }
-#calendar-view.view--active, #trainer-view.view--active {
-    display: flex;
-    flex-direction: column;
-    align-items: center; /* Centra orizzontalmente il contenuto */
-}
-#debriefing-view.view--active { display: grid; }
+#calendar-view.view--active, #trainer-view.view--active { display: flex; flex-direction: column; align-items: center; }
+#debriefing-view.view--active { display: grid; grid-template-columns: 1fr; gap: 20px; align-items: flex-start; }
 
 /* Vista Calendario */
-#calendar-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; margin-bottom: 10px; }
+#calendar-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; margin-bottom: 10px; width:100%; max-width: 900px;}
 #calendar-header h2 { margin: 0; font-size: 1.2em; color: var(--secondary-color); }
-#week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
+#week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; width:100%; max-width: 900px; }
 .day-cell { background: var(--card-color); border-radius: 8px; padding: 8px; min-height: 120px; border-left: 4px solid transparent; cursor: pointer; transition: all 0.2s ease-in-out; display: flex; flex-direction: column; justify-content: space-between; }
 .day-cell:hover { transform: translateY(-3px); border-color: var(--primary-color); }
 .day-header { font-weight: bold; font-size: 0.8em; color: var(--text-secondary); margin-bottom: 5px; text-align: right; }
 .day-number { font-size: 1.5rem; text-align: right; }
 .workout-summary { font-size: 0.8em; margin-top: 5px; background: #3c3c44; padding: 5px; border-radius: 4px; text-align: left; }
-.workout-summary .title { font-weight: bold; word-wrap: break-word; }
 
 /* Pulsanti */
 .btn { padding: 12px 18px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; transition: all 0.2s; }
-.btn:hover { transform: scale(1.03); }
+.btn:hover:not(:disabled) { transform: scale(1.03); }
+.btn:disabled { cursor: not-allowed; opacity: 0.6; }
 .btn-primary { background: var(--primary-color); color: #000; }
 .btn-secondary { background: var(--secondary-color); color: #000; }
+.btn-success { background: var(--success-color); color: #000; }
 .btn-danger { background: var(--danger-color); color: #fff; }
 .btn-grey { background: #555; color: var(--text-color); }
 .start-btn-small { background: var(--secondary-color); color: #000; border: none; border-radius: 4px; padding: 4px 8px; width: 100%; margin-top: auto; font-size: 0.8em; font-weight: bold; cursor: pointer;}
 .start-btn-small:disabled { background: #555; cursor: not-allowed; opacity: 0.5; }
-
 
 /* Modals */
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center; z-index: 1000; }
@@ -64,19 +60,20 @@ body {
 .empty-list-placeholder { color: var(--text-secondary); text-align: center; padding: 20px; }
 
 /* Stili Trainer */
-#trainer-view { text-align: center; justify-content: space-between; height: 80vh; }
-#exercise-name { margin: 0; }
+#trainer-view { justify-content: space-around; height: 85vh; text-align: center; }
+#exercise-name { margin: 0; font-size: 2rem; }
 #trainer-counters { font-size: 1.2em; color: var(--text-secondary); margin: 10px 0; }
-#trainer-main-display {
-    font-size: 3rem;
-    font-weight: bold;
-    color: var(--primary-color);
-    margin: 20px 0;
-}
-#exercise-description { font-size: 0.9em; color: var(--text-secondary); margin-top: 15px; padding: 10px; border-top: 1px solid #444; }
-#trainer-action-btn { width: 80%; max-width: 400px; padding: 15px; font-size: 1.2rem; }
+#trainer-main-display { font-size: 3rem; font-weight: bold; color: var(--primary-color); margin: 20px 0; min-height: 50px; }
+#exercise-description { font-size: 0.9em; color: var(--text-secondary); margin-top: 15px; padding: 10px; border-top: 1px solid #444; max-width: 600px;}
+#trainer-controls button { width: 80%; max-width: 400px; padding: 15px; font-size: 1.2rem; margin: 5px; }
 .trainer-footer { margin-top: 20px; color: var(--text-secondary); }
+
+/* Stili Debriefing */
+#debrief-summary, #debrief-chat { background-color: var(--card-color); padding: 20px; border-radius: 12px; }
+#debrief-actions { display: flex; flex-direction: column; gap: 10px; }
+#debrief-text-area { width: 100%; background-color: #33333a; color: var(--text-color); border: 1px solid #555; border-radius: 5px; padding: 10px; }
+#gemini-chat-iframe { width: 100%; height: 400px; border: none; border-radius: 8px; }
 
 /* Animazioni */
 @keyframes flash { 50% { opacity: 0.3; } }
-.flashing { animation: flash 0.8s infinite ease-in-out; }
+.is-flashing { animation: flash 0.8s infinite ease-in-out; }

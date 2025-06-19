@@ -18,8 +18,18 @@ const dom = {
         counters: document.getElementById('trainer-counters'),
         display: document.getElementById('trainer-main-display'),
         description: document.getElementById('exercise-description'),
-        actionBtn: document.getElementById('trainer-action-btn'),
-        nextExercise: document.getElementById('next-exercise-preview'),
+        controls: document.getElementById('trainer-controls'),
+        startBtn: document.getElementById('start-exercise-btn'),
+        nextSetBtn: document.getElementById('next-set-btn'),
+        nextExerciseBtn: document.getElementById('next-exercise-btn'),
+        endWorkoutBtn: document.getElementById('end-workout-btn'),
+        nextExercisePreview: document.getElementById('next-exercise-preview'),
+    },
+    debrief: {
+        summaryContainer: document.getElementById('debrief-summary'),
+        textArea: document.getElementById('debrief-text-area'),
+        copyBtn: document.getElementById('copy-debrief-btn'),
+        backToCalendarBtn: document.getElementById('back-to-calendar-btn'),
     },
     modals: {
         editor: document.getElementById('editor-modal'),
@@ -33,150 +43,278 @@ const dom = {
     }
 };
 
-// --- STATO DELL'APPLICAZIONE ---
+// --- STATO GLOBALE ---
 let trainerInterval = null;
+let audioContext;
 
 const state = {
     currentWeekOffset: 0,
     workoutRoutines: JSON.parse(localStorage.getItem('workoutRoutines')) || {},
+    workoutHistory: JSON.parse(localStorage.getItem('workoutHistory')) || [],
+    
     activeWorkout: null,
     editingDate: null,
-    // Stati per il trainer
-    trainerStatus: 'ready', // 'ready', 'preparing', 'running', 'paused', 'finished'
+    
+    // State machine del trainer
+    trainerStatus: 'idle', // idle, ready, preparing, action, rest
     currentExerciseIndex: 0,
     currentSeries: 1,
+    currentRep: 1,
     countdownValue: 3,
+    completedExercises: [],
 };
 
-// --- FUNZIONI DI LOGICA ---
-function saveRoutines() {
-    localStorage.setItem('workoutRoutines', JSON.stringify(state.workoutRoutines));
-}
-
-function addExerciseToRoutine(exerciseName) {
-    const exerciseData = WORKOUTS.find(ex => ex.name === exerciseName);
-    if (!exerciseData || !state.editingDate) return;
-
-    if (!state.workoutRoutines[state.editingDate]) {
-        state.workoutRoutines[state.editingDate] = [];
+// --- AUDIO ---
+function initAudio() {
+    try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) {
+        console.warn('Web Audio API is not supported.');
     }
-    state.workoutRoutines[state.editingDate].push({ ...exerciseData });
-    
-    saveRoutines();
-    renderDailyWorkoutList();
-    closeLibraryModal();
 }
 
-function removeExerciseFromRoutine(index) {
-    if (!state.editingDate || !state.workoutRoutines[state.editingDate]) return;
-    state.workoutRoutines[state.editingDate].splice(index, 1);
-    saveRoutines();
-    renderDailyWorkoutList();
+function playTick() {
+    if (!audioContext) return;
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
+    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.2);
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.2);
 }
 
-function goToPrevWeek() {
-    state.currentWeekOffset--;
-    updateUI();
-}
-
-function goToNextWeek() {
-    state.currentWeekOffset++;
-    updateUI();
-}
+// --- LOGICA PRINCIPALE ---
+function saveRoutines() { localStorage.setItem('workoutRoutines', JSON.stringify(state.workoutRoutines)); }
+function saveHistory() { localStorage.setItem('workoutHistory', JSON.stringify(state.workoutHistory)); }
 
 function startWorkout(date) {
-    if (!state.workoutRoutines[date] || state.workoutRoutines[date].length === 0) return;
+    const routine = state.workoutRoutines[date];
+    if (!routine || routine.length === 0) return;
     
-    state.activeWorkout = state.workoutRoutines[date];
-    state.trainerStatus = 'ready';
+    state.activeWorkout = JSON.parse(JSON.stringify(routine)); // Deep copy
     state.currentExerciseIndex = 0;
-    state.currentSeries = 1;
+    state.completedExercises = [];
     
+    advanceWorkoutState(); // Inizia dal primo esercizio
     showView('trainer');
+}
+
+function advanceWorkoutState() {
+    const exercise = state.activeWorkout?.[state.currentExerciseIndex];
+
+    if (!exercise) {
+        // Workout Finito
+        state.trainerStatus = 'finished';
+        updateUI();
+        return;
+    }
+
+    // Se è un nuovo esercizio
+    if (state.trainerStatus !== 'rest') {
+        state.currentSeries = 1;
+        state.currentRep = 1;
+    }
+    state.trainerStatus = 'ready';
     updateUI();
 }
 
-// --- LOGICA MODALI ---
-function openWorkoutEditor(date) {
-    state.editingDate = date;
-    const dateObj = new Date(date);
-    const userTimezoneOffset = dateObj.getTimezoneOffset() * 60000;
-    const adjustedDate = new Date(dateObj.getTime() + userTimezoneOffset);
-    dom.modals.editorTitle.textContent = `Allenamento del ${adjustedDate.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}`;
-    renderDailyWorkoutList();
-    dom.modals.editor.classList.add('visible');
-}
-
-function closeWorkoutEditor() {
-    state.editingDate = null;
-    dom.modals.editor.classList.remove('visible');
+// --- MOTORE DEL TRAINER ---
+function trainerTick() {
+    state.countdownValue--;
+    playTick();
+    
+    if (state.countdownValue <= 0) {
+        if(state.trainerStatus === 'preparing') {
+            state.trainerStatus = 'action';
+            const exercise = state.activeWorkout[state.currentExerciseIndex];
+            if (exercise.type === 'time') {
+                state.countdownValue = exercise.defaultParams.duration;
+            } else {
+                clearInterval(trainerInterval);
+                trainerInterval = null;
+            }
+        } else if (state.trainerStatus === 'rest') {
+            // Fine del riposo, passa all'azione successiva
+             clearInterval(trainerInterval);
+             trainerInterval = null;
+             state.currentSeries++;
+             state.trainerStatus = 'ready';
+             handleTrainerAction(); // Simula il click per ripartire
+        } else if (state.trainerStatus === 'action' && state.activeWorkout[state.currentExerciseIndex].type === 'time') {
+            // Fine di un esercizio a tempo
+            clearInterval(trainerInterval);
+            trainerInterval = null;
+            handleSetCompletion();
+        }
+    }
     updateUI();
 }
 
-function openLibraryModal() {
-    renderExerciseLibrary();
-    dom.modals.library.classList.add('visible');
+function handleSetCompletion() {
+    const exercise = state.activeWorkout[state.currentExerciseIndex];
+    
+    if (state.currentSeries < exercise.defaultParams.series) {
+        // Ci sono altre serie, vai in pausa
+        state.trainerStatus = 'rest';
+        state.countdownValue = exercise.defaultParams.rest;
+        if(state.countdownValue > 0) {
+            if (trainerInterval) clearInterval(trainerInterval);
+            trainerInterval = setInterval(trainerTick, 1000);
+        }
+    } else {
+        // Serie finite, esercizio completato
+        logCompletedExercise();
+        state.currentExerciseIndex++;
+        state.trainerStatus = 'idle'; // Stato intermedio prima di 'ready'
+        advanceWorkoutState();
+    }
+    updateUI();
 }
 
-function closeLibraryModal() {
-    dom.modals.library.classList.remove('visible');
+function logCompletedExercise() {
+    const exercise = state.activeWorkout[state.currentExerciseIndex];
+    const log = {
+        name: exercise.name,
+        sets: exercise.defaultParams.series,
+        reps: exercise.defaultParams.reps,
+        duration: exercise.defaultParams.duration,
+        completedAt: new Date().toISOString()
+    };
+    state.completedExercises.push(log);
+    state.workoutHistory.push(log);
+    saveHistory();
 }
 
 // --- FUNZIONI DI RENDER ---
 function showView(viewId) {
     for (const id in dom.views) {
-        if (dom.views[id]) {
-            dom.views[id].classList.toggle('view--active', id === viewId);
-        }
+        if (dom.views[id]) dom.views[id].classList.toggle('view--active', id === viewId);
     }
 }
 
-function renderCalendar() {
-    const today = new Date();
-    today.setDate(today.getDate() + state.currentWeekOffset * 7);
-    const dayOfWeek = today.getDay();
-    const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-    const startOfWeek = new Date(today.setDate(diff));
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6);
+function renderTrainer() {
+    const exercise = state.activeWorkout?.[state.currentExerciseIndex];
+    if (!exercise) return;
 
-    if (dom.calendar.weekDisplay) {
-        dom.calendar.weekDisplay.textContent = `${startOfWeek.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })} - ${endOfWeek.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}`;
+    const params = exercise.defaultParams;
+    dom.trainer.name.textContent = exercise.name;
+    dom.trainer.description.textContent = exercise.description;
+    dom.trainer.counters.textContent = `Serie: ${state.currentSeries} / ${params.series} | ${params.reps ? `Rip: ${params.reps}` : `Tempo: ${params.duration}s`}`;
+    
+    // Mostra/nasconde i pulsanti
+    const show = (btn) => btn.style.display = 'inline-block';
+    const hide = (btn) => btn.style.display = 'none';
+    [dom.trainer.startBtn, dom.trainer.nextSetBtn, dom.trainer.nextExerciseBtn, dom.trainer.endWorkoutBtn].forEach(hide);
+
+    dom.trainer.display.classList.remove('is-flashing');
+
+    switch (state.trainerStatus) {
+        case 'ready':
+            show(dom.trainer.startBtn);
+            dom.trainer.display.textContent = 'PREPARATI';
+            break;
+        case 'preparing':
+            dom.trainer.display.textContent = state.countdownValue;
+            dom.trainer.display.classList.add('is-flashing');
+            break;
+        case 'action':
+            if (exercise.type === 'time') {
+                dom.trainer.display.textContent = state.countdownValue;
+            } else {
+                dom.trainer.display.textContent = `ESEGUI ${params.reps} RIPETIZIONI`;
+                show(dom.trainer.nextSetBtn);
+                dom.trainer.nextSetBtn.textContent = "SERIE COMPLETATA";
+            }
+            break;
+        case 'rest':
+            show(dom.trainer.nextSetBtn);
+            dom.trainer.nextSetBtn.textContent = `INIZIA SERIE (${state.countdownValue}s)`;
+            dom.trainer.display.textContent = 'RECUPERO';
+            break;
+        case 'finished':
+            renderDebrief();
+            showView('debriefing');
+            break;
     }
-    if (!dom.calendar.grid) return;
-    dom.calendar.grid.innerHTML = '';
-    const dayNames = ['LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB', 'DOM'];
 
+    const nextExercise = state.activeWorkout?.[state.currentExerciseIndex + 1];
+    dom.trainer.nextExercisePreview.textContent = nextExercise ? `Prossimo: ${nextExercise.name}` : 'Ultimo esercizio!';
+}
+
+function renderDebrief() {
+    let summary = `<h3>Riepilogo Allenamento</h3><ul>`;
+    state.completedExercises.forEach(ex => {
+        summary += `<li>✅ ${ex.name} (${ex.sets} x ${ex.reps || `${ex.duration}s`})</li>`;
+    });
+    summary += `</ul>`;
+    dom.debrief.summaryContainer.innerHTML = summary;
+
+    let textReport = "Report Allenamento:\n";
+    state.completedExercises.forEach(ex => {
+        textReport += `- ${ex.name}: ${ex.sets} serie da ${ex.reps ? `${ex.reps} ripetizioni` : `${ex.duration} secondi`}.\n`;
+    });
+    dom.debrief.textArea.value = textReport;
+}
+
+// ... tutte le altre funzioni di render (calendario, modali) ...
+function renderCalendar() {
+    if (!dom.calendar.grid) return;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(startOfWeek.getDate() - (startOfWeek.getDay() + 6) % 7);
+    startOfWeek.setDate(startOfWeek.getDate() + state.currentWeekOffset * 7);
+
+    const formatter = new Intl.DateTimeFormat('it-IT', { month: 'long', day: 'numeric' });
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(endOfWeek.getDate() + 6);
+    dom.calendar.weekDisplay.textContent = `${formatter.format(startOfWeek)} - ${formatter.format(endOfWeek)}`;
+    dom.calendar.grid.innerHTML = '';
+    
     for (let i = 0; i < 7; i++) {
-        const date = new Date(startOfWeek);
-        date.setDate(date.getDate() + i);
-        const dateString = date.toISOString().split('T')[0];
-        const routinesForDay = state.workoutRoutines[dateString] || [];
+        const day = new Date(startOfWeek);
+        day.setDate(day.getDate() + i);
+        const dateString = day.toISOString().split('T')[0];
         const dayCell = document.createElement('div');
         dayCell.className = 'day-cell';
-        dayCell.dataset.date = dateString;
-        dayCell.innerHTML = `<div><div class="day-header">${dayNames[i]}</div><div class="day-number">${date.getDate()}</div></div><div>${routinesForDay.length > 0 ? `<div class="workout-summary">${routinesForDay.length} esercizi</div>` : ''}<button class="start-btn-small" ${routinesForDay.length === 0 ? 'disabled' : ''}>INIZIA</button></div>`;
+        if (day.toDateString() === new Date().toDateString()) dayCell.classList.add('today');
+        
+        const routine = state.workoutRoutines[dateString];
+        dayCell.innerHTML = `
+            <div class="day-header">${day.toLocaleDateString('it-IT', { weekday: 'short' })}</div>
+            <div class="day-number">${day.getDate()}</div>
+            ${routine && routine.length > 0 ? `<div class="workout-summary">${routine.length} esercizi</div><button class="start-btn-small">INIZIA</button>` : ''}
+        `;
+        dayCell.onclick = (e) => {
+            if (e.target.classList.contains('start-btn-small')) {
+                startWorkout(dateString);
+            } else {
+                openWorkoutEditor(dateString);
+            }
+        };
         dom.calendar.grid.appendChild(dayCell);
     }
 }
-
 function renderDailyWorkoutList() {
     const routine = state.workoutRoutines[state.editingDate] || [];
     const listEl = dom.modals.dailyWorkoutsList;
     if (!listEl) return;
     listEl.innerHTML = '';
     if (routine.length === 0) {
-        listEl.innerHTML = `<p class="empty-list-placeholder">Nessun esercizio per oggi. Aggiungine uno!</p>`;
+        listEl.innerHTML = `<p class="empty-list-placeholder">Nessun esercizio. Aggiungine uno!</p>`;
         return;
     }
     routine.forEach((exercise, index) => {
         const item = document.createElement('div');
         item.className = 'workout-item';
-        item.innerHTML = `<div class="workout-item-details"><strong>${exercise.name}</strong></div><button class="remove-exercise-btn" data-index="${index}" title="Rimuovi esercizio">&times;</button>`;
+        item.innerHTML = `<div class="workout-item-details"><strong>${exercise.name}</strong></div><button class="remove-exercise-btn" data-index="${index}">&times;</button>`;
         listEl.appendChild(item);
     });
 }
-
 function renderExerciseLibrary() {
     const listEl = dom.modals.exerciseLibraryList;
     if (!listEl) return;
@@ -185,150 +323,75 @@ function renderExerciseLibrary() {
         const item = document.createElement('div');
         item.className = 'library-item';
         item.dataset.name = exercise.name;
-        item.innerHTML = `<strong>${exercise.name}</strong><p>${exercise.description}</p>`;
+        item.innerHTML = `<strong>${exercise.name}</strong><p style="font-size:0.8em; color: var(--text-secondary);">${exercise.description}</p>`;
         listEl.appendChild(item);
     });
 }
 
-function renderTrainer() {
-    if (!state.activeWorkout) return;
-    const exercise = state.activeWorkout?.[state.currentExerciseIndex];
-    if (!exercise) {
-        // Workout finito? Gestiremo qui la transizione al debriefing.
-        return;
-    }
-
-    dom.trainer.name.textContent = exercise.name;
-    dom.trainer.description.textContent = exercise.description;
-
-    const params = exercise.defaultParams;
-    dom.trainer.counters.textContent = `Serie: ${state.currentSeries} / ${params.series || 1} | ${params.reps ? `Rip: ${params.reps}` : `Tempo: ${params.duration}s`}`;
-
-    switch (state.trainerStatus) {
-        case 'ready':
-            dom.trainer.display.textContent = "PREMI PER INIZIARE";
-            dom.trainer.display.classList.remove('flashing');
-            dom.trainer.actionBtn.textContent = "AVVIA ESERCIZIO";
-            break;
-        
-        case 'preparing':
-            dom.trainer.display.textContent = state.countdownValue;
-            dom.trainer.display.classList.add('flashing');
-            dom.trainer.actionBtn.textContent = "IN PREPARAZIONE...";
-            dom.trainer.actionBtn.disabled = true;
-            break;
-        
-        case 'running':
-            dom.trainer.display.classList.remove('flashing');
-            dom.trainer.actionBtn.disabled = false;
-            // La logica specifica (tempo vs reps) verrà qui
-            if(exercise.type === 'time') {
-                dom.trainer.display.textContent = state.countdownValue;
-                 dom.trainer.actionBtn.textContent = "PAUSA";
-            } else {
-                 dom.trainer.display.textContent = "ESEGUI LE RIPETIZIONI";
-                 dom.trainer.actionBtn.textContent = "FATTO";
-            }
-            break;
-    }
-
-    const nextExercise = state.activeWorkout?.[state.currentExerciseIndex + 1];
-    dom.trainer.nextExercise.textContent = nextExercise ? `Prossimo: ${nextExercise.name}` : 'Ultimo esercizio!';
-}
-
 function updateUI() {
-    if (dom.views.calendar?.classList.contains('view--active')) {
-        renderCalendar();
-    }
-    if (dom.views.trainer?.classList.contains('view--active')) {
-        renderTrainer();
+    switch (state.trainerStatus) {
+        case 'idle':
+        case 'finished':
+            renderCalendar();
+            break;
+        default:
+            renderTrainer();
+            break;
     }
 }
 
-// --- MOTORE DEL TRAINER ---
-function trainerTick() {
-    if (state.trainerStatus === 'preparing') {
-        state.countdownValue--;
-        if (state.countdownValue <= 0) {
-            state.trainerStatus = 'running';
-            const exercise = state.activeWorkout?.[state.currentExerciseIndex];
-            if (exercise?.type === 'time') {
-                state.countdownValue = exercise.defaultParams.duration;
-            }
-        }
-    } else if (state.trainerStatus === 'running') {
-        const exercise = state.activeWorkout?.[state.currentExerciseIndex];
-        if (exercise?.type === 'time') {
-            state.countdownValue--;
-            if (state.countdownValue < 0) {
-                // Tempo finito, gestisci fine serie/esercizio
-                state.trainerStatus = 'paused'; // Placeholder
-                clearInterval(trainerInterval);
-                trainerInterval = null;
-            }
-        }
-    }
-    updateUI();
-}
+// --- EVENT HANDLERS & INITIALIZATION ---
+function handleTrainerAction(event) {
+    const action = event.target.id;
+    const currentStatus = state.trainerStatus;
 
-// --- INIZIALIZZAZIONE ---
-function handleTrainerAction() {
-    if (state.trainerStatus === 'ready') {
+    if (currentStatus === 'ready' && action === 'start-exercise-btn') {
         state.trainerStatus = 'preparing';
-        state.countdownValue = 3; 
-        
+        state.countdownValue = 3;
         if (trainerInterval) clearInterval(trainerInterval);
         trainerInterval = setInterval(trainerTick, 1000);
+    } else if (currentStatus === 'action' && exercise.type === 'ripetizioni' && action === 'next-set-btn') {
+        handleSetCompletion();
+    } else if (currentStatus === 'rest' && action === 'next-set-btn') {
+        // Salta il resto del recupero
+        clearInterval(trainerInterval);
+        trainerInterval = null;
+        state.currentSeries++;
+        state.trainerStatus = 'ready';
+        handleTrainerAction({ target: { id: 'start-exercise-btn' } });
     }
-    // Aggiungeremo qui la logica per gli altri stati (es. 'running' -> 'paused')
     updateUI();
 }
 
 function setupEventListeners() {
-    if (dom.calendar.prevWeekBtn) dom.calendar.prevWeekBtn.addEventListener('click', goToPrevWeek);
-    if (dom.calendar.nextWeekBtn) dom.calendar.nextWeekBtn.addEventListener('click', goToNextWeek);
+    dom.calendar.prevWeekBtn?.addEventListener('click', () => { state.currentWeekOffset--; updateUI(); });
+    dom.calendar.nextWeekBtn?.addEventListener('click', () => { state.currentWeekOffset++; updateUI(); });
     
-    if (dom.calendar.grid) {
-        dom.calendar.grid.addEventListener('click', (event) => {
-            const dayCell = event.target.closest('.day-cell');
-            if (!dayCell || !dayCell.dataset.date) return;
-            const date = dayCell.dataset.date;
-            if (event.target.classList.contains('start-btn-small')) {
-                startWorkout(date);
-            } else {
-                openWorkoutEditor(date);
-            }
-        });
-    }
+    dom.trainer.controls?.addEventListener('click', handleTrainerAction);
+    
+    dom.debrief.backToCalendarBtn?.addEventListener('click', () => { state.trainerStatus = 'idle'; showView('calendar'); updateUI(); });
+    dom.debrief.copyBtn?.addEventListener('click', () => {
+        dom.debrief.textArea.select();
+        document.execCommand('copy');
+    });
 
-    if (dom.modals.closeEditorBtn) dom.modals.closeEditorBtn.addEventListener('click', closeWorkoutEditor);
-    if (dom.modals.addExerciseBtn) dom.modals.addExerciseBtn.addEventListener('click', openLibraryModal);
-    if (dom.modals.closeLibraryBtn) dom.modals.closeLibraryBtn.addEventListener('click', closeLibraryModal);
+    dom.modals.closeEditorBtn?.addEventListener('click', () => { state.editingDate = null; dom.modals.editor.classList.remove('visible'); updateUI(); });
+    dom.modals.addExerciseBtn?.addEventListener('click', () => dom.modals.library.classList.add('visible'));
+    dom.modals.closeLibraryBtn?.addEventListener('click', () => dom.modals.library.classList.remove('visible'));
 
-    if (dom.modals.exerciseLibraryList) {
-        dom.modals.exerciseLibraryList.addEventListener('click', (event) => {
-            const target = event.target.closest('.library-item');
-            if (target && target.dataset.name) {
-                addExerciseToRoutine(target.dataset.name);
-            }
-        });
-    }
-
-    if (dom.modals.dailyWorkoutsList) {
-        dom.modals.dailyWorkoutsList.addEventListener('click', (event) => {
-            const target = event.target.closest('.remove-exercise-btn');
-            if (target && target.dataset.index) {
-                removeExerciseFromRoutine(parseInt(target.dataset.index, 10));
-            }
-        });
-    }
-
-    if (dom.trainer.actionBtn) {
-        dom.trainer.actionBtn.addEventListener('click', handleTrainerAction);
-    }
+    dom.modals.exerciseLibraryList?.addEventListener('click', e => {
+        const target = e.target.closest('.library-item');
+        if (target?.dataset.name) addExerciseToRoutine(target.dataset.name);
+    });
+    
+    dom.modals.dailyWorkoutsList?.addEventListener('click', e => {
+        const target = e.target.closest('.remove-exercise-btn');
+        if (target?.dataset.index) removeExerciseFromRoutine(parseInt(target.dataset.index, 10));
+    });
 }
 
 function main() {
+    initAudio();
     setupEventListeners();
     showView('calendar');
     updateUI();

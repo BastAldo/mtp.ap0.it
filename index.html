@@ -15,37 +15,44 @@
                 <h2 id="week-display"></h2>
                 <button id="next-week-btn" class="btn btn-primary">&gt;</button>
             </div>
-            <div id="week-grid">
-                </div>
+            <div id="week-grid"></div>
         </div>
 
         <div id="trainer-view" class="view">
             <h2 id="exercise-name">--</h2>
             <p id="trainer-counters">Serie: -/- | Rip: -/-</p>
-            
-            <div id="trainer-main-display" class="status-message">
-                PREPARATI
-            </div>
-
+            <div id="trainer-main-display" class="status-message">--</div>
             <p id="exercise-description">--</p>
-
-            <button id="trainer-action-btn" class="btn btn-primary">AVVIA ESERCIZIO</button>
-
+            <div id="trainer-controls">
+                <button id="start-exercise-btn" class="btn btn-primary">AVVIA ESERCIZIO</button>
+                <button id="next-set-btn" class="btn btn-secondary">INIZIA SERIE SUCCESSIVA</button>
+                <button id="next-exercise-btn" class="btn btn-secondary">PROSSIMO ESERCIZIO</button>
+                <button id="end-workout-btn" class="btn btn-success">TERMINA WORKOUT</button>
+            </div>
             <div class="trainer-footer">
                 <p id="next-exercise-preview">Prossimo: --</p>
             </div>
         </div>
 
         <div id="debriefing-view" class="view">
-            <h2>Debriefing</h2>
+            <h2>Debriefing Allenamento</h2>
+            <div id="debrief-summary"></div>
+            <div id="debrief-actions">
+                <textarea id="debrief-text-area" rows="10" readonly></textarea>
+                <button id="copy-debrief-btn" class="btn btn-secondary">Copia per il Coach</button>
+                <button id="back-to-calendar-btn" class="btn btn-primary">Torna al Calendario</button>
+            </div>
+            <div id="debrief-chat">
+                <h3>Chat con il Coach</h3>
+                <iframe id="gemini-chat-iframe" src="https://gemini.google.com/app" title="Gemini Chat"></iframe>
+            </div>
         </div>
     </div>
 
     <div id="editor-modal" class="modal-overlay">
         <div class="modal-content">
             <h3 id="editor-modal-title">Modifica Allenamento</h3>
-            <div id="daily-workouts-list">
-                </div>
+            <div id="daily-workouts-list"></div>
             <div class="modal-actions">
                 <button id="add-exercise-btn" class="btn btn-secondary">Aggiungi Esercizio</button>
                 <button id="close-editor-btn" class="btn btn-grey">Chiudi</button>
@@ -55,8 +62,7 @@
     <div id="library-modal" class="modal-overlay">
         <div class="modal-content">
             <h3>Libreria Esercizi</h3>
-            <div id="exercise-library-list">
-                </div>
+            <div id="exercise-library-list"></div>
              <div class="modal-actions">
                 <button id="close-library-btn" class="btn btn-grey">Annulla</button>
             </div>
