@@ -1,0 +1,34 @@
+# Nome del workflow, apparirà nella scheda "Actions" di GitHub
+name: Deploy to VPS
+
+# Trigger: si attiva ad ogni push sul branch 'main'
+on:
+  push:
+    branches:
+      - main
+
+# Lavori da eseguire
+jobs:
+  deploy:
+    # Usa una macchina virtuale Ubuntu fresca per eseguire il lavoro
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Fa il "checkout" del tuo codice dal repository alla macchina virtuale
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # 2. Sincronizza i file sul VPS usando rsync via SSH
+      - name: Deploy to VPS via rsync
+        uses: easingthemes/ssh-deploy@main
+        with:
+          # La chiave privata SSH che abbiamo salvato nei segreti
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          # La cartella di origine sulla macchina virtuale (tutto il repo)
+          SOURCE: "./"
+          # L'utente e l'host del server di destinazione
+          REMOTE_HOST: ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}
+          # La cartella di destinazione sul VPS
+          TARGET: ${{ secrets.VPS_TARGET_PATH }}
+          # Esclude la cartella .git e altre per non trasferirle
+          EXCLUDE: "/.git/, /.github/"
