@@ -18,7 +18,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 2. Sincronizza i file sul VPS usando rsync via SSH
+# 2. Sincronizza i file sul VPS usando rsync via SSH
       - name: Deploy to VPS via rsync
         uses: easingthemes/ssh-deploy@main
         with:
@@ -26,8 +26,10 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           # La cartella di origine sulla macchina virtuale (tutto il repo)
           SOURCE: "./"
-          # L'utente e l'host del server di destinazione
-          REMOTE_HOST: ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}
+          # L'host/IP del server di destinazione (letto dai segreti)
+          REMOTE_HOST: ${{ secrets.VPS_HOST }}
+          # L'utente del server di destinazione (letto dai segreti)
+          REMOTE_USER: ${{ secrets.VPS_USER }}
           # La cartella di destinazione sul VPS
           TARGET: ${{ secrets.VPS_TARGET_PATH }}
           # Esclude la cartella .git e altre per non trasferirle
