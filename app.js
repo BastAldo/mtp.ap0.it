@@ -14,7 +14,12 @@ const dom = {
         nextWeekBtn: document.getElementById('next-week-btn'),
     },
     trainer: {
-        instruction: document.getElementById('trainer-instruction'),
+        name: document.getElementById('exercise-name'),
+        counters: document.getElementById('trainer-counters'),
+        display: document.getElementById('trainer-main-display'),
+        description: document.getElementById('exercise-description'),
+        actionBtn: document.getElementById('trainer-action-btn'),
+        nextExercise: document.getElementById('next-exercise-preview'),
     },
     modals: {
         editor: document.getElementById('editor-modal'),
@@ -34,6 +39,11 @@ const state = {
     workoutRoutines: JSON.parse(localStorage.getItem('workoutRoutines')) || {},
     activeWorkout: null,
     editingDate: null,
+    // Stati per il trainer
+    trainerStatus: 'ready', // 'ready', 'preparing', 'running', 'paused', 'finished'
+    currentExerciseIndex: 0,
+    currentSeries: 1,
+    countdownValue: 0,
 };
 
 // --- FUNZIONI DI LOGICA ---
@@ -62,12 +72,24 @@ function removeExerciseFromRoutine(index) {
     renderDailyWorkoutList();
 }
 
-function goToPrevWeek() { state.currentWeekOffset--; updateUI(); }
-function goToNextWeek() { state.currentWeekOffset++; updateUI(); }
+function goToPrevWeek() {
+    state.currentWeekOffset--;
+    updateUI();
+}
+
+function goToNextWeek() {
+    state.currentWeekOffset++;
+    updateUI();
+}
 
 function startWorkout(date) {
-    if (!state.workoutRoutines[date]) return;
+    if (!state.workoutRoutines[date] || state.workoutRoutines[date].length === 0) return;
+    
     state.activeWorkout = state.workoutRoutines[date];
+    state.trainerStatus = 'ready';
+    state.currentExerciseIndex = 0;
+    state.currentSeries = 1;
+    
     showView('trainer');
     updateUI();
 }
@@ -101,7 +123,9 @@ function closeLibraryModal() {
 // --- FUNZIONI DI RENDER ---
 function showView(viewId) {
     for (const id in dom.views) {
-        if (dom.views[id]) dom.views[id].classList.toggle('view--active', id === viewId);
+        if (dom.views[id]) {
+            dom.views[id].classList.toggle('view--active', id === viewId);
+        }
     }
 }
 
@@ -114,7 +138,9 @@ function renderCalendar() {
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 6);
 
-    if (dom.calendar.weekDisplay) dom.calendar.weekDisplay.textContent = `${startOfWeek.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })} - ${endOfWeek.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}`;
+    if (dom.calendar.weekDisplay) {
+        dom.calendar.weekDisplay.textContent = `${startOfWeek.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })} - ${endOfWeek.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}`;
+    }
     if (!dom.calendar.grid) return;
     dom.calendar.grid.innerHTML = '';
     const dayNames = ['LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB', 'DOM'];
@@ -163,25 +189,45 @@ function renderExerciseLibrary() {
 }
 
 function renderTrainer() {
-    if (!dom.trainer.instruction) return;
-    if (!state.activeWorkout || state.activeWorkout.length === 0) {
-        dom.trainer.instruction.textContent = 'Nessun allenamento da avviare.';
-        return;
+    if (!state.activeWorkout) return;
+    const exercise = state.activeWorkout?.[state.currentExerciseIndex];
+    if (!exercise) return;
+
+    dom.trainer.name.textContent = exercise.name;
+    dom.trainer.description.textContent = exercise.description;
+
+    switch (state.trainerStatus) {
+        case 'ready':
+            const params = exercise.defaultParams;
+            dom.trainer.counters.textContent = `Serie: ${params.series || 1} | ${params.reps ? `Rip: ${params.reps}` : `Tempo: ${params.duration}s`}`;
+            dom.trainer.display.textContent = "PREMI PER INIZIARE";
+            dom.trainer.actionBtn.textContent = "AVVIA ESERCIZIO";
+            break;
     }
-    const firstExercise = state.activeWorkout[0];
-    if (firstExercise && firstExercise.name) {
-        dom.trainer.instruction.textContent = `Prossimo: ${firstExercise.name}`;
-    } else {
-        dom.trainer.instruction.textContent = 'Errore: Dati esercizio non validi.';
-    }
+
+    const nextExercise = state.activeWorkout?.[state.currentExerciseIndex + 1];
+    dom.trainer.nextExercise.textContent = nextExercise ? `Prossimo: ${nextExercise.name}` : 'Ultimo esercizio!';
 }
 
 function updateUI() {
-    if (dom.views.calendar?.classList.contains('view--active')) renderCalendar();
-    if (dom.views.trainer?.classList.contains('view--active')) renderTrainer();
+    if (dom.views.calendar?.classList.contains('view--active')) {
+        renderCalendar();
+    }
+    if (dom.views.trainer?.classList.contains('view--active')) {
+        renderTrainer();
+    }
 }
 
 // --- INIZIALIZZAZIONE ---
+function handleTrainerAction() {
+    console.log(`Azione richiesta con stato: ${state.trainerStatus}`);
+    if (state.trainerStatus === 'ready') {
+        state.trainerStatus = 'preparing';
+        console.log(`Nuovo stato: ${state.trainerStatus}`);
+        updateUI();
+    }
+}
+
 function setupEventListeners() {
     if (dom.calendar.prevWeekBtn) dom.calendar.prevWeekBtn.addEventListener('click', goToPrevWeek);
     if (dom.calendar.nextWeekBtn) dom.calendar.nextWeekBtn.addEventListener('click', goToNextWeek);
@@ -191,8 +237,11 @@ function setupEventListeners() {
             const dayCell = event.target.closest('.day-cell');
             if (!dayCell || !dayCell.dataset.date) return;
             const date = dayCell.dataset.date;
-            if (event.target.classList.contains('start-btn-small')) startWorkout(date);
-            else openWorkoutEditor(date);
+            if (event.target.classList.contains('start-btn-small')) {
+                startWorkout(date);
+            } else {
+                openWorkoutEditor(date);
+            }
         });
     }
 
@@ -203,15 +252,23 @@ function setupEventListeners() {
     if (dom.modals.exerciseLibraryList) {
         dom.modals.exerciseLibraryList.addEventListener('click', (event) => {
             const target = event.target.closest('.library-item');
-            if (target && target.dataset.name) addExerciseToRoutine(target.dataset.name);
+            if (target && target.dataset.name) {
+                addExerciseToRoutine(target.dataset.name);
+            }
         });
     }
 
     if (dom.modals.dailyWorkoutsList) {
         dom.modals.dailyWorkoutsList.addEventListener('click', (event) => {
             const target = event.target.closest('.remove-exercise-btn');
-            if (target && target.dataset.index) removeExerciseFromRoutine(parseInt(target.dataset.index, 10));
+            if (target && target.dataset.index) {
+                removeExerciseFromRoutine(parseInt(target.dataset.index, 10));
+            }
         });
+    }
+
+    if (dom.trainer.actionBtn) {
+        dom.trainer.actionBtn.addEventListener('click', handleTrainerAction);
     }
 }
 
