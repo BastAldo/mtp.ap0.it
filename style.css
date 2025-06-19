@@ -1,71 +1,87 @@
-:root {
-    --bg-color: #1a1a1d;
-    --card-color: #2c2c34;
-    --primary-color: #9575cd;
-    --secondary-color: #4db6ac;
-    --text-color: #f4f4f9;
-    --text-secondary: #b3b3b3;
-    --danger-color: #ef5350;
-    --success-color: #66bb6a;
+/* Aggiunte per il nuovo layout del Trainer */
+
+.trainer-header {
+    text-align: center;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #444;
+    padding-bottom: 15px;
 }
-*, *::before, *::after { box-sizing: border-box; }
-html, body { height: 100%; }
-body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    background-color: var(--bg-color);
-    color: var(--text-color);
-    margin: 0;
-    padding: 15px;
+
+.trainer-header h2 {
+    margin-bottom: 10px;
 }
-.hidden { display: none !important; }
 
-#app-container { width: 100%; max-width: 1200px; margin: 0 auto; }
-.view { padding: 10px; }
+.trainer-stats {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    font-size: 1.1em;
+    color: #bdc3c7;
+}
 
-/* Vista Calendario */
-#calendar-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; }
-#calendar-header h2 { margin: 0; font-size: 1.2em; color: var(--secondary-color); }
-#week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
-.day-cell { background: var(--card-color); border-radius: 8px; padding: 8px; min-height: 120px; border-left: 4px solid transparent; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; }
-.day-cell:hover { transform: translateY(-3px); border-color: var(--primary-color); }
-.day-header { font-weight: bold; font-size: 0.8em; text-align: center; color: var(--text-secondary); margin-bottom: 5px; }
-.workout-summary { font-size: 0.8em; margin-top: 5px; background: #3c3c44; padding: 5px; border-radius: 4px; }
-.workout-summary .title { font-weight: bold; word-wrap: break-word; }
-.start-btn-small { background: var(--secondary-color); color: #000; border: none; border-radius: 4px; padding: 4px; width: 100%; margin-top: 5px; font-size: 0.7em; font-weight: bold; cursor: pointer;}
+.stats-divider {
+    color: #555;
+    font-size: 1.2em;
+}
 
-/* Modals */
-.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 1000; }
-.modal-content { background: #33333a; padding: 25px; border-radius: 15px; width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
-.modal-content h3 { margin-top: 0; color: var(--primary-color); }
-.modal-actions { margin-top: 20px; display: flex; justify-content: space-between; gap: 10px; }
-.modal-actions button { flex-grow: 1; }
+.trainer-main-display {
+    text-align: center;
+    margin: 30px 0;
+}
 
-/* Editor Allenamenti del Giorno */
-#daily-workouts-list .workout-item { display: flex; align-items: center; justify-content: space-between; background: var(--card-color); padding: 10px; border-radius: 5px; margin-bottom: 10px; }
-#daily-workouts-list .workout-item-details { text-align: left; }
-#daily-workouts-list .workout-item-actions button { font-size: 1.2em; background: none; border: none; color: var(--text-secondary); cursor: pointer; }
-#exercise-library-list .library-item { background: var(--card-color); padding: 15px; border-radius: 5px; margin-bottom: 10px; cursor: pointer; text-align: left;}
-#exercise-library-list .library-item:hover { background-color: #4a4a52; }
-#history-list li { background: var(--card-color); padding: 10px; margin-bottom: 10px; border-radius: 5px; text-align: left; font-size: 0.9em;}
+#trainer-action-wrapper {
+    min-height: 60px; /* Assicura altezza stabile durante il lampeggio */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 
-/* Trainer View */
-#trainer-view { text-align: center; }
-#trainer-instruction { font-size: 2.5em; font-weight: bold; color: var(--primary-color); min-height: 80px; transition: color 0.3s; }
-@keyframes flash { 50% { opacity: 0.3; } }
-.flashing { animation: flash 0.8s infinite ease-in-out; }
-#trainer-timer { font-size: 4em; font-weight: 200; }
-.trainer-counters { font-size: 1.2em; color: var(--text-secondary); margin: 10px 0; }
-.workout-description { font-size: 0.9em; color: var(--text-secondary); margin-top: 15px; padding: 10px; border-top: 1px solid #444; }
+#trainer-current-action {
+    font-size: 3.5em;
+    font-weight: bold;
+    color: #3498db;
+    line-height: 1.2;
+}
 
-/* Debriefing View */
-#debriefing-view { display: grid; grid-template-columns: 1fr; gap: 20px; align-items: flex-start; }
-#debrief-summary { background: var(--card-color); padding: 20px; border-radius: 12px; }
-#summary-actions { display:flex; flex-direction:column; gap:10px; }
+#trainer-timer-wrapper {
+    margin-top: 10px;
+}
 
-/* Pulsanti */
-.btn { padding: 12px 18px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; transition: all 0.2s; }
-.btn:hover { transform: scale(1.03); }
-.btn-primary { background: var(--primary-color); color: #000; }
-.btn-secondary { background: var(--secondary-color); color: #000; }
-.btn-danger { background: var(--danger-color); color: #fff; }
-.btn-grey { background: #555; color: var(--text-color); }
+#trainer-main-timer {
+    font-size: 4.5em;
+    font-weight: 200;
+    font-family: 'Roboto', 'Helvetica Neue', sans-serif; /* Un font più adatto per i numeri */
+    color: #ecf0f1;
+}
+
+.trainer-footer {
+    text-align: center;
+    margin-top: 20px;
+}
+
+#trainer-exercise-desc {
+    font-size: 1em;
+    line-height: 1.6;
+    color: #95a5a6;
+    max-width: 500px;
+    margin: 0 auto 25px auto;
+}
+
+#trainer-controls {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+
+/* Animazione di Lampeggio */
+@keyframes flash-animation {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+.is-flashing {
+    animation: flash-animation 0.8s infinite;
+}
