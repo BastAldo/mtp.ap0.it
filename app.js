@@ -16,6 +16,12 @@ const dom = {
     },
     trainer: {
         instruction: document.getElementById('trainer-instruction'),
+    },
+    modals: {
+        editor: document.getElementById('editor-modal'),
+        editorTitle: document.getElementById('editor-modal-title'),
+        closeEditorBtn: document.getElementById('close-editor-btn'),
+        library: document.getElementById('library-modal'),
     }
 };
 
@@ -24,89 +30,30 @@ const state = {
     currentWeekOffset: 0,
     workoutRoutines: JSON.parse(localStorage.getItem('workoutRoutines')) || {},
     activeWorkout: null,
+    editingDate: null, // NUOVO: tiene traccia della data che stiamo modificando
 };
 
 // --- FUNZIONI DI LOGICA ---
-function goToPrevWeek() {
-    state.currentWeekOffset--;
-    updateUI();
+function goToPrevWeek() { /* ... codice invariato ... */ }
+function goToNextWeek() { /* ... codice invariato ... */ }
+function startWorkout(date) { /* ... codice invariato ... */ }
+
+function openWorkoutEditor(date) {
+    state.editingDate = date;
+    dom.modals.editorTitle.textContent = `Allenamento del ${new Date(date).toLocaleDateString('it-IT')}`;
+    // Qui in futuro popoleremo la lista degli esercizi
+    dom.modals.editor.classList.add('visible');
 }
 
-function goToNextWeek() {
-    state.currentWeekOffset++;
-    updateUI();
-}
-
-function startWorkout(date) {
-    console.log(`Avvio allenamento per il giorno: ${date}`);
-    state.activeWorkout = state.workoutRoutines[date];
-    showView('trainer');
-    updateUI();
+function closeWorkoutEditor() {
+    state.editingDate = null;
+    dom.modals.editor.classList.remove('visible');
 }
 
 // --- FUNZIONI DI RENDER ---
-function showView(viewId) {
-    for (const id in dom.views) {
-        dom.views[id].classList.toggle('view--active', id === viewId);
-    }
-}
-
-function renderCalendar() {
-    const today = new Date();
-    today.setDate(today.getDate() + state.currentWeekOffset * 7);
-    
-    const dayOfWeek = today.getDay();
-    const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); 
-    const startOfWeek = new Date(today.setDate(diff));
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6);
-
-    dom.calendar.weekDisplay.textContent = 
-        `${startOfWeek.toLocaleDateString('it-IT', {day: 'numeric', month: 'short'})} - ${endOfWeek.toLocaleDateString('it-IT', {day: 'numeric', month: 'short'})}`;
-
-    dom.calendar.grid.innerHTML = '';
-
-    const dayNames = ['LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB', 'DOM'];
-
-    for (let i = 0; i < 7; i++) {
-        const date = new Date(startOfWeek);
-        date.setDate(date.getDate() + i);
-        const dateString = date.toISOString().split('T')[0];
-        const routinesForDay = state.workoutRoutines[dateString] || [];
-
-        const dayCell = document.createElement('div');
-        dayCell.className = 'day-cell';
-        dayCell.dataset.date = dateString;
-
-        dayCell.innerHTML = `
-            <div>
-                <div class="day-header">${dayNames[i]}</div>
-                <div class="day-number">${date.getDate()}</div>
-            </div>
-            <div>
-                ${routinesForDay.length > 0 ? `<div class="workout-summary">${routinesForDay.length} esercizi</div>` : ''}
-                <button class="start-btn-small" ${routinesForDay.length === 0 ? 'disabled' : ''}>INIZIA</button>
-            </div>
-        `;
-        dom.calendar.grid.appendChild(dayCell);
-    }
-}
-
-function renderTrainer() {
-    // Codice reso più robusto per gestire dati mancanti o corrotti
-    if (!state.activeWorkout || state.activeWorkout.length === 0) {
-        dom.trainer.instruction.textContent = 'Nessun allenamento da avviare.';
-        return;
-    }
-    
-    const firstExercise = state.activeWorkout[0];
-    
-    if (firstExercise && firstExercise.name) {
-        dom.trainer.instruction.textContent = `Prossimo: ${firstExercise.name}`;
-    } else {
-        dom.trainer.instruction.textContent = 'Errore: Esercizio non valido.';
-    }
-}
+function showView(viewId) { /* ... codice invariato ... */ }
+function renderCalendar() { /* ... codice invariato ... */ }
+function renderTrainer() { /* ... codice invariato ... */ }
 
 function updateUI() {
     if (dom.views.calendar.classList.contains('view--active')) {
@@ -122,20 +69,23 @@ function setupEventListeners() {
     dom.calendar.prevWeekBtn.addEventListener('click', goToPrevWeek);
     dom.calendar.nextWeekBtn.addEventListener('click', goToNextWeek);
 
+    // Listener per la griglia del calendario
     dom.calendar.grid.addEventListener('click', (event) => {
         const target = event.target;
-        
+        const dayCell = target.closest('.day-cell');
+        if (!dayCell) return;
+
+        const date = dayCell.dataset.date;
+
         if (target.classList.contains('start-btn-small')) {
-            const dayCell = target.closest('.day-cell');
-            if (dayCell && dayCell.dataset.date) {
-                startWorkout(dayCell.dataset.date);
-            }
-        }
-        else if (target.closest('.day-cell')) {
-            const dayCell = target.closest('.day-cell');
-            console.log(`Apertura editor per il giorno: ${dayCell.dataset.date}`);
+            startWorkout(date);
+        } else {
+            openWorkoutEditor(date);
         }
     });
+    
+    // Listener per chiudere il modale
+    dom.modals.closeEditorBtn.addEventListener('click', closeWorkoutEditor);
 }
 
 function main() {
@@ -144,4 +94,5 @@ function main() {
     updateUI();
 }
 
+// Avviamo l'app
 main();
