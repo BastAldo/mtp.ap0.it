@@ -69,12 +69,19 @@ document.addEventListener('DOMContentLoaded', () => {
         oscillator.stop(audioContext.currentTime + 0.2);
     }
     
-    function showView(viewName) {
-        Object.values(views).forEach(view => view.style.display = 'none');
-        if (views[viewName]) {
-            views[viewName].style.display = 'block';
+    // L. GESTIONE VISTE
+    const showView = (viewId) => {
+        // Nasconde tutte le viste
+        document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
+        
+        // Mostra solo la vista richiesta
+        const viewToShow = document.getElementById(viewId);
+        if (viewToShow) {
+            // CORREZIONE: Imposta 'flex' invece di 'block' per rispettare
+            // il layout definito nel file CSS.
+            viewToShow.style.display = 'flex';
         }
-    }
+    };
     
     function renderCalendar() {
         calendarGrid.innerHTML = '';
