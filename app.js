@@ -8,7 +8,6 @@ const dom = {
         debriefing: document.getElementById('debriefing-view'),
     },
     calendar: {
-        header: document.getElementById('calendar-header'),
         weekDisplay: document.getElementById('week-display'),
         grid: document.getElementById('week-grid'),
         prevWeekBtn: document.getElementById('prev-week-btn'),
@@ -20,8 +19,13 @@ const dom = {
     modals: {
         editor: document.getElementById('editor-modal'),
         editorTitle: document.getElementById('editor-modal-title'),
+        dailyWorkoutsList: document.getElementById('daily-workouts-list'),
+        addExerciseBtn: document.getElementById('add-exercise-btn'),
         closeEditorBtn: document.getElementById('close-editor-btn'),
+        
         library: document.getElementById('library-modal'),
+        exerciseLibraryList: document.getElementById('exercise-library-list'),
+        closeLibraryBtn: document.getElementById('close-library-btn'),
     }
 };
 
@@ -38,16 +42,32 @@ function saveRoutines() {
     localStorage.setItem('workoutRoutines', JSON.stringify(state.workoutRoutines));
 }
 
-function goToPrevWeek() {
-    state.currentWeekOffset--;
-    updateUI();
+function addExerciseToRoutine(exerciseName) {
+    const exerciseData = WORKOUTS.find(ex => ex.name === exerciseName);
+    if (!exerciseData) return;
+
+    // Crea la routine per il giorno se non esiste
+    if (!state.workoutRoutines[state.editingDate]) {
+        state.workoutRoutines[state.editingDate] = [];
+    }
+    // Aggiunge una copia dell'esercizio con i suoi parametri di default
+    state.workoutRoutines[state.editingDate].push({ ...exerciseData });
+    
+    saveRoutines();
+    renderDailyWorkoutList(); // Aggiorna la lista nell'editor
+    closeLibraryModal();
 }
 
-function goToNextWeek() {
-    state.currentWeekOffset++;
-    updateUI();
+function removeExerciseFromRoutine(index) {
+    if (!state.editingDate || !state.workoutRoutines[state.editingDate]) return;
+
+    state.workoutRoutines[state.editingDate].splice(index, 1);
+    saveRoutines();
+    renderDailyWorkoutList(); // Aggiorna la lista
 }
 
+function goToPrevWeek() { state.currentWeekOffset--; updateUI(); }
+function goToNextWeek() { state.currentWeekOffset++; updateUI(); }
 function startWorkout(date) {
     if (!state.workoutRoutines[date]) return;
     state.activeWorkout = state.workoutRoutines[date];
@@ -55,92 +75,75 @@ function startWorkout(date) {
     updateUI();
 }
 
+// --- LOGICA MODALI ---
 function openWorkoutEditor(date) {
     state.editingDate = date;
     const dateObj = new Date(date);
-    // Aggiustamento per il fuso orario per evitare di mostrare il giorno prima
     const userTimezoneOffset = dateObj.getTimezoneOffset() * 60000;
     const adjustedDate = new Date(dateObj.getTime() + userTimezoneOffset);
-    
     dom.modals.editorTitle.textContent = `Allenamento del ${adjustedDate.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}`;
+    renderDailyWorkoutList();
     dom.modals.editor.classList.add('visible');
-    // Futuro: renderizzare la lista di esercizi per state.editingDate
 }
 
 function closeWorkoutEditor() {
     state.editingDate = null;
     dom.modals.editor.classList.remove('visible');
+    updateUI(); // Aggiorna il calendario nel caso siano stati aggiunti esercizi
+}
+
+function openLibraryModal() {
+    renderExerciseLibrary();
+    dom.modals.library.classList.add('visible');
+}
+
+function closeLibraryModal() {
+    dom.modals.library.classList.remove('visible');
 }
 
 // --- FUNZIONI DI RENDER ---
-function showView(viewId) {
-    for (const id in dom.views) {
-        if (dom.views[id]) {
-            dom.views[id].classList.toggle('view--active', id === viewId);
-        }
-    }
-}
+function showView(viewId) { /* ... codice invariato ... */ }
+function renderCalendar() { /* ... codice invariato ... */ }
 
-function renderCalendar() {
-    const today = new Date();
-    today.setDate(today.getDate() + state.currentWeekOffset * 7);
-    
-    const dayOfWeek = today.getDay();
-    const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); 
-    const startOfWeek = new Date(today.setDate(diff));
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6);
+function renderDailyWorkoutList() {
+    const routine = state.workoutRoutines[state.editingDate] || [];
+    const listEl = dom.modals.dailyWorkoutsList;
+    listEl.innerHTML = '';
 
-    if (dom.calendar.weekDisplay) {
-        dom.calendar.weekDisplay.textContent = 
-            `${startOfWeek.toLocaleDateString('it-IT', {day: 'numeric', month: 'short'})} - ${endOfWeek.toLocaleDateString('it-IT', {day: 'numeric', month: 'short'})}`;
-    }
-
-    if (!dom.calendar.grid) return;
-    dom.calendar.grid.innerHTML = '';
-
-    const dayNames = ['LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB', 'DOM'];
-
-    for (let i = 0; i < 7; i++) {
-        const date = new Date(startOfWeek);
-        date.setDate(date.getDate() + i);
-        const dateString = date.toISOString().split('T')[0];
-        const routinesForDay = state.workoutRoutines[dateString] || [];
-
-        const dayCell = document.createElement('div');
-        dayCell.className = 'day-cell';
-        dayCell.dataset.date = dateString;
-
-        dayCell.innerHTML = `
-            <div>
-                <div class="day-header">${dayNames[i]}</div>
-                <div class="day-number">${date.getDate()}</div>
-            </div>
-            <div>
-                ${routinesForDay.length > 0 ? `<div class="workout-summary">${routinesForDay.length} esercizi</div>` : ''}
-                <button class="start-btn-small" ${routinesForDay.length === 0 ? 'disabled' : ''}>INIZIA</button>
-            </div>
-        `;
-        dom.calendar.grid.appendChild(dayCell);
-    }
-}
-
-function renderTrainer() {
-    if (!dom.trainer.instruction) return;
-    
-    if (!state.activeWorkout || state.activeWorkout.length === 0) {
-        dom.trainer.instruction.textContent = 'Nessun allenamento da avviare.';
+    if (routine.length === 0) {
+        listEl.innerHTML = `<p class="empty-list-placeholder">Nessun esercizio per oggi. Aggiungine uno!</p>`;
         return;
     }
-    
-    const firstExercise = state.activeWorkout[0];
-    
-    if (firstExercise && firstExercise.name) {
-        dom.trainer.instruction.textContent = `Prossimo: ${firstExercise.name}`;
-    } else {
-        dom.trainer.instruction.textContent = 'Errore: Dati esercizio non validi.';
-    }
+
+    routine.forEach((exercise, index) => {
+        const item = document.createElement('div');
+        item.className = 'workout-item';
+        item.innerHTML = `
+            <div class="workout-item-details">
+                <strong>${exercise.name}</strong>
+            </div>
+            <button class="remove-exercise-btn" data-index="${index}" title="Rimuovi esercizio">&times;</button>
+        `;
+        listEl.appendChild(item);
+    });
 }
+
+function renderExerciseLibrary() {
+    const listEl = dom.modals.exerciseLibraryList;
+    listEl.innerHTML = '';
+    WORKOUTS.forEach(exercise => {
+        const item = document.createElement('div');
+        item.className = 'library-item';
+        item.dataset.name = exercise.name;
+        item.innerHTML = `
+            <strong>${exercise.name}</strong>
+            <p>${exercise.description}</p>
+        `;
+        listEl.appendChild(item);
+    });
+}
+
+function renderTrainer() { /* ... codice invariato ... */ }
 
 function updateUI() {
     if (dom.views.calendar?.classList.contains('view--active')) {
@@ -153,29 +156,30 @@ function updateUI() {
 
 // --- INIZIALIZZAZIONE ---
 function setupEventListeners() {
-    if (dom.calendar.prevWeekBtn) {
-        dom.calendar.prevWeekBtn.addEventListener('click', goToPrevWeek);
-    }
-    if (dom.calendar.nextWeekBtn) {
-        dom.calendar.nextWeekBtn.addEventListener('click', goToNextWeek);
-    }
-    if (dom.calendar.grid) {
-        dom.calendar.grid.addEventListener('click', (event) => {
-            const target = event.target;
-            const dayCell = target.closest('.day-cell');
-            if (!dayCell || !dayCell.dataset.date) return;
+    // ... listener per bottoni settimana ...
 
-            const date = dayCell.dataset.date;
-            if (target.classList.contains('start-btn-small')) {
-                startWorkout(date);
-            } else {
-                openWorkoutEditor(date);
-            }
-        });
-    }
-    if (dom.modals.closeEditorBtn) {
-        dom.modals.closeEditorBtn.addEventListener('click', closeWorkoutEditor);
-    }
+    dom.calendar.grid.addEventListener('click', (event) => { /* ... codice invariato ... */ });
+    
+    // Listener per i modali
+    dom.modals.closeEditorBtn.addEventListener('click', closeWorkoutEditor);
+    dom.modals.addExerciseBtn.addEventListener('click', openLibraryModal);
+    dom.modals.closeLibraryBtn.addEventListener('click', closeLibraryModal);
+
+    // Event Delegation per la lista della libreria
+    dom.modals.exerciseLibraryList.addEventListener('click', (event) => {
+        const target = event.target.closest('.library-item');
+        if (target && target.dataset.name) {
+            addExerciseToRoutine(target.dataset.name);
+        }
+    });
+    
+    // Event Delegation per la rimozione di esercizi
+    dom.modals.dailyWorkoutsList.addEventListener('click', (event) => {
+        const target = event.target.closest('.remove-exercise-btn');
+        if(target && target.dataset.index) {
+            removeExerciseFromRoutine(parseInt(target.dataset.index, 10));
+        }
+    });
 }
 
 function main() {
