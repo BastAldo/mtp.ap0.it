@@ -1,87 +1,84 @@
-/* Aggiunte per il nuovo layout del Trainer */
+/* Reset di base e Stili Generali */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background-color: #f4f7f6;
+    color: #333;
+}
 
-.trainer-header {
-    text-align: center;
+button {
+    cursor: pointer;
+    padding: 10px 15px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    background-color: #fff;
+    font-size: 1rem;
+    transition: background-color 0.2s, box-shadow 0.2s;
+}
+
+button:hover:not(:disabled) {
+    background-color: #e9e9e9;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+/* Architettura delle Viste */
+.view {
+    display: none; /* Tutte le viste sono nascoste di default */
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+
+.view--active {
+    display: flex; /* La classe .view--active MOSTRA la vista come contenitore flex */
+}
+
+/* Vista Calendario */
+.week-navigation {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 600px;
     margin-bottom: 20px;
-    border-bottom: 1px solid #444;
-    padding-bottom: 15px;
-}
-
-.trainer-header h2 {
-    margin-bottom: 10px;
-}
-
-.trainer-stats {
-    display: flex;
-    justify-content: center;
     align-items: center;
-    gap: 15px;
-    font-size: 1.1em;
-    color: #bdc3c7;
 }
 
-.stats-divider {
-    color: #555;
-    font-size: 1.2em;
-}
-
-.trainer-main-display {
-    text-align: center;
-    margin: 30px 0;
-}
-
-#trainer-action-wrapper {
-    min-height: 60px; /* Assicura altezza stabile durante il lampeggio */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-#trainer-current-action {
-    font-size: 3.5em;
-    font-weight: bold;
-    color: #3498db;
-    line-height: 1.2;
-}
-
-#trainer-timer-wrapper {
-    margin-top: 10px;
-}
-
-#trainer-main-timer {
-    font-size: 4.5em;
-    font-weight: 200;
-    font-family: 'Roboto', 'Helvetica Neue', sans-serif; /* Un font più adatto per i numeri */
-    color: #ecf0f1;
-}
-
-.trainer-footer {
-    text-align: center;
-    margin-top: 20px;
-}
-
-#trainer-exercise-desc {
-    font-size: 1em;
-    line-height: 1.6;
-    color: #95a5a6;
-    max-width: 500px;
-    margin: 0 auto 25px auto;
-}
-
-#trainer-controls {
-    display: flex;
-    justify-content: center;
+.week-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
     gap: 10px;
-    flex-wrap: wrap;
+    width: 100%;
+    max-width: 900px;
 }
 
-
-/* Animazione di Lampeggio */
-@keyframes flash-animation {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
+.day-cell {
+    border: 1px solid #ddd;
+    padding: 10px;
+    text-align: center;
+    background-color: #fff;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 100px;
 }
 
-.is-flashing {
-    animation: flash-animation 0.8s infinite;
+.day-name { font-weight: bold; }
+.day-number { font-size: 1.5rem; margin: 5px 0; }
+.workout-summary { font-size: 0.9rem; color: #666; }
+
+/* Vista Trainer */
+#trainer-view h2 { font-size: 2.5rem; margin-bottom: 5px; }
+#trainer-view p { font-size: 1.2rem; color: #555; }
+
+.status-message {
+    font-size: 3rem;
+    font-weight: bold;
+    color: #007bff;
+    margin: 40px 0;
 }
