@@ -1,5 +1,3 @@
-//START
-alert("VERSIONE NUOVA CARICATA!!!");
 import { WORKOUTS } from './workouts.js';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -27,7 +25,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const calendarGrid = document.getElementById('calendar-grid');
     const prevWeekBtn = document.getElementById('prev-week-btn');
     const nextWeekBtn = document.getElementById('next-week-btn');
-    // ... (altri elementi modale se necessario)
+    const debriefingSummary = document.getElementById('debriefing-summary');
+    const returnToCalendarBtn = document.getElementById('return-to-calendar-btn');
+
 
     const trainerElements = {
         name: document.getElementById('trainer-exercise-name'),
@@ -57,7 +57,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function playTick() {
         if (!audioContext) return;
-        // ... (la logica audio rimane invariata)
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
+        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.2);
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.2);
     }
     
     function showView(viewName) {
@@ -68,7 +77,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function renderCalendar() {
-        // ... (la logica del calendario rimane invariata)
         calendarGrid.innerHTML = '';
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -93,7 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const dayName = day.toLocaleDateString('it-IT', { weekday: 'long' });
             const dayNumber = day.getDate();
-            dayCell.innerHTML = `<div class="day-name">${dayName}</div><div class="day-number">${dayNumber}</div>`;
+            dayCell.innerHTML = `<div class="day-name"><span class="math-inline">\{dayName\}</div\><div class\="day\-number"\></span>{dayNumber}</div>`;
             
             const routine = workoutRoutines[dateString];
             if (routine && routine.length > 0) {
@@ -111,14 +119,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
                 dayCell.appendChild(startBtn);
             }
-
-            dayCell.onclick = () => alert(`Editor per ${dateString} non implementato.`); // Placeholder
+            // Qui andrebbe la logica per aprire il modale editor
+            dayCell.onclick = () => console.log(`Editor per ${dateString} da implementare.`);
             calendarGrid.appendChild(dayCell);
         }
     }
     
     function updateTrainerUI(exercise, stage) {
-        // ... (la logica di update UI rimane invariata)
         const { controls } = trainerElements;
         
         if (stage === 'initial') {
@@ -143,15 +150,36 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function logWorkout(exercise) {
-        // ... (logica invariata)
+        const historyEntry = {
+            date: new Date().toISOString(),
+            exercise: exercise.name,
+            sets: exercise.sets,
+            reps: exercise.reps || null,
+            duration: exercise.duration || null
+        };
+        workoutHistory.push(historyEntry);
+        localStorage.setItem('workoutHistory', JSON.stringify(workoutHistory));
+    }
+
+    function generateDebrief() {
+        // Questa funzione genera il testo di riepilogo per l'ultimo allenamento
+        let report = "Riepilogo Allenamento:\n\n";
+        currentRoutine.forEach(ex => {
+            report += `- ${ex.name}: ${ex.sets} serie`;
+            if (ex.reps) report += ` x ${ex.reps} ripetizioni`;
+            if (ex.duration) report += ` per ${ex.duration} secondi`;
+            report += ".\n";
+        });
+        debriefingSummary.textContent = report;
     }
 
     function endWorkout() {
-        showView('debriefing'); // Mostra la vista di debriefing
+        generateDebrief();
+        showView('debriefing');
     }
     
     function endOfSet(exercise) {
-        // ... (logica invariata)
+        logWorkout(exercise);
         if (exercise.currentSet < exercise.sets) {
             trainerElements.controls.start.style.display = 'none';
             trainerElements.controls.nextSet.style.display = 'inline-block';
@@ -165,133 +193,10 @@ document.addEventListener('DOMContentLoaded', () => {
             trainerElements.controls.nextSet.style.display = 'none';
             trainerElements.currentAction.textContent = 'COMPLETATO';
             trainerElements.mainTimer.textContent = '✅';
-            logWorkout(exercise);
         }
     }
     
     function playPhase(name, duration, onComplete) {
-        // ... (logica invariata)
         trainerElements.currentAction.textContent = name;
         trainerElements.currentAction.classList.add('is-flashing');
-        trainerElements.mainTimer.textContent = '';
-        playTick();
-
-        setTimeout(() => {
-            trainerElements.currentAction.classList.remove('is-flashing');
-            let timeLeft = duration;
-            trainerElements.mainTimer.textContent = Math.floor(timeLeft);
-
-            timerInterval = setInterval(() => {
-                timeLeft -= 0.1;
-                const newIntTime = Math.floor(timeLeft);
-                if (newIntTime < parseInt(trainerElements.mainTimer.textContent)) {
-                    trainerElements.mainTimer.textContent = newIntTime > 0 ? newIntTime : 0;
-                }
-                if (timeLeft <= 0) {
-                    clearInterval(timerInterval);
-                    timerInterval = null;
-                    onComplete();
-                }
-            }, 100);
-        }, DELAY_BEFORE_ACTION);
-    }
-    
-    function runTimedPhase(exercise) {
-        playPhase("TENUTA", exercise.duration, () => endOfSet(exercise));
-    }
-
-    function runRepetitionPhase(exercise, phaseIndex) {
-        // ... (logica invariata)
-        const phases = ['salita', 'tenuta_s', 'discesa', 'tenuta_g'];
-        if (phaseIndex >= phases.length) {
-            if (exercise.currentRep < exercise.reps) {
-                exercise.currentRep++;
-                updateTrainerUI(exercise, 'rep_change');
-                runRepetitionPhase(exercise, 0);
-            } else {
-                endOfSet(exercise);
-            }
-            return;
-        }
-        const phaseName = phases[phaseIndex];
-        const duration = exercise[phaseName];
-        if (duration > 0) {
-            playPhase(phaseName.toUpperCase(), duration, () => runRepetitionPhase(exercise, phaseIndex + 1));
-        } else {
-            runRepetitionPhase(exercise, phaseIndex + 1);
-        }
-    }
-
-    function runExercisePhase(exercise) {
-        if (exercise.type === 'ripetizioni') {
-            runRepetitionPhase(exercise, 0);
-        } else if (exercise.type === 'tempo') {
-            runTimedPhase(exercise);
-        }
-    }
-
-    function runCurrentExercise() {
-        if (currentExerciseIndex >= currentRoutine.length) {
-            endWorkout();
-            return;
-        }
-        const exercise = currentRoutine[currentExerciseIndex];
-        exercise.currentSet = 1;
-        updateTrainerUI(exercise, 'initial');
-    }
-    
-    function startWorkout(routine) {
-        currentRoutine = JSON.parse(JSON.stringify(routine));
-        currentExerciseIndex = 0;
-        showView('trainer');
-        runCurrentExercise();
-    }
-
-    function setupEventListeners() {
-        prevWeekBtn.addEventListener('click', () => {
-            currentWeekOffset--;
-            renderCalendar();
-        });
-        nextWeekBtn.addEventListener('click', () => {
-            currentWeekOffset++;
-            renderCalendar();
-        });
-        trainerElements.controls.start.addEventListener('click', () => {
-            const exercise = currentRoutine[currentExerciseIndex];
-            trainerElements.controls.start.style.display = 'none';
-            runExercisePhase(exercise);
-        });
-        trainerElements.controls.nextSet.addEventListener('click', () => {
-            const exercise = currentRoutine[currentExerciseIndex];
-            exercise.currentSet++;
-            exercise.currentRep = 1;
-            updateTrainerUI(exercise, 'set_change');
-            trainerElements.controls.nextSet.style.display = 'none';
-            runExercisePhase(exercise);
-        });
-        trainerElements.controls.nextExercise.addEventListener('click', () => {
-            currentExerciseIndex++;
-            runCurrentExercise();
-        });
-        trainerElements.controls.endWorkout.addEventListener('click', endWorkout);
-    }
-    
-    // =================================================================
-    // 4. FUNZIONE DI INIZIALIZZAZIONE
-    // =================================================================
-    function init() {
-        setupEventListeners();
-        renderCalendar();
-        showView('calendar');
-        try {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        } catch (e) {
-            console.warn('Web Audio API is not supported in this browser.');
-        }
-    }
-
-    // =================================================================
-    // 5. ESECUZIONE
-    // =================================================================
-    init();
-});
+        trainerElements.mainTimer.
