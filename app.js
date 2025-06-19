@@ -34,6 +34,8 @@ const dom = {
 };
 
 // --- STATO DELL'APPLICAZIONE ---
+let trainerInterval = null;
+
 const state = {
     currentWeekOffset: 0,
     workoutRoutines: JSON.parse(localStorage.getItem('workoutRoutines')) || {},
@@ -43,7 +45,7 @@ const state = {
     trainerStatus: 'ready', // 'ready', 'preparing', 'running', 'paused', 'finished'
     currentExerciseIndex: 0,
     currentSeries: 1,
-    countdownValue: 0,
+    countdownValue: 3,
 };
 
 // --- FUNZIONI DI LOGICA ---
@@ -191,17 +193,42 @@ function renderExerciseLibrary() {
 function renderTrainer() {
     if (!state.activeWorkout) return;
     const exercise = state.activeWorkout?.[state.currentExerciseIndex];
-    if (!exercise) return;
+    if (!exercise) {
+        // Workout finito? Gestiremo qui la transizione al debriefing.
+        return;
+    }
 
     dom.trainer.name.textContent = exercise.name;
     dom.trainer.description.textContent = exercise.description;
 
+    const params = exercise.defaultParams;
+    dom.trainer.counters.textContent = `Serie: ${state.currentSeries} / ${params.series || 1} | ${params.reps ? `Rip: ${params.reps}` : `Tempo: ${params.duration}s`}`;
+
     switch (state.trainerStatus) {
         case 'ready':
-            const params = exercise.defaultParams;
-            dom.trainer.counters.textContent = `Serie: ${params.series || 1} | ${params.reps ? `Rip: ${params.reps}` : `Tempo: ${params.duration}s`}`;
             dom.trainer.display.textContent = "PREMI PER INIZIARE";
+            dom.trainer.display.classList.remove('flashing');
             dom.trainer.actionBtn.textContent = "AVVIA ESERCIZIO";
+            break;
+        
+        case 'preparing':
+            dom.trainer.display.textContent = state.countdownValue;
+            dom.trainer.display.classList.add('flashing');
+            dom.trainer.actionBtn.textContent = "IN PREPARAZIONE...";
+            dom.trainer.actionBtn.disabled = true;
+            break;
+        
+        case 'running':
+            dom.trainer.display.classList.remove('flashing');
+            dom.trainer.actionBtn.disabled = false;
+            // La logica specifica (tempo vs reps) verrà qui
+            if(exercise.type === 'time') {
+                dom.trainer.display.textContent = state.countdownValue;
+                 dom.trainer.actionBtn.textContent = "PAUSA";
+            } else {
+                 dom.trainer.display.textContent = "ESEGUI LE RIPETIZIONI";
+                 dom.trainer.actionBtn.textContent = "FATTO";
+            }
             break;
     }
 
@@ -218,14 +245,43 @@ function updateUI() {
     }
 }
 
+// --- MOTORE DEL TRAINER ---
+function trainerTick() {
+    if (state.trainerStatus === 'preparing') {
+        state.countdownValue--;
+        if (state.countdownValue <= 0) {
+            state.trainerStatus = 'running';
+            const exercise = state.activeWorkout?.[state.currentExerciseIndex];
+            if (exercise?.type === 'time') {
+                state.countdownValue = exercise.defaultParams.duration;
+            }
+        }
+    } else if (state.trainerStatus === 'running') {
+        const exercise = state.activeWorkout?.[state.currentExerciseIndex];
+        if (exercise?.type === 'time') {
+            state.countdownValue--;
+            if (state.countdownValue < 0) {
+                // Tempo finito, gestisci fine serie/esercizio
+                state.trainerStatus = 'paused'; // Placeholder
+                clearInterval(trainerInterval);
+                trainerInterval = null;
+            }
+        }
+    }
+    updateUI();
+}
+
 // --- INIZIALIZZAZIONE ---
 function handleTrainerAction() {
-    console.log(`Azione richiesta con stato: ${state.trainerStatus}`);
     if (state.trainerStatus === 'ready') {
         state.trainerStatus = 'preparing';
-        console.log(`Nuovo stato: ${state.trainerStatus}`);
-        updateUI();
+        state.countdownValue = 3; 
+        
+        if (trainerInterval) clearInterval(trainerInterval);
+        trainerInterval = setInterval(trainerTick, 1000);
     }
+    // Aggiungeremo qui la logica per gli altri stati (es. 'running' -> 'paused')
+    updateUI();
 }
 
 function setupEventListeners() {

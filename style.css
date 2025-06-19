@@ -20,7 +20,11 @@ body {
 
 /* ARCHITETTURA DELLE VISTE */
 .view { display: none; width: 100%; max-width: 1200px; margin: 0 auto; }
-#calendar-view.view--active, #trainer-view.view--active { display: flex; flex-direction: column; }
+#calendar-view.view--active, #trainer-view.view--active {
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Centra orizzontalmente il contenuto */
+}
 #debriefing-view.view--active { display: grid; }
 
 /* Vista Calendario */
