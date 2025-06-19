@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Mio Trainer Personale</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app-container">
+    <div id="calendar-view" class="view">
+        <h1>Mio Calendario Allenamenti</h1>
+        <div id="calendar-header">
+            <button id="prev-week-btn" class="btn btn-primary">&lt; Sett. Prec.</button>
+            <h2 id="week-display"></h2>
+            <button id="next-week-btn" class="btn btn-primary">Sett. Succ. &gt;</button>
+        </div>
+        <div id="week-grid"></div>
+        <div style="text-align: center; margin-top: 20px;">
+            <button id="show-history-btn" class="btn btn-grey">Vedi Storico</button>
+        </div>
+    </div>
+
+    <div id="trainer-view" class="view hidden">
+        <h2 id="trainer-title"></h2>
+        <div id="trainer-instruction">Pronto?</div>
+        <div id="trainer-timer">0.0</div>
+        <div class="trainer-counters"><span id="rep-counter"></span></div>
+        <div class="trainer-counters"><span id="set-counter"></span></div>
+        <div id="trainer-description" class="workout-description"></div>
+        <div id="trainer-controls" style="margin-top:20px;"></div>
+    </div>
+
+    <div id="debriefing-view" class="view hidden">
+        <div id="debrief-summary">
+            <h3>Ottimo Lavoro!</h3>
+            <div id="summary-content" style="margin: 20px 0; line-height: 1.6;"></div>
+            <div id="summary-actions">
+                 <button id="copy-summary-btn" class="btn btn-primary">Copia Riepilogo</button>
+                 <button id="open-chat-btn" class="btn btn-secondary">Apri Chat Allenatore</button>
+                 <button id="back-to-calendar-btn" class="btn btn-grey">Torna al Calendario</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="editor-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <h3 id="editor-title">Allenamenti del Giorno</h3>
+        <div id="daily-workouts-list"></div>
+        <div class="modal-actions">
+            <button id="add-exercise-btn" class="btn btn-secondary">+ Aggiungi Esercizio</button>
+            <button id="close-editor-btn" class="btn btn-grey">Fatto</button>
+        </div>
+    </div>
+</div>
+
+<div id="exercise-selector-modal" class="modal-overlay hidden">
+     <div class="modal-content">
+        <h3>Libreria Esercizi</h3>
+        <div id="exercise-library-list"></div>
+        <div class="modal-actions" style="justify-content: flex-end;">
+             <button id="close-selector-btn" class="btn btn-grey">Annulla</button>
+        </div>
+    </div>
+</div>
+
+<div id="history-modal" class="modal-overlay hidden">
+     <div class="modal-content">
+        <h3>Storico Allenamenti</h3>
+        <ul id="history-list" style="list-style-type: none; padding: 0;"></ul>
+        <div class="modal-actions" style="justify-content: flex-end;">
+             <button id="close-history-btn" class="btn btn-grey">Chiudi</button>
+        </div>
+    </div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
