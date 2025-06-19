@@ -35,7 +35,6 @@
                         <span id="trainer-set-count">Serie: 1 / 3</span>
                     </div>
                 </div>
-
                 <div class="trainer-main-display">
                     <div id="trainer-action-wrapper">
                         <span id="trainer-current-action">PREPARATI</span>
@@ -44,7 +43,6 @@
                         <span id="trainer-main-timer">--</span>
                     </div>
                 </div>
-
                 <div class="trainer-footer">
                     <p id="trainer-exercise-desc">Descrizione dell'esercizio e istruzioni dettagliate.</p>
                     <div id="trainer-controls">
@@ -61,17 +59,11 @@
         <div id="debriefing-view" class="view">
             <h2>Sessione Completata</h2>
             <div class="debriefing-content">
-                <div class="summary-section">
-                    <h3>Riepilogo</h3>
-                    <pre id="debriefing-summary"></pre>
-                    <button id="copy-for-coach-btn" class="btn">Copia per il Coach</button>
-                    <div class="debriefing-controls">
-                         <button id="return-to-calendar-btn" class="btn">Torna al Calendario</button>
-                    </div>
-                </div>
-                <div class="chat-section">
-                    <h3>Chat con il Coach</h3>
-                    <iframe id="gemini-chat-iframe" src="https://gemini.google.com/app" allow="clipboard-write"></iframe>
+                <h3>Riepilogo</h3>
+                <pre id="debriefing-summary"></pre>
+                <button id="copy-for-coach-btn" class="btn">Copia per il Coach</button>
+                <div class="debriefing-controls">
+                     <button id="return-to-calendar-btn" class="btn">Torna al Calendario</button>
                 </div>
             </div>
         </div>
@@ -79,22 +71,10 @@
     </div>
 
     <div id="routine-editor-modal" class="modal">
-        <div class="modal-content">
-            <span class="close-btn">&times;</span>
-            <h3 id="modal-date-display"></h3>
-            <div id="modal-exercise-list"></div>
-            <button id="add-exercise-btn" class="btn">Aggiungi Esercizio</button>
-            <button id="save-routine-btn" class="btn">Salva Routine</button>
         </div>
-    </div>
 
     <div id="exercise-library-modal" class="modal">
-        <div class="modal-content">
-            <span class="close-btn">&times;</span>
-            <h3>Libreria Esercizi</h3>
-            <div id="library-list"></div>
         </div>
-    </div>
 
     <script type="module" src="app.js"></script>
 </body>

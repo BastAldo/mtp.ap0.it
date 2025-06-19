@@ -101,7 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const dayName = day.toLocaleDateString('it-IT', { weekday: 'long' });
             const dayNumber = day.getDate();
-            dayCell.innerHTML = `<div class="day-name"><span class="math-inline">\{dayName\}</div\><div class\="day\-number"\></span>{dayNumber}</div>`;
+            dayCell.innerHTML = `<div class="day-name">${dayName}</div><div class="day-number">${dayNumber}</div>`;
             
             const routine = workoutRoutines[dateString];
             if (routine && routine.length > 0) {
@@ -199,4 +199,120 @@ document.addEventListener('DOMContentLoaded', () => {
     function playPhase(name, duration, onComplete) {
         trainerElements.currentAction.textContent = name;
         trainerElements.currentAction.classList.add('is-flashing');
-        trainerElements.mainTimer.
+        trainerElements.mainTimer.textContent = '';
+        playTick();
+
+        setTimeout(() => {
+            trainerElements.currentAction.classList.remove('is-flashing');
+            let timeLeft = duration;
+            trainerElements.mainTimer.textContent = Math.floor(timeLeft);
+
+            timerInterval = setInterval(() => {
+                timeLeft -= 0.1;
+                const newIntTime = Math.floor(timeLeft);
+                if (newIntTime < parseInt(trainerElements.mainTimer.textContent)) {
+                    trainerElements.mainTimer.textContent = newIntTime > 0 ? newIntTime : 0;
+                }
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                    onComplete();
+                }
+            }, 100);
+        }, DELAY_BEFORE_ACTION);
+    }
+    
+    function runTimedPhase(exercise) {
+        playPhase("TENUTA", exercise.duration, () => endOfSet(exercise));
+    }
+
+    function runRepetitionPhase(exercise, phaseIndex) {
+        const phases = ['salita', 'tenuta_s', 'discesa', 'tenuta_g'];
+        if (phaseIndex >= phases.length) {
+            if (exercise.currentRep < exercise.reps) {
+                exercise.currentRep++;
+                updateTrainerUI(exercise, 'rep_change');
+                runRepetitionPhase(exercise, 0);
+            } else {
+                endOfSet(exercise);
+            }
+            return;
+        }
+        const phaseName = phases[phaseIndex];
+        const duration = exercise[phaseName];
+        if (duration > 0) {
+            playPhase(phaseName.toUpperCase(), duration, () => runRepetitionPhase(exercise, phaseIndex + 1));
+        } else {
+            runRepetitionPhase(exercise, phaseIndex + 1);
+        }
+    }
+
+    function runExercisePhase(exercise) {
+        if (exercise.type === 'ripetizioni') {
+            runRepetitionPhase(exercise, 0);
+        } else if (exercise.type === 'tempo') {
+            runTimedPhase(exercise);
+        }
+    }
+
+    function runCurrentExercise() {
+        if (currentExerciseIndex >= currentRoutine.length) {
+            endWorkout();
+            return;
+        }
+        const exercise = currentRoutine[currentExerciseIndex];
+        exercise.currentSet = 1;
+        updateTrainerUI(exercise, 'initial');
+    }
+    
+    function startWorkout(routine) {
+        currentRoutine = JSON.parse(JSON.stringify(routine));
+        currentExerciseIndex = 0;
+        showView('trainer');
+        runCurrentExercise();
+    }
+
+    function setupEventListeners() {
+        prevWeekBtn.addEventListener('click', () => { currentWeekOffset--; renderCalendar(); });
+        nextWeekBtn.addEventListener('click', () => { currentWeekOffset++; renderCalendar(); });
+        returnToCalendarBtn.addEventListener('click', () => showView('calendar'));
+
+        trainerElements.controls.start.addEventListener('click', () => {
+            const exercise = currentRoutine[currentExerciseIndex];
+            trainerElements.controls.start.style.display = 'none';
+            runExercisePhase(exercise);
+        });
+        trainerElements.controls.nextSet.addEventListener('click', () => {
+            const exercise = currentRoutine[currentExerciseIndex];
+            exercise.currentSet++;
+            exercise.currentRep = 1;
+            updateTrainerUI(exercise, 'set_change');
+            trainerElements.controls.nextSet.style.display = 'none';
+            runExercisePhase(exercise);
+        });
+        trainerElements.controls.nextExercise.addEventListener('click', () => {
+            currentExerciseIndex++;
+            runCurrentExercise();
+        });
+        trainerElements.controls.endWorkout.addEventListener('click', endWorkout);
+    }
+    
+    // =================================================================
+    // 4. FUNZIONE DI INIZIALIZZAZIONE
+    // =================================================================
+    function init() {
+        setupEventListeners();
+        renderCalendar();
+        showView('calendar');
+        try {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+            console.warn('Web Audio API is not supported in this browser.');
+        }
+    }
+
+    // =================================================================
+    // 5. ESECUZIONE
+    // =================================================================
+    init();
+});
