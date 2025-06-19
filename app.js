@@ -1,3 +1,4 @@
+//START
 alert("VERSIONE NUOVA CARICATA!!!");
 import { WORKOUTS } from './workouts.js';
 
