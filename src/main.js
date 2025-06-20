@@ -4,6 +4,7 @@
  * Orchestrates all other modules.
  */
 import * as storage from './storage.js';
+import { initCalendar } from './calendar.js';
 
 /**
  * The main function to initialize the application.
@@ -11,7 +12,9 @@ import * as storage from './storage.js';
 function main() {
   console.log('Application Initialized.');
   console.log('Fetching all workouts from storage:', storage.getWorkouts());
-  // Qui inizieremo a orchestrare gli altri moduli (UI, Calendar, etc.)
+
+  // Initialize all primary components
+  initCalendar();
 }
 
 // Initialize the app once the DOM is fully loaded.

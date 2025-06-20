@@ -1,101 +1,17 @@
-commit_message: "feat: Establish modular project structure and data persistence module"
+commit_message: "feat: Implement calendar rendering and navigation module"
 rationale: |
-  Questo è il primo e più critico passo del refactoring.
+  Questo patch risolve il problema della "pagina bianca" implementando la logica di rendering del calendario.
 
-  1.  **Risposta alla Strategia:** Mantenere due architetture parallele (monolite + moduli) è una cattiva pratica che porta a complessità e bug. Adottiamo invece un refactoring per estrazione: il monolite verrà smantellato pezzo per pezzo.
+  1.  **Separazione delle Responsabilità:** Viene creato un nuovo modulo, `src/calendar.js`, che ha la responsabilità esclusiva di gestire lo stato, il rendering e l'interazione della vista calendario. Questo è un passo cruciale per smantellare il monolite.
 
-  2.  **Fondamenta Modulari:** Viene creata una directory `src/`. Tutto il codice JavaScript risiederà qui, favorendo un'organizzazione pulita e scalabile fin dall'inizio. L'entry point dell'applicazione viene spostato da `app.js` a `src/main.js`.
+  2.  **Orchestrazione:** Il file `src/main.js` assume il suo vero ruolo di orchestratore. Invece di contenere la logica, importa e inizializza il modulo del calendario (`calendar.initCalendar()`), delegando completamente il compito.
 
-  3.  **Isolamento della Persistenza:** Viene creato il primo modulo, `src/storage.js`. Questo modulo ha la responsabilità UNICA di gestire la lettura e la scrittura su `localStorage`. Qualsiasi altra parte dell'applicazione che necessita di interagire con i dati persistiti dovrà importare e utilizzare questo modulo, eliminando l'accesso diretto e sparpagliato al `localStorage`.
+  3.  **Logica di Rendering:** Il modulo `calendar.js` contiene la logica per calcolare i giorni della settimana, creare dinamicamente le celle del giorno (`day-cell`), e popolarle con i dati corretti (giorno, numero, riepilogo esercizi).
 
-  4.  **Abilitazione ES Modules:** `index.html` viene aggiornato per caricare `src/main.js` usando `type="module"`. Questo ci permette di usare la sintassi `import/export` di ES6, che è il pilastro della nostra nuova architettura.
+  4.  **Integrazione con lo Storage:** Il modulo `calendar.js` comunica con il modulo `storage.js` (creato nel passo precedente) per recuperare il numero di esercizi per ogni giorno, decidendo se abilitare o meno il pulsante "START".
 
-  5.  **Pulizia:** Viene aggiunto un file `.gitignore` standard per mantenere il repository pulito.
+  5.  **Interattività:** La navigazione tra la settimana precedente e quella successiva è ora gestita interamente all'interno del modulo `calendar.js`, mantenendo il suo stato (`currentDate`) isolato dal resto dell'applicazione.
 patches:
-  - file: index.html
-    content: |
-      <!DOCTYPE html>
-      <html lang="it">
-        <head>
-          <meta charset="UTF-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <title>Mio Trainer Personale</title>
-          <link rel="stylesheet" href="style.css" />
-          <link rel="preconnect" href="https://fonts.googleapis.com" />
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-          <link
-            href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:ital,wght@0,400;0,700;1,400&family=Teko:wght@400;600;700&display=swap"
-            rel="stylesheet"
-          />
-        </head>
-        <body>
-          <div id="app-container">
-            <div id="calendar-view" class="view view--active">
-              <header id="calendar-header">
-                <button id="prev-week-btn" class="btn">&lt;</button>
-                <h1 id="current-month-year"></h1>
-                <button id="next-week-btn" class="btn">&gt;</button>
-              </header>
-              <div id="calendar-grid"></div>
-            </div>
-
-            <div id="trainer-view" class="view">
-              <h1 id="trainer-exercise-title"></h1>
-              <div id="trainer-series-counter"></div>
-              <div id="trainer-main-display" class="display-ring">
-                <span id="trainer-main-text"></span>
-              </div>
-              <div id="trainer-description"></div>
-              <div id="trainer-controls">
-                <button id="pause-resume-btn" class="btn"></button>
-                <button id="terminate-btn" class="btn btn-danger"></button>
-              </div>
-            </div>
-
-            <div id="debriefing-view" class="view">
-              <h1>Workout Completato!</h1>
-              <div id="debriefing-summary"></div>
-              <div id="debriefing-report-container">
-                <h2>Copia per il tuo coach:</h2>
-                <textarea id="debriefing-text-report" readonly></textarea>
-                <button id="copy-report-btn" class="btn btn-primary">
-                  Copia Report
-                </button>
-              </div>
-              <button id="return-to-calendar-btn" class="btn btn-secondary">
-                Torna al Calendario
-              </button>
-            </div>
-          </div>
-
-          <div id="day-modal" class="modal-overlay" style="display: none">
-            <div class="modal-content">
-              <h2 id="modal-date-title"></h2>
-              <ul id="modal-exercise-list"></ul>
-              <div class="modal-actions">
-                <button id="add-exercise-btn" class="btn btn-secondary">
-                  Aggiungi Esercizio
-                </button>
-                <button id="close-day-modal-btn" class="btn">Chiudi</button>
-              </div>
-            </div>
-          </div>
-
-          <div id="library-modal" class="modal-overlay" style="display: none">
-            <div class="modal-content">
-              <h2>Libreria Esercizi</h2>
-              <ul id="library-exercise-list"></ul>
-              <div class="modal-actions">
-                <button id="close-library-modal-btn" class="btn">Chiudi</button>
-              </div>
-            </div>
-          </div>
-
-          <script type="module" src="src/main.js"></script>
-        </body>
-      </html>
-  - file: app.js
-    content: "" # Svuotiamo il vecchio file, la sua logica verrà migrata
   - file: src/main.js
     content: |
       /**
@@ -104,6 +20,7 @@ patches:
        * Orchestrates all other modules.
        */
       import * as storage from './storage.js';
+      import { initCalendar } from './calendar.js';
 
       /**
        * The main function to initialize the application.
@@ -111,91 +28,102 @@ patches:
       function main() {
         console.log('Application Initialized.');
         console.log('Fetching all workouts from storage:', storage.getWorkouts());
-        // Qui inizieremo a orchestrare gli altri moduli (UI, Calendar, etc.)
+
+        // Initialize all primary components
+        initCalendar();
       }
 
       // Initialize the app once the DOM is fully loaded.
       document.addEventListener('DOMContentLoaded', main);
-  - file: src/storage.js
+  - file: src/calendar.js
     content: |
       /**
-       * @file storage.js
-       * Handles all interactions with the browser's localStorage.
-       * This is the single source of truth for data persistence.
+       * @file calendar.js
+       * Manages the state, rendering, and interactions of the calendar view.
        */
+      import * as storage from './storage.js';
 
-      const WORKOUTS_KEY = 'mio_trainer_workouts';
+      // DOM Elements
+      const calendarGrid = document.getElementById('calendar-grid');
+      const currentMonthYear = document.getElementById('current-month-year');
+      const prevWeekBtn = document.getElementById('prev-week-btn');
+      const nextWeekBtn = document.getElementById('next-week-btn');
+
+      // State
+      let currentDate = new Date();
 
       /**
-       * Retrieves the entire workouts object from localStorage.
-       * @returns {Object} The workouts object, or an empty object if none exists.
+       * Formats a Date object into a 'YYYY-MM-DD' string.
+       * @param {Date} date The date to format.
+       * @returns {string} The formatted date string.
        */
-      export function getWorkouts() {
-        try {
-          const workouts = localStorage.getItem(WORKOUTS_KEY);
-          return workouts ? JSON.parse(workouts) : {};
-        } catch (error) {
-          console.error("Error reading from localStorage:", error);
-          return {};
+      function formatDateKey(date) {
+        return date.toISOString().split('T')[0];
+      }
+
+      /**
+       * Renders the calendar for the week of the given date.
+       * @param {Date} date A date within the week to be rendered.
+       */
+      function renderCalendar(date) {
+        calendarGrid.innerHTML = '';
+        const weekStart = new Date(date);
+        weekStart.setDate(date.getDate() - date.getDay()); // Start of the week (Sunday)
+
+        const monthNames = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
+        currentMonthYear.textContent = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
+
+        for (let i = 0; i < 7; i++) {
+          const day = new Date(weekStart);
+          day.setDate(weekStart.getDate() + i);
+
+          const dayCell = document.createElement('div');
+          dayCell.className = 'day-cell';
+          const dateKey = formatDateKey(day);
+          dayCell.dataset.date = dateKey;
+
+          const dayName = day.toLocaleDateString('it-IT', { weekday: 'long' });
+          const dayNumber = day.getDate();
+
+          const exercises = storage.getWorkoutsForDate(dateKey);
+          const exerciseCount = exercises.length;
+
+          let summaryText = 'Nessun esercizio';
+          if (exerciseCount > 0) {
+            summaryText = `${exerciseCount} ${exerciseCount > 1 ? 'esercizi' : 'esercizio'}`;
+          }
+
+          dayCell.innerHTML = `
+            <div class="day-name">${dayName}</div>
+            <div class="day-number">${dayNumber}</div>
+            <div class="day-summary">${summaryText}</div>
+            <button class="btn btn-secondary start-workout-btn" ${exerciseCount === 0 ? 'disabled' : ''}>START</button>
+          `;
+
+          calendarGrid.appendChild(dayCell);
         }
       }
 
       /**
-       * Saves the entire workouts object to localStorage.
-       * @param {Object} workouts - The workouts object to save.
+       * Initializes the calendar, sets up event listeners, and performs the initial render.
        */
-      export function saveWorkouts(workouts) {
-        try {
-          localStorage.setItem(WORKOUTS_KEY, JSON.stringify(workouts));
-        } catch (error) {
-          console.error("Error writing to localStorage:", error);
-        }
+      export function initCalendar() {
+        prevWeekBtn.addEventListener('click', () => {
+          currentDate.setDate(currentDate.getDate() - 7);
+          renderCalendar(currentDate);
+        });
+
+        nextWeekBtn.addEventListener('click', () => {
+          currentDate.setDate(currentDate.getDate() + 7);
+          renderCalendar(currentDate);
+        });
+
+        renderCalendar(currentDate);
+        console.log('Calendar module initialized.');
       }
-
-      /**
-       * Retrieves the list of exercises for a specific date key.
-       * @param {string} dateKey - The date in 'YYYY-MM-DD' format.
-       * @returns {Array} An array of exercise IDs for the given date, or an empty array.
-       */
-      export function getWorkoutsForDate(dateKey) {
-        const workouts = getWorkouts();
-        return workouts[dateKey] || [];
-      }
-
-      /**
-       * Saves a list of exercises for a specific date key.
-       * @param {string} dateKey - The date in 'YYYY-MM-DD' format.
-       * @param {Array} exercises - An array of exercise objects to save for the given date.
-       */
-      export function saveWorkoutsForDate(dateKey, exercises) {
-        const workouts = getWorkouts();
-        workouts[dateKey] = exercises;
-        saveWorkouts(workouts);
-      }
-  - file: .gitignore
-    content: |
-      # Dependencies
-      /node_modules
-
-      # Build artifacts
-      /dist
-      /build
-
-      # IDE / Editor specific
-      .vscode/
-      .idea/
-      *.suo
-      *.ntvs*
-      *.njsproj
-      *.sln
-      *.swp
-
-      # OS specific
-      .DS_Store
-      Thumbs.db
 commands:
-  - "echo 'Vecchio app.js svuotato. Creati i nuovi file src/main.js e src/storage.js.'"
-  - "echo 'Verifica la nuova struttura dei file con il comando: ls -R'"
-  - "echo 'IMPORTANTE: A causa dell''uso di moduli ES6 (import/export), non puoi aprire index.html direttamente.'"
-  - "echo 'Devi servirlo tramite un server locale. Se hai Python 3, usa: python3 -m http.server'"
-  - "echo 'Apri il browser su http://localhost:8000 e controlla la console per il messaggio di inizializzazione.'"
+  - "echo 'Patch applicato. Il modulo del calendario è stato creato e integrato.'"
+  - "echo 'Dovresti ora vedere il calendario settimanale renderizzato nella pagina.'"
+  - "echo 'IMPORTANTE: Avvia sempre l''applicazione tramite un server locale.'"
+  - "echo 'Comando suggerito: python3 -m http.server'"
+  - "echo 'Apri http://localhost:8000 nel browser e verifica il risultato.'"
