@@ -1,179 +1,201 @@
-# Questo è un file YAML. Copia tutto il contenuto da qui in giù
-# e salvalo come 'patch.yaml'. Dovrai adattare il tuo script
-# python per leggere questo formato.
-
-commit_message: "refactor: Isolate Trainer state machine and create UI module"
-
+commit_message: "feat: Establish modular project structure and data persistence module"
 rationale: |
-  Questo è il refactoring più importante.
-  1.  **Isolamento Completo:** La logica della state machine del Trainer, il cuore complesso dell'app, è ora in `src/trainer.js`. È disaccoppiata dal DOM.
-  2.  **Modulo UI Dedicato:** Abbiamo creato `src/ui.js`, la cui unica responsabilità è aggiornare l'HTML. Il Trainer gli dice "cosa" mostrare (es. "mostra il timer a 10s"), e la UI sa "come" farlo. Questa è una separazione critica delle responsabilità.
-  3.  **Svuotamento di main.js:** Abbiamo rimosso quasi 250 righe da `main.js`, lasciandolo quasi completamente vuoto. La sua fine è vicina.
-  4.  **Orchestrazione Pulita:** `app.js` ora gestisce l'avvio del trainer, collegando il click sul pulsante "INIZIA" del calendario con l'inizio della logica del trainer.
+  Questo è il primo e più critico passo del refactoring.
 
+  1.  **Risposta alla Strategia:** Mantenere due architetture parallele (monolite + moduli) è una cattiva pratica che porta a complessità e bug. Adottiamo invece un refactoring per estrazione: il monolite verrà smantellato pezzo per pezzo.
+
+  2.  **Fondamenta Modulari:** Viene creata una directory `src/`. Tutto il codice JavaScript risiederà qui, favorendo un'organizzazione pulita e scalabile fin dall'inizio. L'entry point dell'applicazione viene spostato da `app.js` a `src/main.js`.
+
+  3.  **Isolamento della Persistenza:** Viene creato il primo modulo, `src/storage.js`. Questo modulo ha la responsabilità UNICA di gestire la lettura e la scrittura su `localStorage`. Qualsiasi altra parte dell'applicazione che necessita di interagire con i dati persistiti dovrà importare e utilizzare questo modulo, eliminando l'accesso diretto e sparpagliato al `localStorage`.
+
+  4.  **Abilitazione ES Modules:** `index.html` viene aggiornato per caricare `src/main.js` usando `type="module"`. Questo ci permette di usare la sintassi `import/export` di ES6, che è il pilastro della nostra nuova architettura.
+
+  5.  **Pulizia:** Viene aggiunto un file `.gitignore` standard per mantenere il repository pulito.
 patches:
-  - file: src/ui.js
+  - file: index.html
     content: |
-      /**
-       * @file ui.js
-       * Responsabile di tutte le manipolazioni dirette del DOM.
-       * Offre funzioni semplici che gli altri moduli possono chiamare
-       * senza conoscere la struttura dell'HTML.
-       */
+      <!DOCTYPE html>
+      <html lang="it">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>Mio Trainer Personale</title>
+          <link rel="stylesheet" href="style.css" />
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+          <link
+            href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:ital,wght@0,400;0,700;1,400&family=Teko:wght@400;600;700&display=swap"
+            rel="stylesheet"
+          />
+        </head>
+        <body>
+          <div id="app-container">
+            <div id="calendar-view" class="view view--active">
+              <header id="calendar-header">
+                <button id="prev-week-btn" class="btn">&lt;</button>
+                <h1 id="current-month-year"></h1>
+                <button id="next-week-btn" class="btn">&gt;</button>
+              </header>
+              <div id="calendar-grid"></div>
+            </div>
 
-      // Elementi Vista Trainer
-      const trainerView = document.getElementById('trainer-view');
-      const exerciseTitle = document.getElementById('exercise-title');
-      const seriesCounter = document.getElementById('series-counter');
-      const trainerMainDisplay = document.getElementById('trainer-main-display');
-      const exerciseDescription = document.getElementById('exercise-description');
+            <div id="trainer-view" class="view">
+              <h1 id="trainer-exercise-title"></h1>
+              <div id="trainer-series-counter"></div>
+              <div id="trainer-main-display" class="display-ring">
+                <span id="trainer-main-text"></span>
+              </div>
+              <div id="trainer-description"></div>
+              <div id="trainer-controls">
+                <button id="pause-resume-btn" class="btn"></button>
+                <button id="terminate-btn" class="btn btn-danger"></button>
+              </div>
+            </div>
 
-      // Elementi Vista Calendario
-      const calendarView = document.getElementById('calendar-view');
+            <div id="debriefing-view" class="view">
+              <h1>Workout Completato!</h1>
+              <div id="debriefing-summary"></div>
+              <div id="debriefing-report-container">
+                <h2>Copia per il tuo coach:</h2>
+                <textarea id="debriefing-text-report" readonly></textarea>
+                <button id="copy-report-btn" class="btn btn-primary">
+                  Copia Report
+                </button>
+              </div>
+              <button id="return-to-calendar-btn" class="btn btn-secondary">
+                Torna al Calendario
+              </button>
+            </div>
+          </div>
 
-      /**
-       * Mostra una vista specifica e nasconde le altre.
-       * @param {'trainer' | 'calendar'} viewName
-       */
-      export function showView(viewName) {
-        calendarView.classList.toggle('view--active', viewName === 'calendar');
-        trainerView.classList.toggle('view--active', viewName === 'trainer');
-      }
+          <div id="day-modal" class="modal-overlay" style="display: none">
+            <div class="modal-content">
+              <h2 id="modal-date-title"></h2>
+              <ul id="modal-exercise-list"></ul>
+              <div class="modal-actions">
+                <button id="add-exercise-btn" class="btn btn-secondary">
+                  Aggiungi Esercizio
+                </button>
+                <button id="close-day-modal-btn" class="btn">Chiudi</button>
+              </div>
+            </div>
+          </div>
 
-      /**
-       * Aggiorna l'intera UI del trainer con i dati di un esercizio.
-       * @param {object} exercise - L'oggetto dell'esercizio.
-       * @param {number} currentSeries - Il numero della serie corrente.
-       */
-      export function updateTrainerUI(exercise, currentSeries) {
-        exerciseTitle.textContent = exercise.name;
-        seriesCounter.textContent = `SERIE ${currentSeries} / ${exercise.series}`;
-        exerciseDescription.textContent = exercise.description;
-      }
+          <div id="library-modal" class="modal-overlay" style="display: none">
+            <div class="modal-content">
+              <h2>Libreria Esercizi</h2>
+              <ul id="library-exercise-list"></ul>
+              <div class="modal-actions">
+                <button id="close-library-modal-btn" class="btn">Chiudi</button>
+              </div>
+            </div>
+          </div>
 
-      /**
-       * Aggiorna il display principale del trainer (es. timer, testo).
-       * @param {string} text
-       */
-      export function setMainDisplayText(text) {
-        trainerMainDisplay.textContent = text;
-      }
-
-      /**
-       * Applica o rimuove l'effetto flash dal display principale.
-       * @param {boolean} flashing
-       */
-      export function setFlashing(flashing) {
-        trainerMainDisplay.classList.toggle('is-flashing', flashing);
-      }
-
-  - file: src/trainer.js
-    content: |
-      /**
-       * @file trainer.js
-       * Contiene tutta la logica della state machine per la sessione di allenamento.
-       */
-      import * as ui from './ui.js';
-      import { playTick } from './audio.js';
-      import { WORKOUTS } from './workouts.js'; // Assumendo che gli allenamenti del giorno siano passati
-
-      // --- State ---
-      let state = 'idle'; // idle, ready, announcing, preparing, action, paused, rest, finished
-      let workoutPlan = []; // Lista di esercizi per la sessione
-      let currentExerciseIndex = 0;
-      let currentSeries = 1;
-      let currentRep = 1;
-      let timer = null;
-      let timerValue = 0;
-
-      // --- Funzioni private ---
-
-      function runState() {
-        console.log(`TRAINER STATE: ${state.toUpperCase()}`);
-        switch (state) {
-          case 'ready':
-            const exercise = workoutPlan[currentExerciseIndex];
-            ui.updateTrainerUI(exercise, currentSeries);
-            ui.setMainDisplayText("PREMI PER INIZIARE");
-            // Qui si potrebbe aggiungere un event listener per iniziare
-            break;
-          // ... implementazione degli altri stati (announcing, action, etc.)
-        }
-      }
-
-      // --- API Pubblica ---
-
-      /**
-       * Inizia la sessione di allenamento.
-       * @param {string[]} exerciseIds - Array di ID degli esercizi da eseguire.
-       */
-      export function startTrainer(exerciseIds) {
-        console.log('Starting trainer with exercises:', exerciseIds);
-
-        workoutPlan = exerciseIds.map(id => WORKOUTS.find(w => w.id === id));
-        if (workoutPlan.some(e => !e)) {
-          console.error("Uno o più esercizi non trovati!", exerciseIds);
-          return;
-        }
-
-        currentExerciseIndex = 0;
-        currentSeries = 1;
-        state = 'ready';
-
-        ui.showView('trainer');
-        runState();
-      }
-
-  - file: src/app.js
-    content: |
-      import { initializeAudio } from './audio.js';
-      import { initCalendar } from './calendar.js';
-      import { initModals, openDailyWorkoutModal } from './modals.js';
-      import { startTrainer } from './trainer.js';
-
-      function initializeApp() {
-        initializeAudio();
-        initCalendar();
-        initModals();
-
-        // --- Event Delegation ---
-        const calendarGrid = document.getElementById('calendar-grid');
-        calendarGrid.addEventListener('click', (event) => {
-          const target = event.target;
-          const dayCell = target.closest('.day-cell');
-
-          if (!dayCell) return;
-
-          if (target.classList.contains('btn-start')) {
-            // Cliccato "INIZIA"
-            // Logica placeholder per ottenere gli esercizi del giorno
-            const exerciseIds = ['pushups', 'squats', 'plank'];
-            startTrainer(exerciseIds);
-          } else {
-            // Cliccato sulla cella per modificare
-            const date = dayCell.dataset.date;
-            openDailyWorkoutModal(date);
-          }
-        });
-      }
-
-      // Wait for the DOM to be fully loaded before running the app
-      document.addEventListener('DOMContentLoaded', initializeApp);
-
-  - file: main.js
+          <script type="module" src="src/main.js"></script>
+        </body>
+      </html>
+  - file: app.js
+    content: "" # Svuotiamo il vecchio file, la sua logica verrà migrata
+  - file: src/main.js
     content: |
       /**
        * @file main.js
-       * Questo file è ora obsoleto e verrà eliminato nei prossimi refactoring.
-       * La sua logica è stata spostata in moduli dedicati all'interno della cartella /src.
+       * The main entry point for the application.
+       * Orchestrates all other modules.
+       */
+      import * as storage from './storage.js';
+
+      /**
+       * The main function to initialize the application.
+       */
+      function main() {
+        console.log('Application Initialized.');
+        console.log('Fetching all workouts from storage:', storage.getWorkouts());
+        // Qui inizieremo a orchestrare gli altri moduli (UI, Calendar, etc.)
+      }
+
+      // Initialize the app once the DOM is fully loaded.
+      document.addEventListener('DOMContentLoaded', main);
+  - file: src/storage.js
+    content: |
+      /**
+       * @file storage.js
+       * Handles all interactions with the browser's localStorage.
+       * This is the single source of truth for data persistence.
        */
 
-      // Tutta la vecchia logica del trainer, dei timer e dello stato
-      // è stata rimossa.
-      
-      // Tutta la logica dei modali è stata rimossa.
-      
-      // Tutta la logica del calendario è stata rimossa.
+      const WORKOUTS_KEY = 'mio_trainer_workouts';
 
+      /**
+       * Retrieves the entire workouts object from localStorage.
+       * @returns {Object} The workouts object, or an empty object if none exists.
+       */
+      export function getWorkouts() {
+        try {
+          const workouts = localStorage.getItem(WORKOUTS_KEY);
+          return workouts ? JSON.parse(workouts) : {};
+        } catch (error) {
+          console.error("Error reading from localStorage:", error);
+          return {};
+        }
+      }
+
+      /**
+       * Saves the entire workouts object to localStorage.
+       * @param {Object} workouts - The workouts object to save.
+       */
+      export function saveWorkouts(workouts) {
+        try {
+          localStorage.setItem(WORKOUTS_KEY, JSON.stringify(workouts));
+        } catch (error) {
+          console.error("Error writing to localStorage:", error);
+        }
+      }
+
+      /**
+       * Retrieves the list of exercises for a specific date key.
+       * @param {string} dateKey - The date in 'YYYY-MM-DD' format.
+       * @returns {Array} An array of exercise IDs for the given date, or an empty array.
+       */
+      export function getWorkoutsForDate(dateKey) {
+        const workouts = getWorkouts();
+        return workouts[dateKey] || [];
+      }
+
+      /**
+       * Saves a list of exercises for a specific date key.
+       * @param {string} dateKey - The date in 'YYYY-MM-DD' format.
+       * @param {Array} exercises - An array of exercise objects to save for the given date.
+       */
+      export function saveWorkoutsForDate(dateKey, exercises) {
+        const workouts = getWorkouts();
+        workouts[dateKey] = exercises;
+        saveWorkouts(workouts);
+      }
+  - file: .gitignore
+    content: |
+      # Dependencies
+      /node_modules
+
+      # Build artifacts
+      /dist
+      /build
+
+      # IDE / Editor specific
+      .vscode/
+      .idea/
+      *.suo
+      *.ntvs*
+      *.njsproj
+      *.sln
+      *.swp
+
+      # OS specific
+      .DS_Store
+      Thumbs.db
 commands:
-  - "git status"
+  - "echo 'Vecchio app.js svuotato. Creati i nuovi file src/main.js e src/storage.js.'"
+  - "echo 'Verifica la nuova struttura dei file con il comando: ls -R'"
+  - "echo 'IMPORTANTE: A causa dell''uso di moduli ES6 (import/export), non puoi aprire index.html direttamente.'"
+  - "echo 'Devi servirlo tramite un server locale. Se hai Python 3, usa: python3 -m http.server'"
+  - "echo 'Apri il browser su http://localhost:8000 e controlla la console per il messaggio di inizializzazione.'"
