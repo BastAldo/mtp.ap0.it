@@ -23,6 +23,15 @@
 
 export const ALL_EXERCISES = [
   {
+    id: 'fakepushup',
+    name: 'fake Piegamenti sulle braccia',
+    type: 'reps',
+    series: 1,
+    reps: 1,
+    rest: 6,
+    tempo: { up: 1, hold: 0, down: 2 },
+  },
+  {
     id: 'squat',
     name: 'Squat a corpo libero',
     type: 'reps',
