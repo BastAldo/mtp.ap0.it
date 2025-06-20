@@ -5,6 +5,7 @@
  */
 import * as storage from './storage.js';
 import { initCalendar } from './calendar.js';
+import { initModals } from './modal.js';
 
 /**
  * The main function to initialize the application.
@@ -15,6 +16,7 @@ function main() {
 
   // Initialize all primary components
   initCalendar();
+  initModals();
 }
 
 // Initialize the app once the DOM is fully loaded.

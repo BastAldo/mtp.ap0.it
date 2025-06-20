@@ -3,6 +3,7 @@
  * Manages the state, rendering, and interactions of the calendar view.
  */
 import * as storage from './storage.js';
+import { openDayModal } from './modal.js';
 
 // DOM Elements
 const calendarGrid = document.getElementById('calendar-grid');
@@ -26,21 +27,21 @@ function formatDateKey(date) {
  * Renders the calendar for the week of the given date.
  * @param {Date} date A date within the week to be rendered.
  */
-function renderCalendar(date) {
-  calendarGrid.innerHTML = '';
+export function renderCalendar(date = currentDate) {
   const weekStart = new Date(date);
-  weekStart.setDate(date.getDate() - date.getDay()); // Start of the week (Sunday)
+  weekStart.setDate(date.getDate() - date.getDay() + (date.getDay() === 0 ? -6 : 1)); // Start of the week (Monday)
 
   const monthNames = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
   currentMonthYear.textContent = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
 
+  calendarGrid.innerHTML = '';
   for (let i = 0; i < 7; i++) {
     const day = new Date(weekStart);
     day.setDate(weekStart.getDate() + i);
 
     const dayCell = document.createElement('div');
-    dayCell.className = 'day-cell';
     const dateKey = formatDateKey(day);
+    dayCell.className = 'day-cell';
     dayCell.dataset.date = dateKey;
 
     const dayName = day.toLocaleDateString('it-IT', { weekday: 'long' });
@@ -77,6 +78,16 @@ export function initCalendar() {
   nextWeekBtn.addEventListener('click', () => {
     currentDate.setDate(currentDate.getDate() + 7);
     renderCalendar(currentDate);
+  });
+
+  // Event delegation for opening the modal
+  calendarGrid.addEventListener('click', (event) => {
+    const dayCell = event.target.closest('.day-cell');
+    // Open modal only if a day-cell is clicked, but not the start button inside it
+    if (dayCell && !event.target.matches('.start-workout-btn')) {
+      const dateKey = dayCell.dataset.date;
+      openDayModal(dateKey);
+    }
   });
 
   renderCalendar(currentDate);
