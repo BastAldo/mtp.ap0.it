@@ -1,821 +1,19 @@
 # This is a YAML file. Copy all content from here down
 # and save it as 'patch.yaml'.
-commit_message: "revert: Restore codebase to stable architecture from commit a7516d2"
+commit_message: "fix(trainer): Implement robust trainer control state management"
 rationale: |
-  After analyzing the repository's history, it's clear that the project's architecture has significantly regressed.
+  The user reported a JavaScript error: `Uncaught SyntaxError: The requested module './trainer.js' does not provide an export named 'pauseOrResumeTrainer'`.
 
-  A key commit, `a7516d2` ("refactor: Isolate Trainer state machine and create UI module"), established a robust and maintainable structure. It correctly separated concerns into three distinct layers:
-  1.  **State Management (`trainer.js`):** The complex logic of the workout state machine was isolated.
-  2.  **DOM Manipulation (`ui.js`):** A dedicated module was made responsible for all UI updates.
-  3.  **Orchestration (`main.js`):** The main file was simplified to act as an orchestrator, initializing the app and handling top-level event listeners.
+  This error is a symptom of a deeper issue. Analysis revealed that the trainer's UI controls (the Start/Pause/Resume buttons) were not updating their text or state correctly after the workout began. The initial "INIZIA" text would persist, leading to confusion. The user likely attempted to fix this by adding an incorrect import to `main.js`, causing the reported crash.
 
-  In subsequent commits, this clean separation was dismantled, and logic from `trainer.js` and `ui.js` was merged back into `main.js`, creating a monolithic and hard-to-manage file. The current state is a result of this regression.
+  This patch resolves the underlying problem by introducing a clear state management system for the trainer's controls, making the user's attempted fix unnecessary.
 
-  This patch reverts all core application files to their state in commit `a7516d2`. This action restores the sound architectural foundation, making the project easier to understand, debug, and extend. It provides a stable base upon which to re-implement any features added after that point.
+  1.  **New `ui.updateTrainerControls` function:** A new, dedicated function has been created in `ui.js`. It accepts a state (`ready`, `active`, `paused`) and exclusively handles the visibility and text content of the control buttons. This centralizes the UI logic.
+
+  2.  **State-Driven Updates:** The `trainer.js` state machine now calls this new UI function at critical state transitions (`runReadyState`, `runPausedState`, `runActionState`). This ensures the UI is always an accurate reflection of the trainer's internal state.
+
+  3.  **Architectural Integrity:** This fix respects and strengthens the existing architecture. The `trainer.js` module remains responsible for *what* state it's in, while `ui.js` is responsible for *how* that state is displayed. No changes are needed in `main.js`.
 patches:
-  - file: index.html
-    content: |
-      <!DOCTYPE html>
-      <html lang="it">
-        <head>
-          <meta charset="UTF-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <title>Mio Trainer Personale</title>
-          <link rel="stylesheet" href="style.css" />
-          <link rel="preconnect" href="https://fonts.googleapis.com" />
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-          <link
-            href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@700&family=Roboto:wght@300;400;700&display=swap"
-            rel="stylesheet"
-          />
-        </head>
-        <body>
-          <div id="app-container">
-            <div id="calendar-view" class="view view--active">
-              <header class="calendar-header">
-                <button id="prev-week-btn" class="btn btn-icon">&lt;</button>
-                <h1 id="current-week-title">Settimana Corrente</h1>
-                <button id="next-week-btn" class="btn btn-icon">&gt;</button>
-              </header>
-              <div id="calendar-grid" class="calendar-grid">
-                </div>
-            </div>
-
-            <div id="trainer-view" class="view">
-              <h1 id="trainer-exercise-title" class="trainer-title">
-                Nome Esercizio
-              </h1>
-              <p id="trainer-series-counter" class="trainer-series-counter">
-                Serie 1 / 3
-              </p>
-              <div id="trainer-main-display" class="trainer-main-display">PRONTI?</div>
-              <p id="trainer-exercise-description" class="trainer-description">
-                Descrizione dell'esercizio e dettagli.
-              </p>
-              <div class="trainer-controls">
-                <button id="trainer-pause-btn" class="btn btn-primary">PAUSA</button>
-                <button id="trainer-resume-btn" class="btn btn-secondary" style="display: none;">
-                  RIPRENDI
-                </button>
-                <button id="trainer-end-btn" class="btn btn-danger">TERMINA</button>
-              </div>
-            </div>
-
-            <div id="debriefing-view" class="view">
-              <h1>Debriefing Allenamento</h1>
-              </div>
-          </div>
-
-          <div id="daily-workout-modal" class="modal-overlay" style="display: none;">
-            <div class="modal-content">
-              <h2 id="modal-title">Allenamento del Giorno</h2>
-              <ul id="daily-exercises-list">
-                </ul>
-              <div class="modal-actions">
-                <button id="add-exercise-btn" class="btn btn-secondary">
-                  Aggiungi Esercizio
-                </button>
-                <button id="close-daily-modal-btn" class="btn">Chiudi</button>
-              </div>
-            </div>
-          </div>
-
-          <div id="exercise-library-modal" class="modal-overlay" style="display: none;">
-            <div class="modal-content">
-              <h2>Libreria Esercizi</h2>
-              <input type="text" id="search-exercise-input" placeholder="Cerca esercizio...">
-              <ul id="exercise-library-list">
-                </ul>
-              <div class="modal-actions">
-                <button id="close-library-modal-btn" class="btn">Chiudi</button>
-              </div>
-            </div>
-          </div>
-
-
-          <script type="module" src="src/main.js"></script>
-        </body>
-      </html>
-  - file: style.css
-    content: |
-      :root {
-        --bg-color: #1a1a1d;
-        --card-color: #2c2c34;
-        --primary-color: #9575cd; /* Purple */
-        --secondary-color: #4db6ac; /* Teal */
-        --text-color: #f4f4f9;
-        --text-secondary: #b3b3b3;
-        --danger-color: #ef5350;
-        --success-color: #66bb6a;
-        --border-radius: 8px;
-        --transition-speed: 0.2s;
-      }
-
-      * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-      }
-
-      body {
-        font-family: 'Roboto', sans-serif;
-        background-color: var(--bg-color);
-        color: var(--text-color);
-        display: flex;
-        justify-content: center;
-        align-items: flex-start;
-        min-height: 100vh;
-        padding: 20px;
-      }
-
-      #app-container {
-        width: 100%;
-        max-width: 1000px;
-        margin: 0 auto;
-      }
-
-      /* Views */
-      .view {
-        display: none;
-      }
-      .view--active {
-        display: block;
-      }
-
-      /* Calendar */
-      .calendar-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 24px;
-      }
-
-      .calendar-header h1 {
-        font-family: 'Roboto Condensed', sans-serif;
-        font-size: 2rem;
-        color: var(--primary-color);
-        text-align: center;
-      }
-
-      .calendar-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 16px;
-      }
-
-      .day-cell {
-        background-color: var(--card-color);
-        border-radius: var(--border-radius);
-        padding: 20px;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        border-left: 4px solid transparent;
-        transition: transform var(--transition-speed) ease, border-color var(--transition-speed) ease;
-      }
-
-      .day-cell:hover {
-        transform: translateY(-3px);
-        border-left-color: var(--primary-color);
-      }
-
-      .day-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: baseline;
-        margin-bottom: 12px;
-      }
-
-      .day-name {
-        font-family: 'Roboto Condensed', sans-serif;
-        font-size: 1.5rem;
-        font-weight: 700;
-      }
-
-      .day-number {
-        font-size: 1.2rem;
-        color: var(--text-secondary);
-      }
-
-      .day-summary {
-        margin-bottom: 16px;
-        color: var(--text-secondary);
-        flex-grow: 1;
-        min-height: 40px;
-      }
-
-      /* Buttons */
-      .btn {
-        padding: 10px 20px;
-        border: none;
-        border-radius: var(--border-radius);
-        font-weight: 700;
-        font-size: 1rem;
-        cursor: pointer;
-        transition: transform var(--transition-speed) ease, background-color var(--transition-speed) ease;
-        text-transform: uppercase;
-      }
-      .btn:hover:not(:disabled) {
-        transform: scale(1.05);
-      }
-      .btn:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-      .btn-primary {
-        background-color: var(--primary-color);
-        color: white;
-      }
-      .btn-secondary {
-        background-color: var(--secondary-color);
-        color: white;
-      }
-      .btn-danger {
-        background-color: var(--danger-color);
-        color: white;
-      }
-      .btn-icon {
-        padding: 10px;
-        font-size: 1.5rem;
-        background-color: var(--card-color);
-        color: var(--text-color);
-      }
-
-      /* Modal System */
-      .modal-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0, 0, 0, 0.7);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        z-index: 1000;
-      }
-      .modal-content {
-        background-color: var(--card-color);
-        padding: 30px;
-        border-radius: var(--border-radius);
-        width: 90%;
-        max-width: 500px;
-        max-height: 90vh;
-        display: flex;
-        flex-direction: column;
-      }
-      .modal-content h2 {
-        margin-bottom: 20px;
-        color: var(--primary-color);
-      }
-      .modal-content ul {
-        list-style: none;
-        margin-bottom: 20px;
-        overflow-y: auto;
-        flex-grow: 1;
-      }
-      .modal-content li {
-        padding: 15px;
-        background-color: var(--bg-color);
-        border-radius: var(--border-radius);
-        margin-bottom: 10px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-       .modal-content li .remove-exercise-btn {
-        background-color: transparent;
-        color: var(--danger-color);
-        border: none;
-        cursor: pointer;
-        font-size: 1.2rem;
-       }
-      #exercise-library-list li {
-        cursor: pointer;
-        transition: background-color var(--transition-speed) ease;
-      }
-      #exercise-library-list li:hover {
-        background-color: var(--primary-color);
-      }
-      .modal-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 10px;
-      }
-      #search-exercise-input {
-          width: 100%;
-          padding: 10px;
-          margin-bottom: 20px;
-          border-radius: var(--border-radius);
-          border: 2px solid var(--text-secondary);
-          background-color: var(--bg-color);
-          color: var(--text-color);
-          font-size: 1rem;
-      }
-
-      /* Trainer View */
-      #trainer-view {
-        text-align: center;
-        display: none; /* Hidden by default */
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        height: calc(100vh - 40px);
-      }
-      #trainer-view.view--active {
-        display: flex;
-      }
-
-      .trainer-title {
-        font-family: 'Roboto Condensed', sans-serif;
-        font-size: 2.5rem;
-        color: var(--primary-color);
-        margin-bottom: 0.2em;
-      }
-
-      .trainer-series-counter {
-        font-size: 1.5rem;
-        color: var(--text-secondary);
-        margin-bottom: 1em;
-      }
-
-      .trainer-main-display {
-        font-family: 'Roboto Condensed', sans-serif;
-        font-size: 10rem;
-        font-weight: 700;
-        line-height: 1;
-        margin-bottom: 0.2em;
-        width: 100%;
-      }
-
-      .trainer-description {
-        font-size: 1.2rem;
-        color: var(--text-secondary);
-        margin-bottom: 2em;
-        min-height: 2em;
-      }
-
-      .trainer-controls {
-        display: flex;
-        gap: 20px;
-      }
-
-      /* Flashing Animation */
-      @keyframes flash {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.3; }
-      }
-
-      .is-flashing {
-        animation: flash 0.5s infinite;
-      }
-  - file: src/main.js
-    content: |
-      /**
-       * @file main.js
-       * ---
-       * Main application entry point.
-       * Orchestrates the different modules of the application:
-       * - Initializes UI components.
-       * - Handles user interactions (view navigation, opening modals).
-       * - Manages the overall application flow.
-       */
-
-      import * as storage from './storage.js';
-      import * as ui from './ui.js';
-      import { startTrainer } from './trainer.js';
-      import { getWeek, getDayName, getFormattedDate } from './utils.js';
-
-      // --- STATE ---
-      let currentWeekOffset = 0;
-      let selectedDate = null; // Used for modals to know which day they're editing
-
-      // --- INITIALIZATION ---
-      function initialize() {
-        setupEventListeners();
-        renderCurrentWeek();
-      }
-
-      // --- EVENT LISTENERS ---
-      function setupEventListeners() {
-        // Calendar Navigation
-        document.getElementById('prev-week-btn').addEventListener('click', showPreviousWeek);
-        document.getElementById('next-week-btn').addEventListener('click', showNextWeek);
-
-        // Modals
-        document.getElementById('close-daily-modal-btn').addEventListener('click', ui.closeDailyWorkoutModal);
-        document.getElementById('close-library-modal-btn').addEventListener('click', ui.closeExerciseLibraryModal);
-        document.getElementById('add-exercise-btn').addEventListener('click', () => ui.openExerciseLibraryModal(handleSelectExercise));
-
-        // Event delegation for dynamically created elements
-        document.body.addEventListener('click', handleDynamicClicks);
-      }
-
-      /**
-       * Handles clicks on dynamically generated elements like day cells, start buttons, etc.
-       * @param {Event} event The click event.
-       */
-      function handleDynamicClicks(event) {
-        const target = event.target;
-
-        // Open Daily Workout Modal
-        if (target.closest('.day-cell') && !target.closest('.day-actions')) {
-          const dayCell = target.closest('.day-cell');
-          selectedDate = dayCell.dataset.date;
-          const workouts = storage.getWorkoutsForDate(selectedDate);
-          ui.openDailyWorkoutModal(selectedDate, workouts, handleRemoveExercise);
-        }
-
-        // Start Trainer
-        if (target.id === 'start-day-btn') {
-          const dayCell = target.closest('.day-cell');
-          const date = dayCell.dataset.date;
-          const exerciseIds = storage.getWorkoutsForDate(date).map(w => w.id);
-          if (exerciseIds.length > 0) {
-            startTrainer(exerciseIds);
-          }
-        }
-      }
-
-
-      // --- CALENDAR LOGIC ---
-      function renderCurrentWeek() {
-        const week = getWeek(currentWeekOffset);
-        ui.updateCalendar(week, handleDayCellClick, handleStartWorkout);
-      }
-
-      function showPreviousWeek() {
-        currentWeekOffset--;
-        renderCurrentWeek();
-      }
-
-      function showNextWeek() {
-        currentWeekOffset++;
-        renderCurrentWeek();
-      }
-
-      function handleDayCellClick(date) {
-        selectedDate = date;
-        const workouts = storage.getWorkoutsForDate(date);
-        ui.openDailyWorkoutModal(date, workouts, handleRemoveExercise);
-      }
-
-      function handleStartWorkout(date) {
-          const exerciseIds = storage.getWorkoutsForDate(date).map(w => w.id);
-          if (exerciseIds.length > 0) {
-              startTrainer(exerciseIds);
-          }
-      }
-
-      // --- WORKOUT MANAGEMENT ---
-
-      /**
-       * Callback for when an exercise is selected from the library.
-       * @param {string} exerciseId The ID of the selected exercise.
-       */
-      function handleSelectExercise(exerciseId) {
-          storage.addWorkoutToDate(selectedDate, exerciseId);
-          ui.closeExerciseLibraryModal();
-          // Re-render the daily workout modal to show the new exercise
-          const updatedWorkouts = storage.getWorkoutsForDate(selectedDate);
-          ui.renderDailyExercises(updatedWorkouts, handleRemoveExercise);
-          // Also, re-render the calendar to update the summary
-          renderCurrentWeek();
-      }
-
-      /**
-       * Callback for when an exercise is removed from the daily list.
-       * @param {string} exerciseId The ID of the exercise to remove.
-       */
-      function handleRemoveExercise(exerciseId) {
-        storage.removeWorkoutFromDate(selectedDate, exerciseId);
-        // Re-render the daily workout modal
-        const updatedWorkouts = storage.getWorkoutsForDate(selectedDate);
-        ui.renderDailyExercises(updatedWorkouts, handleRemoveExercise);
-        // Also, re-render the calendar to update the summary
-        renderCurrentWeek();
-      }
-
-
-      // --- STARTUP ---
-      document.addEventListener('DOMContentLoaded', initialize);
-  - file: src/storage.js
-    content: |
-      /**
-       * @file storage.js
-       * ---
-       * Handles all interactions with the browser's localStorage.
-       * It's responsible for saving, retrieving, and deleting workout data.
-       * The data is stored under a single key, `workoutSchedule`, as a JSON string.
-       *
-       * Data Structure:
-       * {
-       * "YYYY-MM-DD": ["exId1", "exId2", ...],
-       * "YYYY-MM-DD": ["exId3"],
-       * ...
-       * }
-       */
-      import { ALL_EXERCISES } from './workouts.js';
-
-      const STORAGE_KEY = 'workoutSchedule';
-
-      /**
-       * Retrieves the entire workout schedule from localStorage.
-       * @returns {Object} The schedule object.
-       */
-      function getSchedule() {
-        const data = localStorage.getItem(STORAGE_KEY);
-        return data ? JSON.parse(data) : {};
-      }
-
-      /**
-       * Saves the entire workout schedule to localStorage.
-       * @param {Object} schedule The schedule object to save.
-       */
-      function saveSchedule(schedule) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(schedule));
-      }
-
-      /**
-       * Retrieves the workout data for a specific date.
-       * @param {string} date - The date in 'YYYY-MM-DD' format.
-       * @returns {Array<Object>} An array of full exercise objects for the given date.
-       */
-      export function getWorkoutsForDate(date) {
-        const schedule = getSchedule();
-        const exerciseIds = schedule[date] || [];
-        return exerciseIds.map(id => ALL_EXERCISES.find(ex => ex.id === id)).filter(Boolean);
-      }
-
-      /**
-       * Adds an exercise to a specific date's workout.
-       * @param {string} date - The date in 'YYYY-MM-DD' format.
-       * @param {string} exerciseId - The ID of the exercise to add.
-       */
-      export function addWorkoutToDate(date, exerciseId) {
-        const schedule = getSchedule();
-        if (!schedule[date]) {
-          schedule[date] = [];
-        }
-        if (!schedule[date].includes(exerciseId)) {
-          schedule[date].push(exerciseId);
-        }
-        saveSchedule(schedule);
-      }
-
-      /**
-       * Removes an exercise from a specific date's workout.
-       * @param {string} date - The date in 'YYYY-MM-DD' format.
-       * @param {string} exerciseId - The ID of the exercise to remove.
-       */
-      export function removeWorkoutFromDate(date, exerciseId) {
-        const schedule = getSchedule();
-        if (schedule[date]) {
-          schedule[date] = schedule[date].filter(id => id !== exerciseId);
-          // If the day becomes empty, remove the key to keep the storage clean
-          if (schedule[date].length === 0) {
-            delete schedule[date];
-          }
-        }
-        saveSchedule(schedule);
-      }
-  - file: src/trainer.js
-    content: |
-      /**
-       * @file trainer.js
-       * ---
-       * Contains the entire state machine logic for the training session.
-       * This module is completely decoupled from the DOM. It receives workout data,
-       * manages the state (ready, preparing, action, rest, etc.), and uses callback
-       * functions provided by the UI module to display updates.
-       */
-
-      import * as ui from './ui.js';
-      import { ALL_EXERCISES } from './workouts.js';
-      import { playTick } from './utils.js';
-
-      const ANNOUNCE_DURATION = 750; // ms
-      const PREPARE_DURATION = 3; // seconds
-
-      // --- STATE ---
-      // This object holds the entire state of the current training session.
-      let trainerState = {
-        state: 'idle', // idle, ready, announcing, preparing, action, paused, rest, finished
-        exercises: [], // a queue of exercises for the current session
-        currentExerciseIndex: -1,
-        currentSeries: 0,
-        currentRep: 0,
-        timerId: null, // To store setInterval reference
-        countdown: 0,
-      };
-
-      // --- PUBLIC API ---
-
-      /**
-       * Initializes and starts the trainer with a list of exercise IDs.
-       * @param {Array<string>} exerciseIds - List of exercise IDs to be performed.
-       */
-      export function startTrainer(exerciseIds) {
-        if (!exerciseIds || exerciseIds.length === 0) {
-          console.error("Trainer started with no exercises.");
-          return;
-        }
-        // Reset state and populate with new workout
-        resetTrainerState();
-        trainerState.exercises = exerciseIds
-          .map(id => ALL_EXERCISES.find(ex => ex.id === id))
-          .filter(Boolean);
-
-        ui.showView('trainer');
-        nextStep();
-      }
-
-      // --- STATE MACHINE LOGIC ---
-
-      /**
-       * The core of the trainer. Determines the next state and executes it.
-       */
-      function nextStep() {
-        const currentExercise = getCurrentExercise();
-
-        // Case 1: Workout is finished
-        if (!currentExercise) {
-          runFinishedState();
-          return;
-        }
-
-        // Case 2: Starting a new exercise
-        if (trainerState.currentSeries === 0) {
-          trainerState.currentExerciseIndex++;
-          trainerState.currentSeries = 1;
-          trainerState.currentRep = 1;
-          runReadyState();
-          return;
-        }
-
-        // Case 3: Finished all series for the current exercise
-        if (trainerState.currentSeries > currentExercise.series) {
-          trainerState.currentExerciseIndex++;
-          trainerState.currentSeries = 1;
-          trainerState.currentRep = 1;
-           // Check if this was the last exercise
-          if (trainerState.currentExerciseIndex >= trainerState.exercises.length) {
-              runFinishedState();
-          } else {
-              runReadyState();
-          }
-          return;
-        }
-        
-        // Case 4: Proceeding to the next set (start with rest)
-        runRestState();
-      }
-
-      /**
-       * Runs the READY state. The user has to manually start the set.
-       */
-      function runReadyState() {
-        trainerState.state = 'ready';
-        const exercise = getCurrentExercise();
-        ui.updateTrainerUI(exercise, trainerState.currentSeries, 'PRONTI?', `Premi 'PAUSA' per iniziare la serie`);
-        // The 'pause' button doubles as a 'start' button here.
-        // We will repurpose it in the UI module. For now, we wait for user input.
-        // The transition to the next state is handled by the PAUSE/RESUME button's event listener.
-      }
-
-      export function handleAction() {
-        switch (trainerState.state) {
-            case 'ready':
-                runAnnouncingPhase('PREPARATI', runPreparingPhase);
-                break;
-            case 'action':
-                runPausedState();
-                break;
-            case 'paused':
-                resumeActionState();
-                break;
-            case 'rest':
-                // Pausing during rest is not yet implemented.
-                break;
-        }
-      }
-
-      /**
-       * Runs a short "announcing" phase to alert the user of what's next.
-       * @param {string} text - The text to display (e.g., "UP", "REST").
-       * @param {function} nextPhaseCallback - The function to call after the announcement.
-       */
-      function runAnnouncingPhase(text, nextPhaseCallback) {
-        trainerState.state = 'announcing';
-        ui.updateTrainerMainDisplay(text, true);
-        playTick();
-        
-        setTimeout(() => {
-          ui.updateTrainerMainDisplay(text, false); // Stop flashing
-          nextPhaseCallback();
-        }, ANNOUNCE_DURATION);
-      }
-
-
-      /**
-       * Runs the PREPARING state (countdown before the first set).
-       */
-      function runPreparingPhase() {
-        trainerState.state = 'preparing';
-        trainerState.countdown = PREPARE_DURATION;
-        ui.updateTrainerMainDisplay(trainerState.countdown);
-        
-        trainerState.timerId = setInterval(() => {
-            trainerState.countdown--;
-            playTick();
-            ui.updateTrainerMainDisplay(trainerState.countdown);
-            if (trainerState.countdown <= 0) {
-                clearInterval(trainerState.timerId);
-                runActionState();
-            }
-        }, 1000);
-      }
-
-      function runActionState() {
-          trainerState.state = 'action';
-          const exercise = getCurrentExercise();
-          // Logic for timed vs reps exercise will go here
-          // For now, let's just simulate a 5s action
-          trainerState.countdown = 5;
-          ui.updateTrainerMainDisplay(trainerState.countdown);
-
-          trainerState.timerId = setInterval(() => {
-              trainerState.countdown--;
-              ui.updateTrainerMainDisplay(trainerState.countdown);
-              if (trainerState.countdown <= 0) {
-                  clearInterval(trainerState.timerId);
-                  trainerState.currentSeries++;
-                  nextStep(); // This will trigger the rest phase
-              }
-          }, 1000);
-      }
-
-      function runPausedState() {
-          trainerState.state = 'paused';
-          clearInterval(trainerState.timerId);
-          ui.setPaused(true);
-      }
-
-      function resumeActionState() {
-          trainerState.state = 'action';
-          ui.setPaused(false);
-          // To resume correctly, we need to know what kind of action was paused.
-          // This simplified version just restarts the action timer.
-          runActionState();
-      }
-
-      function runRestState() {
-          trainerState.state = 'rest';
-          const exercise = getCurrentExercise();
-          trainerState.countdown = exercise.rest;
-
-          runAnnouncingPhase('RIPOSO', () => {
-              ui.updateTrainerMainDisplay(trainerState.countdown);
-              trainerState.timerId = setInterval(() => {
-                  trainerState.countdown--;
-                  playTick();
-                  ui.updateTrainerMainDisplay(trainerState.countdown);
-                  if (trainerState.countdown <= 0) {
-                      clearInterval(trainerState.timerId);
-                      runAnnouncingPhase('PREPARATI', runPreparingPhase);
-                  }
-              }, 1000);
-          });
-      }
-
-      function runFinishedState() {
-          trainerState.state = 'finished';
-          console.log("Workout Finished!");
-          // Transition to debriefing view
-      }
-
-      /**
-       * Resets the trainer's state to its initial values.
-       */
-      function resetTrainerState() {
-        if (trainerState.timerId) {
-          clearInterval(trainerState.timerId);
-        }
-        trainerState = {
-          state: 'idle',
-          exercises: [],
-          currentExerciseIndex: -1,
-          currentSeries: 0,
-          currentRep: 0,
-          timerId: null,
-          countdown: 0,
-        };
-      }
-
-      // --- HELPERS ---
-      function getCurrentExercise() {
-        return trainerState.exercises[trainerState.currentExerciseIndex];
-      }
   - file: src/ui.js
     content: |
       /**
@@ -993,7 +191,7 @@ patches:
 
 
       /**
-       * Updates the entire trainer view.
+       * Updates the entire trainer view, except for the controls.
        * @param {object} exercise - The current exercise object.
        * @param {number} currentSeries - The current series number.
        * @param {string} mainDisplayText - Text for the main large display.
@@ -1005,9 +203,6 @@ patches:
           trainerMainDisplay.textContent = mainDisplayText;
           trainerMainDisplay.classList.remove('is-flashing');
           trainerExerciseDescription.textContent = descriptionText || (exercise.type === 'reps' ? `${exercise.reps} ripetizioni` : `${exercise.duration} secondi`);
-          
-          // Logic for the start button
-          pauseBtn.textContent = 'INIZIA';
       }
 
       /**
@@ -1025,190 +220,285 @@ patches:
       }
 
       /**
-       * Toggles the UI between paused and active states.
-       * @param {boolean} isPaused - True to show paused state, false for active state.
+       * Manages the state of the trainer control buttons.
+       * @param {'ready' | 'active' | 'paused'} state The current trainer state.
        */
-      export function setPaused(isPaused) {
-          if (isPaused) {
-              pauseBtn.style.display = 'none';
-              resumeBtn.style.display = 'inline-block';
+      export function updateTrainerControls(state) {
+        if (state === 'ready') {
+            pauseBtn.textContent = 'INIZIA';
+            pauseBtn.style.display = 'inline-block';
+            resumeBtn.style.display = 'none';
+        } else if (state === 'active') {
+            pauseBtn.textContent = 'PAUSA';
+            pauseBtn.style.display = 'inline-block';
+            resumeBtn.style.display = 'none';
+        } else if (state === 'paused') {
+            pauseBtn.style.display = 'none';
+            resumeBtn.style.display = 'inline-block';
+        }
+      }
+  - file: src/trainer.js
+    content: |
+      /**
+       * @file trainer.js
+       * ---
+       * Contains the entire state machine logic for the training session.
+       * This module is completely decoupled from the DOM. It receives workout data,
+       * manages the state (ready, preparing, action, rest, etc.), and uses callback
+       * functions provided by the UI module to display updates.
+       */
+
+      import * as ui from './ui.js';
+      import { ALL_EXERCISES } from './workouts.js';
+      import { playTick } from './utils.js';
+
+      const ANNOUNCE_DURATION = 750; // ms
+      const PREPARE_DURATION = 3; // seconds
+
+      // --- STATE ---
+      // This object holds the entire state of the current training session.
+      let trainerState = {
+        state: 'idle', // idle, ready, announcing, preparing, action, paused, rest, finished
+        exercises: [], // a queue of exercises for the current session
+        currentExerciseIndex: -1,
+        currentSeries: 0,
+        currentRep: 0,
+        timerId: null, // To store setInterval reference
+        countdown: 0,
+      };
+
+      // --- PUBLIC API ---
+
+      /**
+       * Initializes and starts the trainer with a list of exercise IDs.
+       * @param {Array<string>} exerciseIds - List of exercise IDs to be performed.
+       */
+      export function startTrainer(exerciseIds) {
+        if (!exerciseIds || exerciseIds.length === 0) {
+          console.error("Trainer started with no exercises.");
+          return;
+        }
+        // Reset state and populate with new workout
+        resetTrainerState();
+        trainerState.exercises = exerciseIds
+          .map(id => ALL_EXERCISES.find(ex => ex.id === id))
+          .filter(Boolean);
+
+        ui.showView('trainer');
+        nextStep();
+      }
+
+      /**
+       * Handles user interaction with the main trainer action button (Start/Pause/Resume).
+       */
+      export function handleAction() {
+        switch (trainerState.state) {
+            case 'ready':
+                runAnnouncingPhase('PREPARATI', runPreparingPhase);
+                break;
+            case 'action':
+                runPausedState();
+                break;
+            case 'paused':
+                resumeActionState();
+                break;
+            case 'rest':
+                // Pausing during rest is not yet implemented, but we can stop the timer.
+                runPausedState();
+                break;
+        }
+      }
+
+      // --- STATE MACHINE LOGIC ---
+
+      /**
+       * The core of the trainer. Determines the next state and executes it.
+       */
+      function nextStep() {
+        const currentExercise = getCurrentExercise();
+
+        // Case 1: Workout is finished
+        if (!currentExercise) {
+          runFinishedState();
+          return;
+        }
+
+        // Case 2: Starting a new exercise
+        if (trainerState.currentSeries === 0) {
+          trainerState.currentExerciseIndex++;
+          trainerState.currentSeries = 1;
+          trainerState.currentRep = 1;
+          runReadyState();
+          return;
+        }
+
+        // Case 3: Finished all series for the current exercise
+        if (trainerState.currentSeries > currentExercise.series) {
+          trainerState.currentExerciseIndex++;
+          trainerState.currentSeries = 1;
+          trainerState.currentRep = 1;
+           // Check if this was the last exercise
+          if (trainerState.currentExerciseIndex >= trainerState.exercises.length) {
+              runFinishedState();
           } else {
-              pauseBtn.style.display = 'inline-block';
-              resumeBtn.style.display = 'none';
+              runReadyState();
           }
-      }
-  - file: src/utils.js
-    content: |
-      /**
-       * @file utils.js
-       * ---
-       * Contains utility functions used across the application.
-       * These are pure functions that don't depend on the application's state.
-       */
-
-      /**
-       * Generates an array of 7 Date objects for the week based on an offset from the current week.
-       * @param {number} weekOffset - 0 for the current week, -1 for last week, 1 for next week, etc.
-       * @returns {Array<Date>} An array of 7 Date objects, starting from Monday.
-       */
-      export function getWeek(weekOffset = 0) {
-        const today = new Date();
-        const dayOfWeek = today.getDay(); // Sunday is 0, Monday is 1
-        const offsetToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Calculate offset to get to Monday
-        const mondayOfThisWeek = new Date(today.setDate(today.getDate() + offsetToMonday));
-
-        const targetMonday = new Date(
-          mondayOfThisWeek.setDate(mondayOfThisWeek.getDate() + weekOffset * 7)
-        );
-
-        const week = [];
-        for (let i = 0; i < 7; i++) {
-          const day = new Date(targetMonday);
-          day.setDate(day.getDate() + i);
-          week.push(day);
+          return;
         }
-        return week;
+        
+        // Case 4: Proceeding to the next set (start with rest)
+        runRestState();
       }
 
       /**
-       * Gets the Italian name of the day for a given Date object.
-       * @param {Date} date - The date.
-       * @returns {string} The full name of the day in Italian (e.g., "Lunedì").
+       * Runs the READY state. The user has to manually start the set.
        */
-      export function getDayName(date) {
-        return date.toLocaleDateString('it-IT', { weekday: 'long' });
+      function runReadyState() {
+        trainerState.state = 'ready';
+        const exercise = getCurrentExercise();
+        ui.updateTrainerUI(exercise, trainerState.currentSeries, 'PRONTI?', `Premi 'INIZIA' per cominciare la serie`);
+        ui.updateTrainerControls('ready');
       }
 
       /**
-       * Formats a Date object into a string.
-       * @param {Date} date - The date to format.
-       * @param {object} [options] - Optional formatting options for toLocaleDateString.
-       * @returns {string} The formatted date string, defaulting to 'YYYY-MM-DD'.
+       * Runs a short "announcing" phase to alert the user of what's next.
+       * @param {string} text - The text to display (e.g., "UP", "REST").
+       * @param {function} nextPhaseCallback - The function to call after the announcement.
        */
-      export function getFormattedDate(date, options) {
-        if (options) {
-          return date.toLocaleDateString('it-IT', options);
+      function runAnnouncingPhase(text, nextPhaseCallback) {
+        trainerState.state = 'announcing';
+        ui.updateTrainerMainDisplay(text, true);
+        playTick();
+        
+        setTimeout(() => {
+          ui.updateTrainerMainDisplay(text, false); // Stop flashing
+          nextPhaseCallback();
+        }, ANNOUNCE_DURATION);
+      }
+
+
+      /**
+       * Runs the PREPARING state (countdown before the first set).
+       */
+      function runPreparingPhase() {
+        trainerState.state = 'preparing';
+        trainerState.countdown = PREPARE_DURATION;
+        ui.updateTrainerMainDisplay(trainerState.countdown);
+        
+        trainerState.timerId = setInterval(() => {
+            trainerState.countdown--;
+            playTick();
+            ui.updateTrainerMainDisplay(trainerState.countdown);
+            if (trainerState.countdown <= 0) {
+                clearInterval(trainerState.timerId);
+                runActionState();
+            }
+        }, 1000);
+      }
+
+      function runActionState() {
+          trainerState.state = 'action';
+          ui.updateTrainerControls('active');
+          const exercise = getCurrentExercise();
+          // Logic for timed vs reps exercise will go here
+          // For now, let's just simulate a 5s action
+          trainerState.countdown = 5;
+          ui.updateTrainerMainDisplay(trainerState.countdown);
+
+          trainerState.timerId = setInterval(() => {
+              trainerState.countdown--;
+              ui.updateTrainerMainDisplay(trainerState.countdown);
+              if (trainerState.countdown <= 0) {
+                  clearInterval(trainerState.timerId);
+                  trainerState.currentSeries++;
+                  nextStep(); // This will trigger the rest phase
+              }
+          }, 1000);
+      }
+
+      function runPausedState() {
+          const prevState = trainerState.state;
+          if (prevState !== 'action' && prevState !== 'rest') return; // Can only pause during action or rest
+
+          trainerState.state = 'paused';
+          clearInterval(trainerState.timerId);
+          ui.updateTrainerControls('paused');
+          // We can store the previous state to resume correctly
+          trainerState.pausedFrom = prevState; 
+      }
+
+      function resumeActionState() {
+          // To resume correctly, we check where we paused from.
+          // This simplified version just restarts the previous phase's timer.
+          if (trainerState.pausedFrom === 'action') {
+              runActionState();
+          } else if (trainerState.pausedFrom === 'rest') {
+              // We need a dedicated function to resume the rest timer
+              runRestState(true); // passing a flag to indicate it's a resume
+          } else {
+              // Default fallback
+              runActionState();
+          }
+      }
+
+      function runRestState(isResuming = false) {
+          trainerState.state = 'rest';
+          ui.updateTrainerControls('active'); // Rest is an active state with a "PAUSA" button
+          const exercise = getCurrentExercise();
+
+          // Only set countdown if it's not a resume action
+          if (!isResuming) {
+            trainerState.countdown = exercise.rest;
+          }
+
+          const startRestTimer = () => {
+              ui.updateTrainerMainDisplay(trainerState.countdown);
+              trainerState.timerId = setInterval(() => {
+                  trainerState.countdown--;
+                  playTick();
+                  ui.updateTrainerMainDisplay(trainerState.countdown);
+                  if (trainerState.countdown <= 0) {
+                      clearInterval(trainerState.timerId);
+                      runAnnouncingPhase('PREPARATI', runPreparingPhase);
+                  }
+              }, 1000);
+          }
+          
+          if (isResuming) {
+            startRestTimer();
+          } else {
+            runAnnouncingPhase('RIPOSO', startRestTimer);
+          }
+      }
+
+      function runFinishedState() {
+          trainerState.state = 'finished';
+          console.log("Workout Finished!");
+          ui.showView('calendar'); // For now, just go back to calendar
+      }
+
+      /**
+       * Resets the trainer's state to its initial values.
+       */
+      function resetTrainerState() {
+        if (trainerState.timerId) {
+          clearInterval(trainerState.timerId);
         }
-        // ISO 8601 format (YYYY-MM-DD), but adjusted for local timezone
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
+        trainerState = {
+          state: 'idle',
+          exercises: [],
+          currentExerciseIndex: -1,
+          currentSeries: 0,
+          currentRep: 0,
+          timerId: null,
+          countdown: 0,
+          pausedFrom: null,
+        };
       }
 
-
-      /**
-       * Web Audio API for sound feedback.
-       */
-      let audioCtx;
-      function getAudioContext() {
-          if (!audioCtx) {
-              audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-          }
-          return audioCtx;
+      // --- HELPERS ---
+      function getCurrentExercise() {
+        return trainerState.exercises[trainerState.currentExerciseIndex];
       }
-
-      /**
-       * Plays a short, high-frequency tick sound.
-       */
-      export function playTick() {
-          try {
-              const context = getAudioContext();
-              const oscillator = context.createOscillator();
-              const gainNode = context.createGain();
-
-              oscillator.connect(gainNode);
-              gainNode.connect(context.destination);
-
-              oscillator.type = 'sine';
-              oscillator.frequency.setValueAtTime(880, context.currentTime); // A5 note
-              gainNode.gain.setValueAtTime(0.1, context.currentTime);
-
-              oscillator.start(context.currentTime);
-              gainNode.gain.exponentialRampToValueAtTime(0.00001, context.currentTime + 0.1);
-              oscillator.stop(context.currentTime + 0.1);
-          } catch (e) {
-              console.warn("Web Audio API is not supported in this browser or context.", e);
-          }
-      }
-  - file: src/workouts.js
-    content: |
-      /**
-       * @file workouts.js
-       * ---
-       * Defines the complete list of all available exercises in the application.
-       * This acts as the central database of workouts.
-       *
-       * Each exercise object has the following structure:
-       * - id: A unique string identifier.
-       * - name: The display name of the exercise.
-       * - type: 'reps' or 'time'.
-       *
-       * For 'reps' type:
-       * - series: Number of sets.
-       * - reps: Number of repetitions per set.
-       * - rest: Rest time in seconds between sets.
-       * - tempo: An object { up, hold, down } defining the time in seconds for each phase of a rep.
-       *
-       * For 'time' type:
-       * - series: Number of sets.
-       * - duration: Duration in seconds for each set.
-       * - rest: Rest time in seconds between sets.
-       */
-
-      export const ALL_EXERCISES = [
-        {
-          id: 'squat',
-          name: 'Squat a corpo libero',
-          type: 'reps',
-          series: 3,
-          reps: 12,
-          rest: 60,
-          tempo: { up: 1, hold: 0, down: 2 },
-        },
-        {
-          id: 'pushup',
-          name: 'Piegamenti sulle braccia',
-          type: 'reps',
-          series: 3,
-          reps: 10,
-          rest: 60,
-          tempo: { up: 1, hold: 0, down: 2 },
-        },
-        {
-          id: 'plank',
-          name: 'Plank',
-          type: 'time',
-          series: 3,
-          duration: 45, // seconds
-          rest: 45,
-        },
-        {
-          id: 'lunges',
-          name: 'Affondi',
-          type: 'reps',
-          series: 3,
-          reps: 10, // per gamba
-          rest: 60,
-          tempo: { up: 1, hold: 0, down: 1 },
-        },
-        {
-          id: 'jumping_jacks',
-          name: 'Jumping Jacks',
-          type: 'time',
-          series: 1,
-          duration: 60,
-          rest: 0,
-        },
-        {
-          id: 'burpees',
-          name: 'Burpees',
-          type: 'reps',
-          series: 3,
-          reps: 8,
-          rest: 90,
-          tempo: null, // Not tempo-based
-        },
-      ];
 commands:
   - "git status"

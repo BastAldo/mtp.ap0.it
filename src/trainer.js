@@ -47,6 +47,27 @@ export function startTrainer(exerciseIds) {
   nextStep();
 }
 
+/**
+ * Handles user interaction with the main trainer action button (Start/Pause/Resume).
+ */
+export function handleAction() {
+  switch (trainerState.state) {
+      case 'ready':
+          runAnnouncingPhase('PREPARATI', runPreparingPhase);
+          break;
+      case 'action':
+          runPausedState();
+          break;
+      case 'paused':
+          resumeActionState();
+          break;
+      case 'rest':
+          // Pausing during rest is not yet implemented, but we can stop the timer.
+          runPausedState();
+          break;
+  }
+}
+
 // --- STATE MACHINE LOGIC ---
 
 /**
@@ -94,27 +115,8 @@ function nextStep() {
 function runReadyState() {
   trainerState.state = 'ready';
   const exercise = getCurrentExercise();
-  ui.updateTrainerUI(exercise, trainerState.currentSeries, 'PRONTI?', `Premi 'PAUSA' per iniziare la serie`);
-  // The 'pause' button doubles as a 'start' button here.
-  // We will repurpose it in the UI module. For now, we wait for user input.
-  // The transition to the next state is handled by the PAUSE/RESUME button's event listener.
-}
-
-export function handleAction() {
-  switch (trainerState.state) {
-      case 'ready':
-          runAnnouncingPhase('PREPARATI', runPreparingPhase);
-          break;
-      case 'action':
-          runPausedState();
-          break;
-      case 'paused':
-          resumeActionState();
-          break;
-      case 'rest':
-          // Pausing during rest is not yet implemented.
-          break;
-  }
+  ui.updateTrainerUI(exercise, trainerState.currentSeries, 'PRONTI?', `Premi 'INIZIA' per cominciare la serie`);
+  ui.updateTrainerControls('ready');
 }
 
 /**
@@ -155,6 +157,7 @@ function runPreparingPhase() {
 
 function runActionState() {
     trainerState.state = 'action';
+    ui.updateTrainerControls('active');
     const exercise = getCurrentExercise();
     // Logic for timed vs reps exercise will go here
     // For now, let's just simulate a 5s action
@@ -173,25 +176,41 @@ function runActionState() {
 }
 
 function runPausedState() {
+    const prevState = trainerState.state;
+    if (prevState !== 'action' && prevState !== 'rest') return; // Can only pause during action or rest
+
     trainerState.state = 'paused';
     clearInterval(trainerState.timerId);
-    ui.setPaused(true);
+    ui.updateTrainerControls('paused');
+    // We can store the previous state to resume correctly
+    trainerState.pausedFrom = prevState; 
 }
 
 function resumeActionState() {
-    trainerState.state = 'action';
-    ui.setPaused(false);
-    // To resume correctly, we need to know what kind of action was paused.
-    // This simplified version just restarts the action timer.
-    runActionState();
+    // To resume correctly, we check where we paused from.
+    // This simplified version just restarts the previous phase's timer.
+    if (trainerState.pausedFrom === 'action') {
+        runActionState();
+    } else if (trainerState.pausedFrom === 'rest') {
+        // We need a dedicated function to resume the rest timer
+        runRestState(true); // passing a flag to indicate it's a resume
+    } else {
+        // Default fallback
+        runActionState();
+    }
 }
 
-function runRestState() {
+function runRestState(isResuming = false) {
     trainerState.state = 'rest';
+    ui.updateTrainerControls('active'); // Rest is an active state with a "PAUSA" button
     const exercise = getCurrentExercise();
-    trainerState.countdown = exercise.rest;
 
-    runAnnouncingPhase('RIPOSO', () => {
+    // Only set countdown if it's not a resume action
+    if (!isResuming) {
+      trainerState.countdown = exercise.rest;
+    }
+
+    const startRestTimer = () => {
         ui.updateTrainerMainDisplay(trainerState.countdown);
         trainerState.timerId = setInterval(() => {
             trainerState.countdown--;
@@ -202,13 +221,19 @@ function runRestState() {
                 runAnnouncingPhase('PREPARATI', runPreparingPhase);
             }
         }, 1000);
-    });
+    }
+    
+    if (isResuming) {
+      startRestTimer();
+    } else {
+      runAnnouncingPhase('RIPOSO', startRestTimer);
+    }
 }
 
 function runFinishedState() {
     trainerState.state = 'finished';
     console.log("Workout Finished!");
-    // Transition to debriefing view
+    ui.showView('calendar'); // For now, just go back to calendar
 }
 
 /**
@@ -226,6 +251,7 @@ function resetTrainerState() {
     currentRep: 0,
     timerId: null,
     countdown: 0,
+    pausedFrom: null,
   };
 }
 

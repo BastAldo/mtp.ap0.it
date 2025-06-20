@@ -173,7 +173,7 @@ resumeBtn.addEventListener('click', handleAction);
 
 
 /**
- * Updates the entire trainer view.
+ * Updates the entire trainer view, except for the controls.
  * @param {object} exercise - The current exercise object.
  * @param {number} currentSeries - The current series number.
  * @param {string} mainDisplayText - Text for the main large display.
@@ -185,9 +185,6 @@ export function updateTrainerUI(exercise, currentSeries, mainDisplayText, descri
     trainerMainDisplay.textContent = mainDisplayText;
     trainerMainDisplay.classList.remove('is-flashing');
     trainerExerciseDescription.textContent = descriptionText || (exercise.type === 'reps' ? `${exercise.reps} ripetizioni` : `${exercise.duration} secondi`);
-    
-    // Logic for the start button
-    pauseBtn.textContent = 'INIZIA';
 }
 
 /**
@@ -205,15 +202,20 @@ export function updateTrainerMainDisplay(text, isFlashing = false) {
 }
 
 /**
- * Toggles the UI between paused and active states.
- * @param {boolean} isPaused - True to show paused state, false for active state.
+ * Manages the state of the trainer control buttons.
+ * @param {'ready' | 'active' | 'paused'} state The current trainer state.
  */
-export function setPaused(isPaused) {
-    if (isPaused) {
-        pauseBtn.style.display = 'none';
-        resumeBtn.style.display = 'inline-block';
-    } else {
-        pauseBtn.style.display = 'inline-block';
-        resumeBtn.style.display = 'none';
-    }
+export function updateTrainerControls(state) {
+  if (state === 'ready') {
+      pauseBtn.textContent = 'INIZIA';
+      pauseBtn.style.display = 'inline-block';
+      resumeBtn.style.display = 'none';
+  } else if (state === 'active') {
+      pauseBtn.textContent = 'PAUSA';
+      pauseBtn.style.display = 'inline-block';
+      resumeBtn.style.display = 'none';
+  } else if (state === 'paused') {
+      pauseBtn.style.display = 'none';
+      resumeBtn.style.display = 'inline-block';
+  }
 }
