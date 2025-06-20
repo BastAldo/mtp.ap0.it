@@ -1,0 +1,33 @@
+# --- Ambiente Virtuale ---
+# Ignora la cartella dell'ambiente virtuale. È specifica della macchina locale.
+venv/
+.venv/
+
+# --- Cache e artefatti di Python ---
+# Ignora le cartelle della cache di bytecode generate da Python.
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# --- File di configurazione di IDE ed Editor ---
+# Ignora i file di configurazione specifici dell'ambiente di sviluppo.
+.vscode/
+.idea/
+*.swp
+*~
+
+# --- File di sistema operativo ---
+# Ignora i file di metadati generati dai sistemi operativi.
+.DS_Store
+Thumbs.db
+
+# --- File di dipendenze e build ---
+# Se in futuro userai tool per pacchettizzare il progetto.
+/build/
+/dist/
+*.egg-info/
+
+# --- File di ambiente ---
+# I file .env contengono spesso segreti e non dovrebbero mai essere committati.
+.env
