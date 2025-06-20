@@ -17,16 +17,12 @@ const pauseResumeBtn = document.getElementById('pause-resume-btn');
 const terminateBtn = document.getElementById('terminate-btn');
 const progressRingFg = document.getElementById('progress-ring-foreground');
 
-// --- Progress Ring Setup ---
-const ringRadius = progressRingFg.r.baseVal.value;
-const ringCircumference = 2 * Math.PI * ringRadius;
-progressRingFg.style.strokeDasharray = `${ringCircumference} ${ringCircumference}`;
-progressRingFg.style.strokeDashoffset = ringCircumference;
 
 export function updateProgressOnly(percentage) {
   if (isNaN(percentage)) return;
-  const offset = ringCircumference - (percentage / 100) * ringCircumference;
-  progressRingFg.style.strokeDashoffset = Math.max(0, offset);
+  // With pathLength=100, the offset is simply 100 - percentage.
+  const offset = 100 - percentage;
+  progressRingFg.style.strokeDashoffset = Math.max(0, Math.min(100, offset));
 }
 
 export function showView(viewName) {
@@ -35,13 +31,15 @@ export function showView(viewName) {
 }
 
 export function updateTrainerUI(state) {
-  const { exercise, currentSeries, currentRep, phase, totalDuration, currentState } = state;
+  const { exercise, currentSeries, currentRep, phase, totalDuration, currentState, prevState } = state;
 
   trainerExerciseTitle.textContent = exercise ? exercise.name : 'Workout';
   
   if (exercise) {
     let seriesText = `Serie ${currentSeries} / ${exercise.series}`;
-    if (exercise.type === 'reps' && (currentState === 'action' || (currentState === 'paused' && state.prevState?.currentState === 'action'))) {
+    // Show reps only during action state (or if paused during action)
+    const isAction = currentState === 'action' || (currentState === 'paused' && prevState?.currentState === 'action');
+    if (exercise.type === 'reps' && isAction) {
       seriesText += `  |  Rip. ${currentRep} / ${exercise.reps}`;
     }
     trainerSeriesCounter.textContent = seriesText;
@@ -62,7 +60,7 @@ export function updateTrainerUI(state) {
   pauseResumeBtn.style.display = inProgress ? 'block' : 'none';
   terminateBtn.style.display = inProgress ? 'block' : 'none';
   
-  const canPause = currentState === 'action' || currentState === 'rest_countdown' || currentState === 'announcing' || currentState === 'paused';
+  const canPause = currentState !== 'ready' && currentState !== 'paused' && currentState !== 'idle' && currentState !== 'finished';
   pauseResumeBtn.disabled = !canPause;
   pauseResumeBtn.textContent = currentState === 'paused' ? 'Riprendi' : 'Pausa';
 }

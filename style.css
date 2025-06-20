@@ -87,11 +87,25 @@ h1, h2 {
 #trainer-exercise-title { font-size: 2.5rem; text-align: center; }
 #trainer-series-counter { font-size: 1.5rem; color: var(--text-secondary); min-height: 1.5rem; }
 #trainer-main-display { width: 300px; height: 300px; margin: 1rem 0; position: relative; display: flex; justify-content: center; align-items: center; }
-#trainer-main-text { font-family: 'Teko', sans-serif; font-size: 6rem; line-height: 1; text-align: center; }
+#trainer-main-text {
+  font-family: 'Teko', sans-serif;
+  font-size: 5.5rem; /* Reduced from 6rem */
+  line-height: 1;
+  text-align: center;
+}
 #trainer-main-text small { font-size: 2.5rem; color: var(--text-secondary); }
 #trainer-progress-ring-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
 .progress-ring-bg { fill: transparent; stroke: var(--card-color); stroke-width: 8; }
-.progress-ring-fg { fill: transparent; stroke: var(--primary-color); stroke-width: 8; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke-dashoffset 0.5s linear; }
+.progress-ring-fg {
+  fill: transparent;
+  stroke: var(--primary-color);
+  stroke-width: 8;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  stroke-dasharray: 100; /* Set based on pathLength=100 */
+  stroke-dashoffset: 100; /* Start empty */
+}
 #trainer-controls { display: flex; gap: 1rem; }
 #trainer-controls .btn { width: 150px; }
 @keyframes flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
