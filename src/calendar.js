@@ -34,12 +34,15 @@ function formatWeekRange(start, end) {
 }
 
 export function renderCalendar(date = currentDate) {
-  const weekStart = new Date(date);
-  // Set to Monday of the current week
-  const dayOfWeek = date.getDay(); // Sunday = 0, Monday = 1
-  const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-  weekStart.setDate(diff);
-
+  // Create a local copy to avoid mutating the module-level state unintentionally
+  const dateForWeek = new Date(date);
+  
+  // Robustly calculate the Monday of the week for the given date
+  const dayOfWeek = dateForWeek.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  const offsetToMonday = (dayOfWeek === 0) ? 6 : dayOfWeek - 1; // Calculate how many days to go back
+  dateForWeek.setDate(dateForWeek.getDate() - offsetToMonday);
+  
+  const weekStart = new Date(dateForWeek);
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 6);
   
