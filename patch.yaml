@@ -1,12 +1,12 @@
-commit_message: "fix(trainer): Correct state machine logic to prevent extra loop at end of workout"
+commit_message: "debug(trainer): Add aggressive logging to diagnose final loop bug"
 rationale: |
-  Questo patch corregge un bug critico nella macchina a stati che causava l'esecuzione di un ciclo extra al termine di un allenamento.
+  Nonostante i tentativi precedenti, il bug del ciclo extra a fine allenamento persiste. Questo indica un errore sottile nella logica della macchina a stati che non è emerso durante l'analisi statica del codice.
 
-  1.  **Causa del Bug:** Il problema era un "closure bug" nella funzione `handleRest` in `trainer.js`. La logica che decideva se continuare con la serie/esercizio successivo veniva valutata al momento della definizione della funzione di callback, usando dati potenzialmente non aggiornati, invece che al momento della sua esecuzione (al termine del riposo).
+  1.  **Strategia di Debugging:** Invece di tentare un'altra correzione, questo patch introduce un logging diagnostico mirato. L'obiettivo non è risolvere, ma ottenere dati inequivocabili dall'ambiente in cui il bug si manifesta.
 
-  2.  **Soluzione:** La logica di avanzamento è stata completamente centralizzata all'interno della funzione di callback `onRestComplete`. Questa funzione ora ricalcola lo stato (ultima serie? ultimo esercizio?) nel momento esatto in cui viene eseguita, garantendo che la decisione sia basata sui dati più recenti.
+  2.  **Punti di Controllo:** Sono stati inseriti dei `console.log` all'inizio della funzione `handleRest` in `trainer.js`. Questi log stamperanno i valori critici (`currentSeries`, `exercise.series`, `currentExerciseIndex`, `workout.length`) e il risultato dei controlli booleani (`isLastSeries`, `isLastExercise`) nel momento esatto in cui la decisione di terminare o continuare viene presa.
 
-  3.  **Miglioramento Flusso:** È stata anche introdotta una modifica per cui, se l'utente completa l'ultima serie dell'ultimo esercizio, l'applicazione transita immediatamente allo stato `FINISHED` senza avviare un ultimo periodo di riposo non necessario, migliorando il flusso di fine allenamento.
+  3.  **Obiettivo Finale:** L'output di questi log permetterà di identificare con certezza la causa della discrepanza tra il comportamento atteso e quello effettivo, portando a una soluzione definitiva.
 patches:
   - file: src/trainer.js
     content: |
@@ -105,9 +105,20 @@ patches:
       }
 
       function handleRest() {
-        // First, check if the workout is absolutely over. If so, finish immediately.
+        // --- AGGRESSIVE DEBUGGING ---
+        console.log('%c--- ENTERING handleRest ---', 'color: red; font-weight: bold;');
+        console.log(`currentSeries: ${state.currentSeries}, exercise.series: ${state.exercise.series}`);
+        console.log(`currentExerciseIndex: ${state.currentExerciseIndex}, workout.length: ${state.workout.length}`);
+        
         const isLastSeries = state.currentSeries >= state.exercise.series;
         const isLastExercise = state.currentExerciseIndex >= state.workout.length - 1;
+
+        console.log(`isLastSeries CHECK: (${state.currentSeries} >= ${state.exercise.series}) -> ${isLastSeries}`);
+        console.log(`isLastExercise CHECK: (${state.currentExerciseIndex} >= ${state.workout.length - 1}) -> ${isLastExercise}`);
+        console.log(`FINAL CHECK (isLastSeries && isLastExercise) -> ${isLastSeries && isLastExercise}`);
+        console.log('%c---------------------------', 'color: red; font-weight: bold;');
+        // --- END DEBUGGING ---
+
         if (isLastSeries && isLastExercise) {
             setState(STATES.FINISHED);
             const result = { ...state, wasTerminated: false };
@@ -115,30 +126,24 @@ patches:
             return;
         }
 
-        // If not, define what to do AFTER the rest is complete.
         const onRestComplete = () => {
-            // Re-evaluate state at the moment the rest finishes.
             const wasLastSeries = state.currentSeries >= state.exercise.series;
-
             if (wasLastSeries) {
-                // End of series for this exercise, move to the next one.
                 state.currentExerciseIndex++;
                 state.currentSeries = 1;
                 startExercise();
             } else {
-                // More series of the same exercise to do.
                 state.currentSeries++;
                 startExercise();
             }
         };
         
-        // Start the rest period.
         transitionTo('Riposo', state.exercise.rest, () => runCountdown(state.exercise.rest, 'Riposo', onRestComplete));
       }
 
       function startExercise() {
         state.exercise = state.workout[state.currentExerciseIndex];
-        state.currentRep = 0; // Reset rep count for new exercise
+        state.currentRep = 0;
         transitionTo("Pronti?", 3, () => {
             runCountdown(3, 'VIA!', () => {
                 if (state.exercise.type === 'reps') {
@@ -164,11 +169,9 @@ patches:
 
       export function pauseOrResumeTrainer() {
         if (state.currentState === STATES.PAUSED) {
-            // RESUMING
             const ps = state.pausedState;
             runCountdown(ps.totalDuration, ps.phase, ps.onTimerComplete, ps.timeOffsetMs);
         } else {
-            // PAUSING
             clearTimers();
             const elapsed = (Date.now() - state.timerStartTime) + state.timeOffsetMs;
             const pausedContext = {
@@ -193,6 +196,10 @@ patches:
           setState(STATES.IDLE, { phase: '' });
       }
 commands:
-  - "echo 'Patch applicato. La logica di fine allenamento è stata riscritta per essere più robusta.'"
-  - "echo 'Per favore, prova di nuovo con la tua ''serie veloce'' di test.'"
-  - "echo 'L''allenamento ora dovrebbe terminare correttamente dopo l''ultima serie e mostrarti la schermata di debriefing, senza più eseguire cicli aggiuntivi.'"
+  - "echo 'Patch di DIAGNOSTICA applicato. Il problema non è risolto.'"
+  - "echo 'Per favore, esegui questi passi:'"
+  - "echo '1. Avvia il server locale (es. python3 -m http.server).'"
+  - "echo '2. Apri l''applicazione nel browser.'"
+  - "echo '3. Apri gli Strumenti per Sviluppatori (F12 o Cmd+Opt+I) e vai alla tab \"Console\".'"
+  - "echo '4. Esegui il tuo workout di test che causa il bug.'"
+  - "echo '5. Copia TUTTO il testo che appare nella console (specialmente le righe rosse) e forniscimelo.'"

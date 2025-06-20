@@ -93,9 +93,20 @@ function runTempoCycle() {
 }
 
 function handleRest() {
-  // First, check if the workout is absolutely over. If so, finish immediately.
+  // --- AGGRESSIVE DEBUGGING ---
+  console.log('%c--- ENTERING handleRest ---', 'color: red; font-weight: bold;');
+  console.log(`currentSeries: ${state.currentSeries}, exercise.series: ${state.exercise.series}`);
+  console.log(`currentExerciseIndex: ${state.currentExerciseIndex}, workout.length: ${state.workout.length}`);
+  
   const isLastSeries = state.currentSeries >= state.exercise.series;
   const isLastExercise = state.currentExerciseIndex >= state.workout.length - 1;
+
+  console.log(`isLastSeries CHECK: (${state.currentSeries} >= ${state.exercise.series}) -> ${isLastSeries}`);
+  console.log(`isLastExercise CHECK: (${state.currentExerciseIndex} >= ${state.workout.length - 1}) -> ${isLastExercise}`);
+  console.log(`FINAL CHECK (isLastSeries && isLastExercise) -> ${isLastSeries && isLastExercise}`);
+  console.log('%c---------------------------', 'color: red; font-weight: bold;');
+  // --- END DEBUGGING ---
+
   if (isLastSeries && isLastExercise) {
       setState(STATES.FINISHED);
       const result = { ...state, wasTerminated: false };
@@ -103,30 +114,24 @@ function handleRest() {
       return;
   }
 
-  // If not, define what to do AFTER the rest is complete.
   const onRestComplete = () => {
-      // Re-evaluate state at the moment the rest finishes.
       const wasLastSeries = state.currentSeries >= state.exercise.series;
-
       if (wasLastSeries) {
-          // End of series for this exercise, move to the next one.
           state.currentExerciseIndex++;
           state.currentSeries = 1;
           startExercise();
       } else {
-          // More series of the same exercise to do.
           state.currentSeries++;
           startExercise();
       }
   };
   
-  // Start the rest period.
   transitionTo('Riposo', state.exercise.rest, () => runCountdown(state.exercise.rest, 'Riposo', onRestComplete));
 }
 
 function startExercise() {
   state.exercise = state.workout[state.currentExerciseIndex];
-  state.currentRep = 0; // Reset rep count for new exercise
+  state.currentRep = 0;
   transitionTo("Pronti?", 3, () => {
       runCountdown(3, 'VIA!', () => {
           if (state.exercise.type === 'reps') {
@@ -152,11 +157,9 @@ export function confirmStart() {
 
 export function pauseOrResumeTrainer() {
   if (state.currentState === STATES.PAUSED) {
-      // RESUMING
       const ps = state.pausedState;
       runCountdown(ps.totalDuration, ps.phase, ps.onTimerComplete, ps.timeOffsetMs);
   } else {
-      // PAUSING
       clearTimers();
       const elapsed = (Date.now() - state.timerStartTime) + state.timeOffsetMs;
       const pausedContext = {
