@@ -93,13 +93,16 @@ function runTempoCycle() {
 
 function handleRest() {
   const isLastSeries = state.currentSeries >= state.exercise.series;
-  const isLastExercise = isLastSeries && state.currentExerciseIndex >= state.workout.length - 1;
-  if (isLastExercise) {
+  if (isLastSeries) {
+    const isLastExercise = state.currentExerciseIndex >= state.workout.length - 1;
+    if (isLastExercise) {
       setState(STATES.FINISHED);
       const result = { ...state, wasTerminated: false };
       showDebriefing(result);
       return;
+    }
   }
+  
   const onRestComplete = () => {
       if (state.currentSeries < state.exercise.series) {
           state.currentSeries++;
@@ -128,7 +131,7 @@ function startExercise() {
 
 export function startTrainer(exercises) {
   if (!exercises || exercises.length === 0) return;
-  const freshState = { workout: JSON.parse(JSON.stringify(exercises)), currentExerciseIndex: 0 };
+  const freshState = { workout: JSON.parse(JSON.stringify(exercises)), currentExerciseIndex: 0, currentSeries: 0, currentRep: 0 };
   state = { ...state, ...freshState };
   ui.showView('trainer');
   setState(STATES.READY, {phase: "Pronto?"});

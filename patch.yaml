@@ -1,12 +1,16 @@
-commit_message: "fix(debriefing): Add full details to report and relocate Gemini button"
+commit_message: "fix(trainer): Correct end-of-workout flow and implement UX feedback"
 rationale: |
-  Questo patch corregge due importanti punti sollevati dall'utente, migliorando la precisione del report di debriefing e l'usabilità del flusso di condivisione.
+  Questo patch corregge un bug critico nel flusso di fine allenamento e implementa una serie di importanti miglioramenti all'interfaccia e all'usabilità basati sul feedback dell'utente.
 
-  1.  **Report di Debriefing Dettagliato:** La logica in `debriefing.js` è stata completamente riscritta per essere più informativa. Ora il report testuale e il riepilogo visivo mostrano i dettagli completi di ogni esercizio (serie, ripetizioni, durata, tempo). Fondamentalmente, ora gestisce correttamente anche gli allenamenti interrotti, specificando l'esatta serie e ripetizione in cui l'utente si è fermato.
+  1.  **Correzione Flusso Finale:** È stato corretto un bug nella macchina a stati in `trainer.js` che impediva la corretta transizione allo stato `FINISHED` al termine dell'ultimo esercizio. L'applicazione ora naviga correttamente alla vista di Debriefing.
 
-  2.  **Spostamento Pulsante Gemini:** Il pulsante per aprire Gemini è stato rimosso dall'header globale e spostato nella vista di Debriefing. Questa nuova posizione è strategicamente migliore, in quanto si allinea al workflow dell'utente: completare l'allenamento, copiare il report e avere immediatamente a disposizione il link per incollarlo e discuterne con Gemini.
+  2.  **Miglioramento Testo Tempo:** La funzione `getExerciseDetails` in `ui.js` è stata aggiornata per mostrare etichette esplicite (`up`, `hold`, `down`) per i valori del tempo, come richiesto.
 
-  3.  **Miglioramento Strutturale:** Per supportare report più dettagliati, la comunicazione tra `trainer.js` e `debriefing.js` è stata migliorata, passando un oggetto di stato più ricco al termine del workout.
+  3.  **Aggiunta Descrizione Esercizio:** Il modello dati in `workouts.js` è stato esteso per includere una `description`. Questa viene ora visualizzata nella vista del trainer per fornire più contesto all'utente.
+
+  4.  **Correzione Etichetta Pulsante:** Il pulsante "Termina" ora ha la sua etichetta testuale, correggendo una svista precedente.
+
+  5.  **Miglioramento UX Modale:** Il pulsante "Aggiungi Tutti" è stato rimosso e sostituito con un più utile "Inizia Allenamento". Questo permette all'utente di avviare un workout direttamente dal modale, snellendo significativamente il flusso operativo.
 patches:
   - file: index.html
     content: |
@@ -51,6 +55,7 @@ patches:
                 <button id="pause-resume-btn" class="btn"></button>
                 <button id="terminate-btn" class="btn btn-danger"></button>
               </div>
+              <div id="trainer-full-description"></div>
             </div>
 
             <div id="debriefing-view" class="view">
@@ -77,7 +82,7 @@ patches:
               <h2 id="modal-date-title"></h2>
               <ul id="modal-exercise-list"></ul>
               <div class="modal-actions">
-                <button id="add-all-btn" class="btn btn-primary">Aggiungi Tutti</button>
+                <button id="start-from-modal-btn" class="btn btn-success">Inizia Allenamento</button>
                 <button id="add-exercise-btn" class="btn btn-secondary">
                   Aggiungi Esercizio
                 </button>
@@ -99,6 +104,168 @@ patches:
           <script type="module" src="src/main.js"></script>
         </body>
       </html>
+  - file: src/workouts.js
+    content: |
+      /**
+       * @file workouts.js
+       * Contains the master list of all available exercises in the application.
+       */
+
+      export const ALL_EXERCISES = [
+        {
+          id: 'pushup',
+          name: 'Push Up',
+          type: 'reps',
+          series: 3,
+          reps: 10,
+          rest: 60, // seconds
+          tempo: { up: 1, hold: 1, down: 2 }, // seconds
+          description: "Esercizio a corpo libero per pettorali, tricipiti e spalle. Mantenere il corpo in linea retta dalla testa ai talloni."
+        },
+        {
+          id: 'squat',
+          name: 'Squat a corpo libero',
+          type: 'reps',
+          series: 3,
+          reps: 12,
+          rest: 60,
+          tempo: { up: 1, hold: 0, down: 2 },
+          description: "Esercizio fondamentale per gambe e glutei. Scendere come per sedersi su una sedia, mantenendo la schiena dritta."
+        },
+        {
+          id: 'plank',
+          name: 'Plank',
+          type: 'time',
+          series: 3,
+          duration: 45, // seconds
+          rest: 45,
+          description: "Esercizio isometrico per il core. Mantenere una linea retta e contrarre gli addominali per tutta la durata."
+        },
+        {
+          id: 'burpees',
+          name: 'Burpees',
+          type: 'reps',
+          series: 4,
+          reps: 8,
+          rest: 90,
+          tempo: { up: 1, hold: 0, down: 1 },
+          description: "Esercizio total body ad alta intensità. Combina un push-up, uno squat e un salto verticale in un unico movimento fluido."
+        },
+        {
+          id: 'jumping_jacks',
+          name: 'Jumping Jacks',
+          type: 'time',
+          series: 2,
+          duration: 60,
+          rest: 30,
+          description: "Esercizio cardiovascolare classico per riscaldamento o per aumentare la frequenza cardiaca."
+        },
+        {
+          id: 'calf_raises',
+          name: 'Calf Raises',
+          type: 'reps',
+          series: 3,
+          reps: 15,
+          rest: 45,
+          tempo: { up: 1, hold: 1, down: 2 },
+          description: "Esercizio di isolamento per i polpacci. Sollevarsi sulla punta dei piedi, mantenere la contrazione e scendere lentamente."
+        }
+      ];
+  - file: src/ui.js
+    content: |
+      /**
+       * @file ui.js
+       * Responsible for all direct DOM manipulations and user feedback (visual/audio).
+       */
+
+      // --- Elements ---
+      const views = {
+        calendar: document.getElementById('calendar-view'),
+        trainer: document.getElementById('trainer-view'),
+        debriefing: document.getElementById('debriefing-view')
+      };
+      const trainerExerciseTitle = document.getElementById('trainer-exercise-title');
+      const trainerSeriesCounter = document.getElementById('trainer-series-counter');
+      const trainerMainText = document.getElementById('trainer-main-text');
+      const trainerMainDisplay = document.getElementById('trainer-main-display');
+      const trainerDescription = document.getElementById('trainer-description');
+      const trainerFullDescription = document.getElementById('trainer-full-description');
+      const startSessionBtn = document.getElementById('start-session-btn');
+      const pauseResumeBtn = document.getElementById('pause-resume-btn');
+      const terminateBtn = document.getElementById('terminate-btn');
+      const progressRingFg = document.getElementById('progress-ring-foreground');
+
+      export function updateProgressOnly(percentage) {
+        if (isNaN(percentage)) return;
+        const offset = 100 - percentage;
+        progressRingFg.style.strokeDashoffset = Math.max(0, Math.min(100, offset));
+      }
+
+      export function showView(viewName) {
+        Object.values(views).forEach(view => view.classList.remove('view--active'));
+        if (views[viewName]) views[viewName].classList.add('view--active');
+      }
+
+      function getExerciseDetails(exercise) {
+        if (!exercise) return '';
+        if (exercise.type === 'reps') {
+          const tempo = exercise.tempo;
+          return `${exercise.series} serie × ${exercise.reps} rip. | Tempo: up ${tempo.up}s - hold ${tempo.hold}s - down ${tempo.down}s`;
+        } else { // time
+          return `${exercise.series} serie × ${exercise.duration} secondi`;
+        }
+      }
+
+      export function updateTrainerUI(state) {
+        const { exercise, currentSeries, currentRep, phase, totalDuration, currentState, pausedState } = state;
+        const displayState = currentState === 'paused' ? pausedState : state;
+
+        trainerExerciseTitle.textContent = displayState.exercise ? displayState.exercise.name : 'Workout';
+        trainerDescription.textContent = getExerciseDetails(displayState.exercise);
+        trainerFullDescription.textContent = displayState.exercise ? displayState.exercise.description : '';
+        
+        if (displayState.exercise) {
+          let seriesText = `Serie ${displayState.currentSeries} / ${displayState.exercise.series}`;
+          const isAction = currentState === 'action' || (currentState === 'paused' && pausedState?.currentState === 'action');
+          if (displayState.exercise.type === 'reps' && isAction) {
+            seriesText += `  |  Rip. ${displayState.currentRep} / ${displayState.exercise.reps}`;
+          }
+          trainerSeriesCounter.textContent = seriesText;
+        } else {
+          trainerSeriesCounter.textContent = '';
+        }
+
+        if (currentState === 'paused') {
+            const interruptedPhase = pausedState?.phase || '';
+            trainerMainText.innerHTML = `PAUSA<br><small style="text-transform: capitalize;">${interruptedPhase.toLowerCase()}</small>`;
+        } else if (displayState.totalDuration > 0) {
+            trainerMainText.innerHTML = `${displayState.phase}<br><small>${displayState.totalDuration}s</small>`;
+        } else {
+            trainerMainText.textContent = displayState.phase;
+        }
+
+        if (currentState === 'announcing') {
+            trainerMainDisplay.classList.add('is-flashing');
+        } else {
+            trainerMainDisplay.classList.remove('is-flashing');
+        }
+        
+        startSessionBtn.style.display = currentState === 'ready' ? 'block' : 'none';
+        const inProgress = currentState !== 'ready' && currentState !== 'idle' && currentState !== 'finished';
+        pauseResumeBtn.style.display = inProgress ? 'block' : 'none';
+        terminateBtn.style.display = inProgress ? 'block' : 'none';
+        
+        const canBeInterrupted = currentState === 'action' || currentState === 'announcing' || currentState === 'paused';
+        pauseResumeBtn.disabled = !canBeInterrupted;
+        terminateBtn.textContent = 'Termina';
+        pauseResumeBtn.textContent = currentState === 'paused' ? 'Riprendi' : 'Pausa';
+      }
+
+      export function initTrainerControls(handlers) {
+          startSessionBtn.addEventListener('click', () => handlers.onConfirmStart());
+          pauseResumeBtn.addEventListener('click', () => handlers.onPauseResume());
+          terminateBtn.addEventListener('click', () => handlers.onTerminate());
+      }
   - file: src/trainer.js
     content: |
       /**
@@ -196,13 +363,16 @@ patches:
 
       function handleRest() {
         const isLastSeries = state.currentSeries >= state.exercise.series;
-        const isLastExercise = isLastSeries && state.currentExerciseIndex >= state.workout.length - 1;
-        if (isLastExercise) {
+        if (isLastSeries) {
+          const isLastExercise = state.currentExerciseIndex >= state.workout.length - 1;
+          if (isLastExercise) {
             setState(STATES.FINISHED);
             const result = { ...state, wasTerminated: false };
             showDebriefing(result);
             return;
+          }
         }
+        
         const onRestComplete = () => {
             if (state.currentSeries < state.exercise.series) {
                 state.currentSeries++;
@@ -231,7 +401,7 @@ patches:
 
       export function startTrainer(exercises) {
         if (!exercises || exercises.length === 0) return;
-        const freshState = { workout: JSON.parse(JSON.stringify(exercises)), currentExerciseIndex: 0 };
+        const freshState = { workout: JSON.parse(JSON.stringify(exercises)), currentExerciseIndex: 0, currentSeries: 0, currentRep: 0 };
         state = { ...state, ...freshState };
         ui.showView('trainer');
         setState(STATES.READY, {phase: "Pronto?"});
@@ -269,95 +439,126 @@ patches:
           showDebriefing(result);
           setState(STATES.IDLE, { phase: '' });
       }
-  - file: src/debriefing.js
+  - file: src/modal.js
     content: |
       /**
-       * @file debriefing.js
-       * Handles the display and logic of the post-workout debriefing screen.
+       * @file modal.js
+       * Handles all logic for the workout editor and exercise library modals.
        */
-      import { showView } from './ui.js';
+      import * as storage from './storage.js';
+      import { ALL_EXERCISES } from './workouts.js';
       import { renderCalendar } from './calendar.js';
+      import { startTrainer } from './trainer.js';
 
-      const summaryList = document.getElementById('debriefing-summary');
-      const reportTextArea = document.getElementById('debriefing-text-report');
-      const copyBtn = document.getElementById('copy-report-btn');
-      const returnBtn = document.getElementById('return-to-calendar-btn');
+      // DOM Elements
+      const dayModal = document.getElementById('day-modal');
+      const libraryModal = document.getElementById('library-modal');
+      const modalDateTitle = document.getElementById('modal-date-title');
+      const modalExerciseList = document.getElementById('modal-exercise-list');
+      const libraryExerciseList = document.getElementById('library-exercise-list');
+      const addExerciseBtn = document.getElementById('add-exercise-btn');
+      const startFromModalBtn = document.getElementById('start-from-modal-btn');
+      const closeDayModalBtn = document.getElementById('close-day-modal-btn');
+      const closeLibraryModalBtn = document.getElementById('close-library-modal-btn');
 
-      function getExerciseDetails(exercise) {
-        if (!exercise) return '';
-        if (exercise.type === 'reps') {
-          return `(${exercise.series} × ${exercise.reps} rip., Tempo: ${exercise.tempo.up}-${exercise.tempo.hold}-${exercise.tempo.down})`;
+      // State
+      let currentEditingDateKey = null;
+
+      function renderDayExercises() {
+        modalExerciseList.innerHTML = '';
+        const exercises = storage.getWorkoutsForDate(currentEditingDateKey);
+        
+        startFromModalBtn.disabled = exercises.length === 0;
+
+        if (exercises.length === 0) {
+          modalExerciseList.innerHTML = `<li class="empty-list-item">Aggiungi un esercizio per iniziare.</li>`;
+          return;
         }
-        return `(${exercise.series} × ${exercise.duration}s)`;
+
+        exercises.forEach((exercise, index) => {
+          const li = document.createElement('li');
+          li.className = 'modal-list-item';
+          li.innerHTML = `
+            <span>${exercise.name}</span>
+            <button class="btn btn-danger remove-exercise-btn" data-index="${index}">Rimuovi</button>
+          `;
+          modalExerciseList.appendChild(li);
+        });
       }
 
-      function generateTextReport(result) {
-          let report = `Report Allenamento del ${new Date().toLocaleDateString('it-IT')}:\n`;
-          if (result.wasTerminated) {
-              report += "(Allenamento interrotto manualmente)\n\n";
-          } else {
-              report += "(Allenamento completato)\n\n";
+      function renderLibrary() {
+        libraryExerciseList.innerHTML = '';
+        ALL_EXERCISES.forEach(exercise => {
+          const li = document.createElement('li');
+          li.className = 'modal-list-item';
+          li.innerHTML = `
+            <span>${exercise.name}</span>
+            <button class="btn btn-success add-from-library-btn" data-id="${exercise.id}">Aggiungi</button>
+          `;
+          libraryExerciseList.appendChild(li);
+        });
+      }
+
+      export function openDayModal(dateKey) {
+        currentEditingDateKey = dateKey;
+        const date = new Date(dateKey + 'T00:00:00');
+        modalDateTitle.textContent = `Allenamento per ${date.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}`;
+        renderDayExercises();
+        dayModal.style.display = 'flex';
+      }
+
+      function closeDayModal() {
+        dayModal.style.display = 'none';
+        renderCalendar();
+      }
+
+      function openLibraryModal() {
+        renderLibrary();
+        libraryModal.style.display = 'flex';
+      }
+
+      function closeLibraryModal() {
+        libraryModal.style.display = 'none';
+      }
+
+      export function initModals() {
+        closeDayModalBtn.addEventListener('click', closeDayModal);
+        closeLibraryModalBtn.addEventListener('click', closeLibraryModal);
+        addExerciseBtn.addEventListener('click', openLibraryModal);
+
+        startFromModalBtn.addEventListener('click', () => {
+            const exercises = storage.getWorkoutsForDate(currentEditingDateKey);
+            if(exercises.length > 0) {
+                closeDayModal();
+                startTrainer(exercises);
+            }
+        });
+
+        modalExerciseList.addEventListener('click', (event) => {
+          if (event.target.matches('.remove-exercise-btn')) {
+            const indexToRemove = parseInt(event.target.dataset.index, 10);
+            const exercises = storage.getWorkoutsForDate(currentEditingDateKey);
+            exercises.splice(indexToRemove, 1);
+            storage.saveWorkoutsForDate(currentEditingDateKey, exercises);
+            renderDayExercises();
           }
+        });
 
-          result.workout.forEach((exercise, index) => {
-              if (index > result.currentExerciseIndex) return;
-
-              const details = getExerciseDetails(exercise);
-              report += `* ${exercise.name} ${details}:\n`;
-
-              if (index < result.currentExerciseIndex) {
-                  report += `  - Completato (${exercise.series} / ${exercise.series} serie)\n`;
-              } else {
-                  const seriesText = `  - Arrivato a ${result.currentSeries} / ${exercise.series} serie`;
-                  const repText = exercise.type === 'reps' && result.currentRep > 0 ? `, ${result.currentRep} rip.` : '';
-                  report += `${seriesText}${repText}\n`;
+        libraryExerciseList.addEventListener('click', (event) => {
+          if (event.target.matches('.add-from-library-btn')) {
+            const exerciseId = event.target.dataset.id;
+            const exerciseToAdd = ALL_EXERCISES.find(ex => ex.id === exerciseId);
+            if (exerciseToAdd) {
+              const currentExercises = storage.getWorkoutsForDate(currentEditingDateKey);
+              if (!currentExercises.some(ex => ex.id === exerciseId)) {
+                currentExercises.push(exerciseToAdd);
+                storage.saveWorkoutsForDate(currentEditingDateKey, currentExercises);
               }
-          });
-
-          return report;
-      }
-
-      export function showDebriefing(result) {
-          summaryList.innerHTML = '';
-          result.workout.forEach((exercise, index) => {
-              if (index > result.currentExerciseIndex) return;
-              
-              const li = document.createElement('li');
-              li.className = 'modal-list-item';
-              const details = getExerciseDetails(exercise);
-
-              let status = '';
-              if (index < result.currentExerciseIndex) {
-                  status = `${exercise.series} / ${exercise.series} serie`;
-              } else {
-                  status = `Serie ${result.currentSeries}, Rip. ${result.currentRep}`;
-              }
-
-              li.innerHTML = `
-                <span class="debrief-exercise-name">${exercise.name} <small>${details}</small></span>
-                <span class="debrief-status">${status}</span>
-              `;
-              summaryList.appendChild(li);
-          });
-
-          reportTextArea.value = generateTextReport(result);
-          showView('debriefing');
-      }
-
-      export function initDebriefing() {
-          returnBtn.addEventListener('click', () => {
-              showView('calendar');
-              renderCalendar();
-          });
-
-          copyBtn.addEventListener('click', () => {
-              if (navigator.clipboard) {
-                  navigator.clipboard.writeText(reportTextArea.value).then(() => {
-                      copyBtn.textContent = 'Copiato!';
-                      setTimeout(() => (copyBtn.textContent = 'Copia Report'), 2000);
-                  });
-              }
-          });
+            }
+            renderDayExercises();
+            closeLibraryModal();
+          }
+        });
       }
   - file: style.css
     content: |
@@ -404,11 +605,12 @@ patches:
       .modal-list-item .btn { width: auto; max-width: 120px; margin-top: 0; }
       .empty-list-item { color: var(--text-secondary); text-align: center; padding: 2rem; }
       .modal-actions { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem; }
-      .modal-actions .btn { width: auto; margin-top: 0; }
+      .modal-actions .btn { width: auto; margin-top: 0; flex-shrink: 0; }
       #trainer-view, #debriefing-view { gap: 1rem; }
       #trainer-exercise-title { font-size: 2.5rem; text-align: center; }
       #trainer-series-counter { font-size: 1.5rem; color: var(--text-secondary); min-height: 1.5rem; }
       #trainer-description { color: var(--text-secondary); text-align: center; padding: 0 1rem; }
+      #trainer-full-description { font-size: 0.9rem; max-width: 400px; text-align: center; color: var(--text-secondary); margin-top: 1rem; }
       #trainer-main-display { width: 300px; height: 300px; margin: 1rem 0; position: relative; display: flex; justify-content: center; align-items: center; }
       #trainer-main-text { font-family: 'Teko', sans-serif; font-size: 5.5rem; line-height: 1; text-align: center; }
       #trainer-main-text small { font-size: 2.5rem; color: var(--text-secondary); }
@@ -418,11 +620,11 @@ patches:
       #trainer-controls { display: flex; gap: 1rem; }
       #trainer-controls .btn { width: 150px; }
       #debriefing-summary { list-style: none; padding: 0; width: 100%; max-width: 500px; background-color: var(--card-color); border-radius: 8px; }
-      .debrief-exercise-name small { color: var(--text-secondary); }
+      .debrief-exercise-name small { color: var(--text-secondary); display: block; font-size: 0.8rem; }
       #debriefing-report-container { width: 100%; max-width: 500px; }
       #debriefing-report-container textarea { width: 100%; min-height: 150px; background-color: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.5rem; font-family: monospace; }
       .debriefing-actions { display: flex; gap: 1rem; width: 100%; max-width: 500px; }
-      .debriefing-actions .btn { flex-grow: 1; }
+      .debriefing-actions .btn { flex-grow: 1; margin-top: 0; }
       @keyframes flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
       .is-flashing { animation: flash 0.75s infinite; }
       @media (max-width: 768px) {

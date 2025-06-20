@@ -14,6 +14,7 @@ const trainerSeriesCounter = document.getElementById('trainer-series-counter');
 const trainerMainText = document.getElementById('trainer-main-text');
 const trainerMainDisplay = document.getElementById('trainer-main-display');
 const trainerDescription = document.getElementById('trainer-description');
+const trainerFullDescription = document.getElementById('trainer-full-description');
 const startSessionBtn = document.getElementById('start-session-btn');
 const pauseResumeBtn = document.getElementById('pause-resume-btn');
 const terminateBtn = document.getElementById('terminate-btn');
@@ -34,7 +35,7 @@ function getExerciseDetails(exercise) {
   if (!exercise) return '';
   if (exercise.type === 'reps') {
     const tempo = exercise.tempo;
-    return `${exercise.series} serie × ${exercise.reps} rip. | Tempo: ${tempo.up}s-${tempo.hold}s-${tempo.down}s`;
+    return `${exercise.series} serie × ${exercise.reps} rip. | Tempo: up ${tempo.up}s - hold ${tempo.hold}s - down ${tempo.down}s`;
   } else { // time
     return `${exercise.series} serie × ${exercise.duration} secondi`;
   }
@@ -46,6 +47,7 @@ export function updateTrainerUI(state) {
 
   trainerExerciseTitle.textContent = displayState.exercise ? displayState.exercise.name : 'Workout';
   trainerDescription.textContent = getExerciseDetails(displayState.exercise);
+  trainerFullDescription.textContent = displayState.exercise ? displayState.exercise.description : '';
   
   if (displayState.exercise) {
     let seriesText = `Serie ${displayState.currentSeries} / ${displayState.exercise.series}`;
@@ -80,6 +82,7 @@ export function updateTrainerUI(state) {
   
   const canBeInterrupted = currentState === 'action' || currentState === 'announcing' || currentState === 'paused';
   pauseResumeBtn.disabled = !canBeInterrupted;
+  terminateBtn.textContent = 'Termina';
   pauseResumeBtn.textContent = currentState === 'paused' ? 'Riprendi' : 'Pausa';
 }
 

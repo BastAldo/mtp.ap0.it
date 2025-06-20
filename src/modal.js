@@ -5,6 +5,7 @@
 import * as storage from './storage.js';
 import { ALL_EXERCISES } from './workouts.js';
 import { renderCalendar } from './calendar.js';
+import { startTrainer } from './trainer.js';
 
 // DOM Elements
 const dayModal = document.getElementById('day-modal');
@@ -13,7 +14,7 @@ const modalDateTitle = document.getElementById('modal-date-title');
 const modalExerciseList = document.getElementById('modal-exercise-list');
 const libraryExerciseList = document.getElementById('library-exercise-list');
 const addExerciseBtn = document.getElementById('add-exercise-btn');
-const addAllBtn = document.getElementById('add-all-btn');
+const startFromModalBtn = document.getElementById('start-from-modal-btn');
 const closeDayModalBtn = document.getElementById('close-day-modal-btn');
 const closeLibraryModalBtn = document.getElementById('close-library-modal-btn');
 
@@ -23,6 +24,9 @@ let currentEditingDateKey = null;
 function renderDayExercises() {
   modalExerciseList.innerHTML = '';
   const exercises = storage.getWorkoutsForDate(currentEditingDateKey);
+  
+  startFromModalBtn.disabled = exercises.length === 0;
+
   if (exercises.length === 0) {
     modalExerciseList.innerHTML = `<li class="empty-list-item">Aggiungi un esercizio per iniziare.</li>`;
     return;
@@ -54,7 +58,7 @@ function renderLibrary() {
 
 export function openDayModal(dateKey) {
   currentEditingDateKey = dateKey;
-  const date = new Date(dateKey + 'T00:00:00'); // Ensure correct date object
+  const date = new Date(dateKey + 'T00:00:00');
   modalDateTitle.textContent = `Allenamento per ${date.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}`;
   renderDayExercises();
   dayModal.style.display = 'flex';
@@ -79,9 +83,12 @@ export function initModals() {
   closeLibraryModalBtn.addEventListener('click', closeLibraryModal);
   addExerciseBtn.addEventListener('click', openLibraryModal);
 
-  addAllBtn.addEventListener('click', () => {
-    storage.saveWorkoutsForDate(currentEditingDateKey, ALL_EXERCISES);
-    renderDayExercises();
+  startFromModalBtn.addEventListener('click', () => {
+      const exercises = storage.getWorkoutsForDate(currentEditingDateKey);
+      if(exercises.length > 0) {
+          closeDayModal();
+          startTrainer(exercises);
+      }
   });
 
   modalExerciseList.addEventListener('click', (event) => {
@@ -100,7 +107,6 @@ export function initModals() {
       const exerciseToAdd = ALL_EXERCISES.find(ex => ex.id === exerciseId);
       if (exerciseToAdd) {
         const currentExercises = storage.getWorkoutsForDate(currentEditingDateKey);
-        // Avoid duplicates
         if (!currentExercises.some(ex => ex.id === exerciseId)) {
           currentExercises.push(exerciseToAdd);
           storage.saveWorkoutsForDate(currentEditingDateKey, currentExercises);
