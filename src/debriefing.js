@@ -15,7 +15,10 @@ function getExerciseDetails(exercise) {
   if (exercise.type === 'reps') {
     return `(${exercise.series} × ${exercise.reps} rip., Tempo: ${exercise.tempo.up}-${exercise.tempo.hold}-${exercise.tempo.down})`;
   }
-  return `(${exercise.series} × ${exercise.duration}s)`;
+  if (exercise.type === 'time') {
+    return `(${exercise.series} × ${exercise.duration}s)`;
+  }
+  return `(${exercise.duration}s)`;
 }
 
 function generateTextReport(result) {
@@ -28,16 +31,20 @@ function generateTextReport(result) {
 
     result.workout.forEach((exercise, index) => {
         if (index > result.currentExerciseIndex) return;
-
+        
         const details = getExerciseDetails(exercise);
         report += `* ${exercise.name} ${details}:\n`;
 
         if (index < result.currentExerciseIndex) {
-            report += `  - Completato (${exercise.series} / ${exercise.series} serie)\n`;
+            report += `  - Completato\n`;
         } else {
-            const seriesText = `  - Arrivato a ${result.currentSeries} / ${exercise.series} serie`;
-            const repText = exercise.type === 'reps' && result.currentRep > 0 ? `, ${result.currentRep} rip.` : '';
-            report += `${seriesText}${repText}\n`;
+            if (exercise.type === 'rest') {
+                report += `  - Eseguito\n`;
+            } else {
+                const seriesText = `  - Arrivato a ${result.currentSeries} / ${exercise.series} serie`;
+                const repText = exercise.type === 'reps' && result.currentRep > 0 ? `, ${result.currentRep} rip.` : '';
+                report += `${seriesText}${repText}\n`;
+            }
         }
     });
 
@@ -47,22 +54,16 @@ function generateTextReport(result) {
 export function showDebriefing(result) {
     summaryList.innerHTML = '';
     result.workout.forEach((exercise, index) => {
-        if (index > result.currentExerciseIndex) return;
+        if (index > result.currentExerciseIndex && result.wasTerminated) return;
         
         const li = document.createElement('li');
         li.className = 'modal-list-item';
         const details = getExerciseDetails(exercise);
-
-        let status = '';
-        if (index < result.currentExerciseIndex) {
-            status = `${exercise.series} / ${exercise.series} serie`;
-        } else {
-            status = `Serie ${result.currentSeries}, Rip. ${result.currentRep}`;
-        }
+        const name = exercise.type === 'rest' ? `Recupero` : exercise.name;
 
         li.innerHTML = `
-          <span class="debrief-exercise-name">${exercise.name} <small>${details}</small></span>
-          <span class="debrief-status">${status}</span>
+          <span class="debrief-exercise-name">${name} <small>${details}</small></span>
+          <span class="debrief-status">Completato</span>
         `;
         summaryList.appendChild(li);
     });

@@ -14,11 +14,11 @@ const modalDateTitle = document.getElementById('modal-date-title');
 const modalExerciseList = document.getElementById('modal-exercise-list');
 const libraryExerciseList = document.getElementById('library-exercise-list');
 const addExerciseBtn = document.getElementById('add-exercise-btn');
+const addRestBtn = document.getElementById('add-rest-btn');
 const startFromModalBtn = document.getElementById('start-from-modal-btn');
 const closeDayModalBtn = document.getElementById('close-day-modal-btn');
 const closeLibraryModalBtn = document.getElementById('close-library-modal-btn');
 
-// State
 let currentEditingDateKey = null;
 
 function renderDayExercises() {
@@ -28,15 +28,16 @@ function renderDayExercises() {
   startFromModalBtn.disabled = exercises.length === 0;
 
   if (exercises.length === 0) {
-    modalExerciseList.innerHTML = `<li class="empty-list-item">Aggiungi un esercizio per iniziare.</li>`;
+    modalExerciseList.innerHTML = `<li class="empty-list-item">Aggiungi un esercizio o un recupero.</li>`;
     return;
   }
 
   exercises.forEach((exercise, index) => {
     const li = document.createElement('li');
     li.className = 'modal-list-item';
+    const name = exercise.type === 'rest' ? `Recupero ${exercise.duration}s` : exercise.name;
     li.innerHTML = `
-      <span>${exercise.name}</span>
+      <span>${name}</span>
       <button class="btn btn-danger remove-exercise-btn" data-index="${index}">Rimuovi</button>
     `;
     modalExerciseList.appendChild(li);
@@ -83,6 +84,16 @@ export function initModals() {
   closeLibraryModalBtn.addEventListener('click', closeLibraryModal);
   addExerciseBtn.addEventListener('click', openLibraryModal);
 
+  addRestBtn.addEventListener('click', () => {
+    const duration = parseInt(prompt("Inserisci la durata del recupero in secondi:", "60"), 10);
+    if (duration && !isNaN(duration)) {
+      const currentExercises = storage.getWorkoutsForDate(currentEditingDateKey);
+      currentExercises.push({ id: `rest_${Date.now()}`, type: 'rest', name: 'Recupero', duration: duration });
+      storage.saveWorkoutsForDate(currentEditingDateKey, currentExercises);
+      renderDayExercises();
+    }
+  });
+
   startFromModalBtn.addEventListener('click', () => {
       const exercises = storage.getWorkoutsForDate(currentEditingDateKey);
       if(exercises.length > 0) {
@@ -107,10 +118,8 @@ export function initModals() {
       const exerciseToAdd = ALL_EXERCISES.find(ex => ex.id === exerciseId);
       if (exerciseToAdd) {
         const currentExercises = storage.getWorkoutsForDate(currentEditingDateKey);
-        if (!currentExercises.some(ex => ex.id === exerciseId)) {
-          currentExercises.push(exerciseToAdd);
-          storage.saveWorkoutsForDate(currentEditingDateKey, currentExercises);
-        }
+        currentExercises.push(exerciseToAdd);
+        storage.saveWorkoutsForDate(currentEditingDateKey, currentExercises);
       }
       renderDayExercises();
       closeLibraryModal();
