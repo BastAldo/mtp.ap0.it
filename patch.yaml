@@ -1,129 +1,176 @@
-commit_message: "feat: Implement calendar rendering and navigation module"
+commit_message: "fix(css): Implement CSS grid for calendar and apply core design system"
 rationale: |
-  Questo patch risolve il problema della "pagina bianca" implementando la logica di rendering del calendario.
+  Questo patch risolve il problema di layout per cui le celle del calendario erano impilate verticalmente.
 
-  1.  **Separazione delle Responsabilità:** Viene creato un nuovo modulo, `src/calendar.js`, che ha la responsabilità esclusiva di gestire lo stato, il rendering e l'interazione della vista calendario. Questo è un passo cruciale per smantellare il monolite.
+  1.  **Correzione Layout Calendario:** La causa del problema era l'assenza di stili CSS per l'elemento `#calendar-grid`. Come da specifiche di design, è stato applicato `display: grid` con `grid-template-columns: repeat(7, 1fr)` per creare la corretta griglia settimanale. È stata aggiunta anche la proprietà `gap` per spaziare adeguatamente le celle.
 
-  2.  **Orchestrazione:** Il file `src/main.js` assume il suo vero ruolo di orchestratore. Invece di contenere la logica, importa e inizializza il modulo del calendario (`calendar.initCalendar()`), delegando completamente il compito.
+  2.  **Implementazione Design System:** Oltre alla correzione, questo patch introduce l'intero sistema di stili di base definito in `design_and_visual.md`. Include le variabili di colore CSS globali, gli stili per i bottoni (`.btn`), per le card (`.day-cell`) e per il layout generale (`#app-container`). Questo allinea l'aspetto visivo dell'applicazione alle specifiche di design.
 
-  3.  **Logica di Rendering:** Il modulo `calendar.js` contiene la logica per calcolare i giorni della settimana, creare dinamicamente le celle del giorno (`day-cell`), e popolarle con i dati corretti (giorno, numero, riepilogo esercizi).
-
-  4.  **Integrazione con lo Storage:** Il modulo `calendar.js` comunica con il modulo `storage.js` (creato nel passo precedente) per recuperare il numero di esercizi per ogni giorno, decidendo se abilitare o meno il pulsante "START".
-
-  5.  **Interattività:** La navigazione tra la settimana precedente e quella successiva è ora gestita interamente all'interno del modulo `calendar.js`, mantenendo il suo stato (`currentDate`) isolato dal resto dell'applicazione.
+  3.  **Responsività:** È stata aggiunta una media query per schermi con larghezza inferiore a 768px. Su questi dispositivi, la griglia del calendario passerà a una singola colonna (`grid-template-columns: 1fr`), migliorando l'usabilità su mobile. Questa è una best practice fondamentale.
 patches:
-  - file: src/main.js
+  - file: style.css
     content: |
-      /**
-       * @file main.js
-       * The main entry point for the application.
-       * Orchestrates all other modules.
-       */
-      import * as storage from './storage.js';
-      import { initCalendar } from './calendar.js';
-
-      /**
-       * The main function to initialize the application.
-       */
-      function main() {
-        console.log('Application Initialized.');
-        console.log('Fetching all workouts from storage:', storage.getWorkouts());
-
-        // Initialize all primary components
-        initCalendar();
+      :root {
+        --bg-color: #1a1a1d;
+        --card-color: #2c2c34;
+        --primary-color: #9575cd;
+        --secondary-color: #4db6ac;
+        --text-color: #f4f4f9;
+        --text-secondary: #b3b3b3;
+        --danger-color: #ef5350;
+        --success-color: #66bb6a;
+        --border-color: #4a4a52;
       }
 
-      // Initialize the app once the DOM is fully loaded.
-      document.addEventListener('DOMContentLoaded', main);
-  - file: src/calendar.js
-    content: |
-      /**
-       * @file calendar.js
-       * Manages the state, rendering, and interactions of the calendar view.
-       */
-      import * as storage from './storage.js';
-
-      // DOM Elements
-      const calendarGrid = document.getElementById('calendar-grid');
-      const currentMonthYear = document.getElementById('current-month-year');
-      const prevWeekBtn = document.getElementById('prev-week-btn');
-      const nextWeekBtn = document.getElementById('next-week-btn');
-
-      // State
-      let currentDate = new Date();
-
-      /**
-       * Formats a Date object into a 'YYYY-MM-DD' string.
-       * @param {Date} date The date to format.
-       * @returns {string} The formatted date string.
-       */
-      function formatDateKey(date) {
-        return date.toISOString().split('T')[0];
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
       }
 
-      /**
-       * Renders the calendar for the week of the given date.
-       * @param {Date} date A date within the week to be rendered.
-       */
-      function renderCalendar(date) {
-        calendarGrid.innerHTML = '';
-        const weekStart = new Date(date);
-        weekStart.setDate(date.getDate() - date.getDay()); // Start of the week (Sunday)
+      body {
+        font-family: "Roboto Condensed", sans-serif;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        min-height: 100vh;
+        padding: 2rem;
+      }
 
-        const monthNames = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
-        currentMonthYear.textContent = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
+      #app-container {
+        width: 100%;
+        max-width: 1200px;
+      }
 
-        for (let i = 0; i < 7; i++) {
-          const day = new Date(weekStart);
-          day.setDate(weekStart.getDate() + i);
+      h1, h2 {
+        font-family: "Teko", sans-serif;
+        font-weight: 600;
+        color: var(--primary-color);
+        text-align: center;
+        margin-bottom: 1.5rem;
+      }
 
-          const dayCell = document.createElement('div');
-          dayCell.className = 'day-cell';
-          const dateKey = formatDateKey(day);
-          dayCell.dataset.date = dateKey;
+      .view {
+        display: none;
+      }
 
-          const dayName = day.toLocaleDateString('it-IT', { weekday: 'long' });
-          const dayNumber = day.getDate();
+      .view--active {
+        display: block;
+      }
 
-          const exercises = storage.getWorkoutsForDate(dateKey);
-          const exerciseCount = exercises.length;
+      /* Calendar Styles */
+      #calendar-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+      }
 
-          let summaryText = 'Nessun esercizio';
-          if (exerciseCount > 0) {
-            summaryText = `${exerciseCount} ${exerciseCount > 1 ? 'esercizi' : 'esercizio'}`;
-          }
+      #calendar-header h1 {
+        margin: 0;
+      }
 
-          dayCell.innerHTML = `
-            <div class="day-name">${dayName}</div>
-            <div class="day-number">${dayNumber}</div>
-            <div class="day-summary">${summaryText}</div>
-            <button class="btn btn-secondary start-workout-btn" ${exerciseCount === 0 ? 'disabled' : ''}>START</button>
-          `;
+      #calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 1rem;
+      }
 
-          calendarGrid.appendChild(dayCell);
+      .day-cell {
+        background-color: var(--card-color);
+        border-radius: 8px;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        border-left: 4px solid transparent;
+        transition: transform 0.2s ease-out, border-color 0.2s ease-out;
+      }
+
+      .day-cell:hover {
+        transform: translateY(-4px);
+        border-left-color: var(--primary-color);
+      }
+
+      .day-name {
+        font-weight: bold;
+        text-transform: capitalize;
+        font-size: 1.1rem;
+        color: var(--text-secondary);
+      }
+
+      .day-number {
+        font-family: "Teko", sans-serif;
+        font-size: 3rem;
+        font-weight: 700;
+        text-align: center;
+        margin: 0.5rem 0;
+      }
+
+      .day-summary {
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+        min-height: 2.5em; /* Ensures consistent alignment */
+        text-align: center;
+      }
+
+      /* Button Styles */
+      .btn {
+        background-color: var(--card-color);
+        color: var(--text-color);
+        border: 1px solid var(--border-color);
+        padding: 0.75rem 1.5rem;
+        border-radius: 6px;
+        font-family: "Roboto Condensed", sans-serif;
+        font-weight: bold;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: background-color 0.2s, transform 0.2s;
+        display: block;
+        width: 100%;
+        text-align: center;
+        margin-top: 1rem;
+      }
+
+      .btn:hover {
+        transform: scale(1.02);
+      }
+
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        background-color: var(--card-color);
+      }
+
+      .btn.btn-secondary {
+        background-color: var(--secondary-color);
+        border-color: var(--secondary-color);
+        color: var(--bg-color);
+      }
+
+      .btn.btn-secondary:disabled {
+        background-color: var(--secondary-color);
+        border-color: var(--secondary-color);
+        color: var(--bg-color);
+        opacity: 0.4;
+      }
+
+      /* Responsive Design */
+      @media (max-width: 768px) {
+        body {
+          padding: 1rem;
+        }
+        #calendar-grid {
+          grid-template-columns: 1fr;
+          gap: 0.5rem;
+        }
+        #calendar-header {
+            margin-bottom: 1rem;
         }
       }
-
-      /**
-       * Initializes the calendar, sets up event listeners, and performs the initial render.
-       */
-      export function initCalendar() {
-        prevWeekBtn.addEventListener('click', () => {
-          currentDate.setDate(currentDate.getDate() - 7);
-          renderCalendar(currentDate);
-        });
-
-        nextWeekBtn.addEventListener('click', () => {
-          currentDate.setDate(currentDate.getDate() + 7);
-          renderCalendar(currentDate);
-        });
-
-        renderCalendar(currentDate);
-        console.log('Calendar module initialized.');
-      }
 commands:
-  - "echo 'Patch applicato. Il modulo del calendario è stato creato e integrato.'"
-  - "echo 'Dovresti ora vedere il calendario settimanale renderizzato nella pagina.'"
-  - "echo 'IMPORTANTE: Avvia sempre l''applicazione tramite un server locale.'"
-  - "echo 'Comando suggerito: python3 -m http.server'"
-  - "echo 'Apri http://localhost:8000 nel browser e verifica il risultato.'"
+  - "echo 'Patch CSS applicato.'"
+  - "echo 'Ricarica la pagina nel browser. Potrebbe essere necessario un \"Hard Refresh\" (Cmd+Shift+R su Mac, Ctrl+Shift+R su Windows) per pulire la cache dello stylesheet.'"
+  - "echo 'Dovresti ora vedere il calendario disposto correttamente in una griglia 7x1.'"
