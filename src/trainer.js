@@ -23,9 +23,6 @@ let state = {
   phase: '',
   totalDuration: 0,
   animationFrameId: null,
-  timerStartTime: 0,
-  timeOffsetMs: 0,
-  onTimerComplete: null,
 };
 
 function clearTimers() {
@@ -37,38 +34,34 @@ function setState(newState, payload = {}) {
   clearTimers();
   state = { ...state, ...payload, currentState: newState };
   ui.updateTrainerUI(state);
-
-  if (newState === STATES.ANNOUNCING) {
-      ui.playTick();
-      setTimeout(() => {
-          if (state.onTimerComplete) state.onTimerComplete();
-      }, 750);
-  }
 }
 
-function transitionTo(phaseText, onCompleteAction, duration = 0) {
-  state.phase = phaseText;
-  state.totalDuration = duration;
-  state.onTimerComplete = onCompleteAction;
-  setState(STATES.ANNOUNCING);
+function transitionTo(phaseText, duration, onCompleteAction) {
+  setState(STATES.ANNOUNCING, { phase: phaseText });
+  setTimeout(() => {
+    if (onCompleteAction) onCompleteAction();
+  }, 750);
 }
 
-function runCountdown(duration, onComplete) {
-    state.timerStartTime = Date.now();
-    state.timeOffsetMs = 0; // Countdown always starts fresh
+function runCountdown(duration, phaseText, onComplete) {
+    state.totalDuration = duration;
+    state.phase = phaseText;
+    const startTime = Date.now();
 
     const tick = () => {
-        const elapsedMs = Date.now() - state.timerStartTime;
+        const elapsedMs = Date.now() - startTime;
         const progress = Math.min(100, (elapsedMs / (duration * 1000)) * 100);
         ui.updateProgressOnly(progress);
 
         if (elapsedMs >= duration * 1000) {
+            ui.playTick();
             clearTimers();
             if (onComplete) onComplete();
         } else {
             state.animationFrameId = requestAnimationFrame(tick);
         }
     };
+    
     tick();
     ui.updateTrainerUI(state);
 }
@@ -77,7 +70,7 @@ function runTempoCycle() {
     const tempo = state.exercise.tempo;
     const executePhase = (phaseName, duration, nextPhase) => {
         if (duration > 0) {
-          transitionTo(phaseName.toUpperCase(), () => runCountdown(duration, nextPhase), duration);
+          transitionTo(phaseName.toUpperCase(), duration, () => runCountdown(duration, phaseName.toUpperCase(), nextPhase));
         } else {
             nextPhase();
         }
@@ -101,6 +94,8 @@ function handleRest() {
   const isLastExercise = isLastSeries && state.currentExerciseIndex >= state.workout.length - 1;
   if (isLastExercise) {
       setState(STATES.FINISHED, {phase: 'Completato!'});
+      // Future: transition to debriefing view
+      setTimeout(() => ui.showView('calendar'), 2000);
       return;
   }
 
@@ -110,26 +105,25 @@ function handleRest() {
           startExercise();
       } else {
           state.currentExerciseIndex++;
-          state.exercise = state.workout[state.currentExerciseIndex];
           state.currentSeries = 1;
           startExercise();
       }
   };
   
-  transitionTo('Riposo', () => runCountdown(state.exercise.rest, onRestComplete), state.exercise.rest);
+  transitionTo('Riposo', state.exercise.rest, () => runCountdown(state.exercise.rest, 'Riposo', onRestComplete));
 }
 
 function startExercise() {
   state.exercise = state.workout[state.currentExerciseIndex];
-  transitionTo("Pronti?", () => {
+  transitionTo("Pronti?", 3, () => {
       runCountdown(3, 'VIA!', () => {
           setState(STATES.ACTION);
           if (state.exercise.type === 'reps') {
               runTempoCycle();
           } else {
-              transitionTo("Azione", () => runCountdown(state.exercise.duration, handleRest), state.exercise.duration);
+              transitionTo("Azione", state.exercise.duration, () => runCountdown(state.exercise.duration, "Azione", handleRest));
           }
-      }, 3);
+      });
   });
 }
 
@@ -147,7 +141,6 @@ export function confirmStart() {
 }
 
 export function pauseOrResumeTrainer() {
-  // Pause/resume logic is complex with the new transition model and is disabled for now.
   console.warn("Pause/Resume functionality is currently disabled.");
 }
 

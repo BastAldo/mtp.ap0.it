@@ -1,12 +1,12 @@
-commit_message: "feat(trainer): Introduce consistent 0.75s announcing phase between states"
+commit_message: "fix(trainer): Correct arguments in runCountdown calls causing TypeError"
 rationale: |
-  Questo patch introduce una fase di preavviso ("Announcing State") di 0.75 secondi prima di ogni transizione di stato significativa nel trainer, migliorando la user experience.
+  Questo patch corregge un errore fatale (`TypeError`) che bloccava la macchina a stati del trainer all'avvio del workout.
 
-  1.  **Migliore Coordinazione:** Come richiesto dall'utente, questo preavviso visivo permette di anticipare la prossima azione. Questo è particolarmente utile negli esercizi a ripetizioni con fasi di `tempo` brevi, dove l'utente ora ha il tempo di coordinare il movimento.
+  1.  **Causa del Bug:** Il problema era causato da chiamate errate alla funzione interna `runCountdown` in `trainer.js`. I parametri venivano passati in un ordine scorretto, causando un `TypeError` quando il programma tentava di eseguire una stringa di testo come se fosse una funzione.
 
-  2.  **Pattern Architetturale Standardizzato:** È stato refattorizzato `trainer.js` per usare un pattern di transizione coerente. Invece di passare direttamente da uno stato all'altro, la logica ora passa attraverso uno stato `ANNOUNCING` intermedio. Questo stato ha la responsabilità unica di mostrare il nome della fase imminente, attendere 0.75 secondi e solo allora procedere allo stato effettivo.
+  2.  **Impatto:** L'errore bloccava l'esecuzione dello script, lasciando l'utente bloccato nella fase di "announcing" ("Pronti?") senza che il workout potesse effettivamente iniziare.
 
-  3.  **Logica Centralizzata:** La gestione dell'effetto visivo (l'aggiunta/rimozione della classe `.is-flashing`) è centralizzata in `ui.js`, che viene informato dello stato di `announcing` e reagisce di conseguenza. Questo mantiene la separazione delle responsabilità tra la logica del trainer e la sua rappresentazione visiva.
+  3.  **Soluzione:** La firma della funzione `runCountdown` è stata standardizzata e tutte le sue chiamate sono state corrette per aderire alla nuova firma. Questo assicura che i parametri vengano passati correttamente, risolve il `TypeError` e permette alla macchina a stati di progredire come previsto.
 patches:
   - file: src/trainer.js
     content: |
@@ -35,9 +35,6 @@ patches:
         phase: '',
         totalDuration: 0,
         animationFrameId: null,
-        timerStartTime: 0,
-        timeOffsetMs: 0,
-        onTimerComplete: null,
       };
 
       function clearTimers() {
@@ -49,38 +46,34 @@ patches:
         clearTimers();
         state = { ...state, ...payload, currentState: newState };
         ui.updateTrainerUI(state);
-
-        if (newState === STATES.ANNOUNCING) {
-            ui.playTick();
-            setTimeout(() => {
-                if (state.onTimerComplete) state.onTimerComplete();
-            }, 750);
-        }
       }
 
-      function transitionTo(phaseText, onCompleteAction, duration = 0) {
-        state.phase = phaseText;
-        state.totalDuration = duration;
-        state.onTimerComplete = onCompleteAction;
-        setState(STATES.ANNOUNCING);
+      function transitionTo(phaseText, duration, onCompleteAction) {
+        setState(STATES.ANNOUNCING, { phase: phaseText });
+        setTimeout(() => {
+          if (onCompleteAction) onCompleteAction();
+        }, 750);
       }
       
-      function runCountdown(duration, onComplete) {
-          state.timerStartTime = Date.now();
-          state.timeOffsetMs = 0; // Countdown always starts fresh
+      function runCountdown(duration, phaseText, onComplete) {
+          state.totalDuration = duration;
+          state.phase = phaseText;
+          const startTime = Date.now();
 
           const tick = () => {
-              const elapsedMs = Date.now() - state.timerStartTime;
+              const elapsedMs = Date.now() - startTime;
               const progress = Math.min(100, (elapsedMs / (duration * 1000)) * 100);
               ui.updateProgressOnly(progress);
 
               if (elapsedMs >= duration * 1000) {
+                  ui.playTick();
                   clearTimers();
                   if (onComplete) onComplete();
               } else {
                   state.animationFrameId = requestAnimationFrame(tick);
               }
           };
+          
           tick();
           ui.updateTrainerUI(state);
       }
@@ -89,7 +82,7 @@ patches:
           const tempo = state.exercise.tempo;
           const executePhase = (phaseName, duration, nextPhase) => {
               if (duration > 0) {
-                transitionTo(phaseName.toUpperCase(), () => runCountdown(duration, nextPhase), duration);
+                transitionTo(phaseName.toUpperCase(), duration, () => runCountdown(duration, phaseName.toUpperCase(), nextPhase));
               } else {
                   nextPhase();
               }
@@ -113,6 +106,8 @@ patches:
         const isLastExercise = isLastSeries && state.currentExerciseIndex >= state.workout.length - 1;
         if (isLastExercise) {
             setState(STATES.FINISHED, {phase: 'Completato!'});
+            // Future: transition to debriefing view
+            setTimeout(() => ui.showView('calendar'), 2000);
             return;
         }
 
@@ -122,26 +117,25 @@ patches:
                 startExercise();
             } else {
                 state.currentExerciseIndex++;
-                state.exercise = state.workout[state.currentExerciseIndex];
                 state.currentSeries = 1;
                 startExercise();
             }
         };
         
-        transitionTo('Riposo', () => runCountdown(state.exercise.rest, onRestComplete), state.exercise.rest);
+        transitionTo('Riposo', state.exercise.rest, () => runCountdown(state.exercise.rest, 'Riposo', onRestComplete));
       }
 
       function startExercise() {
         state.exercise = state.workout[state.currentExerciseIndex];
-        transitionTo("Pronti?", () => {
+        transitionTo("Pronti?", 3, () => {
             runCountdown(3, 'VIA!', () => {
                 setState(STATES.ACTION);
                 if (state.exercise.type === 'reps') {
                     runTempoCycle();
                 } else {
-                    transitionTo("Azione", () => runCountdown(state.exercise.duration, handleRest), state.exercise.duration);
+                    transitionTo("Azione", state.exercise.duration, () => runCountdown(state.exercise.duration, "Azione", handleRest));
                 }
-            }, 3);
+            });
         });
       }
 
@@ -159,7 +153,6 @@ patches:
       }
 
       export function pauseOrResumeTrainer() {
-        // Pause/resume logic is complex with the new transition model and is disabled for now.
         console.warn("Pause/Resume functionality is currently disabled.");
       }
 
@@ -167,95 +160,4 @@ patches:
           clearTimers();
           state = { ...state, currentState: STATES.IDLE };
           ui.showView('calendar');
-      }
-  - file: src/ui.js
-    content: |
-      /**
-       * @file ui.js
-       * Responsible for all direct DOM manipulations and user feedback (visual/audio).
-       */
-
-      // --- Elements ---
-      const views = {
-        calendar: document.getElementById('calendar-view'),
-        trainer: document.getElementById('trainer-view'),
-        debriefing: document.getElementById('debriefing-view')
-      };
-      const trainerExerciseTitle = document.getElementById('trainer-exercise-title');
-      const trainerSeriesCounter = document.getElementById('trainer-series-counter');
-      const trainerMainText = document.getElementById('trainer-main-text');
-      const trainerMainDisplay = document.getElementById('trainer-main-display');
-      const startSessionBtn = document.getElementById('start-session-btn');
-      const pauseResumeBtn = document.getElementById('pause-resume-btn');
-      const terminateBtn = document.getElementById('terminate-btn');
-      const progressRingFg = document.getElementById('progress-ring-foreground');
-
-      export function updateProgressOnly(percentage) {
-        if (isNaN(percentage)) return;
-        const offset = 100 - percentage;
-        progressRingFg.style.strokeDashoffset = Math.max(0, Math.min(100, offset));
-      }
-
-      export function showView(viewName) {
-        Object.values(views).forEach(view => view.classList.remove('view--active'));
-        if (views[viewName]) views[viewName].classList.add('view--active');
-      }
-
-      export function updateTrainerUI(state) {
-        const { exercise, currentSeries, currentRep, phase, totalDuration, currentState } = state;
-
-        trainerExerciseTitle.textContent = exercise ? exercise.name : 'Workout';
-        
-        if (exercise) {
-          let seriesText = `Serie ${currentSeries} / ${exercise.series}`;
-          if (exercise.type === 'reps' && (currentState === 'action')) {
-            seriesText += `  |  Rip. ${currentRep} / ${exercise.reps}`;
-          }
-          trainerSeriesCounter.textContent = seriesText;
-        } else {
-          trainerSeriesCounter.textContent = '';
-        }
-
-        // Handle text display
-        if (totalDuration > 0) {
-            trainerMainText.innerHTML = `${phase}<br><small>${totalDuration}s</small>`;
-        } else {
-            trainerMainText.textContent = phase;
-        }
-
-        // Handle flashing for announcing state
-        if (currentState === 'announcing') {
-            trainerMainDisplay.classList.add('is-flashing');
-        } else {
-            trainerMainDisplay.classList.remove('is-flashing');
-        }
-        
-        // Handle button visibility
-        startSessionBtn.style.display = currentState === 'ready' ? 'block' : 'none';
-        const inProgress = currentState !== 'ready' && currentState !== 'idle' && currentState !== 'finished';
-        pauseResumeBtn.style.display = inProgress ? 'block' : 'none';
-        terminateBtn.style.display = inProgress ? 'block' : 'none';
-        
-        pauseResumeBtn.disabled = true; // Pause is disabled in this version
-        pauseResumeBtn.textContent = 'Pausa';
-      }
-
-      export function initTrainerControls(handlers) {
-          startSessionBtn.addEventListener('click', () => handlers.onConfirmStart());
-          pauseResumeBtn.addEventListener('click', () => handlers.onPauseResume());
-          terminateBtn.addEventListener('click', () => handlers.onTerminate());
-      }
-
-      let audioCtx;
-      export function playTick() {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
-        oscillator.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(440, audioCtx.currentTime);
-        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        oscillator.start(audioCtx.currentTime);
-        oscillator.stop(audioCtx.currentTime + 0.05);
       }
