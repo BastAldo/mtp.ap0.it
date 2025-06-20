@@ -13,7 +13,6 @@ const views = { calendar: calendarView, trainer: trainerView, debriefing: debrie
 const trainerExerciseTitle = document.getElementById('trainer-exercise-title');
 const trainerSeriesCounter = document.getElementById('trainer-series-counter');
 const trainerMainText = document.getElementById('trainer-main-text');
-const trainerDescription = document.getElementById('trainer-description');
 const startSessionBtn = document.getElementById('start-session-btn');
 const pauseResumeBtn = document.getElementById('pause-resume-btn');
 const terminateBtn = document.getElementById('terminate-btn');
@@ -23,8 +22,9 @@ const progressRingFg = document.getElementById('progress-ring-foreground');
 const ringRadius = progressRingFg.r.baseVal.value;
 const ringCircumference = 2 * Math.PI * ringRadius;
 progressRingFg.style.strokeDasharray = `${ringCircumference} ${ringCircumference}`;
+progressRingFg.style.strokeDashoffset = ringCircumference;
 
-function updateProgressRing(percentage) {
+export function updateProgressOnly(percentage) {
   const offset = ringCircumference - (percentage / 100) * ringCircumference;
   progressRingFg.style.strokeDashoffset = offset;
 }
@@ -37,14 +37,13 @@ export function showView(viewName) {
 }
 
 export function updateTrainerUI(state) {
-  const { exercise, currentSeries, currentRep, phase, countdown, totalDuration, currentState } = state;
+  const { exercise, currentSeries, currentRep, phase, totalDuration, currentState } = state;
 
   trainerExerciseTitle.textContent = exercise ? exercise.name : 'Workout';
   
-  // Update series and reps counter
   if (exercise) {
     let seriesText = `Serie ${currentSeries} / ${exercise.series}`;
-    if (exercise.type === 'reps' && currentState === 'action') {
+    if (exercise.type === 'reps' && (currentState === 'action' || currentState === 'paused')) {
       seriesText += `  |  Rip. ${currentRep} / ${exercise.reps}`;
     }
     trainerSeriesCounter.textContent = seriesText;
@@ -52,31 +51,22 @@ export function updateTrainerUI(state) {
     trainerSeriesCounter.textContent = '';
   }
 
-  // Update main display text and progress ring
   if (currentState === 'ready') {
     trainerMainText.textContent = "Pronto?";
-    updateProgressRing(100);
+    updateProgressOnly(0);
+  } else if(currentState === 'paused') {
+    trainerMainText.textContent = 'Pausa';
   } else if (totalDuration > 0) {
     trainerMainText.innerHTML = `${phase}<br><small>${totalDuration}s</small>`;
-    const elapsed = totalDuration - countdown;
-    const progressPercentage = (elapsed / totalDuration) * 100;
-    updateProgressRing(progressPercentage);
   } else {
       trainerMainText.textContent = phase;
-      updateProgressRing(0);
   }
   
-  // Update button visibility and state
   startSessionBtn.style.display = currentState === 'ready' ? 'block' : 'none';
   pauseResumeBtn.style.display = currentState !== 'ready' ? 'block' : 'none';
   terminateBtn.style.display = currentState !== 'ready' ? 'block' : 'none';
-
-  pauseResumeBtn.disabled = !(currentState === 'action' || currentState === 'paused');
-  if (currentState === 'paused') {
-      pauseResumeBtn.textContent = 'Riprendi';
-  } else {
-      pauseResumeBtn.textContent = 'Pausa';
-  }
+  pauseResumeBtn.disabled = !(currentState === 'action' || currentState === 'paused' || currentState === 'rest_countdown');
+  pauseResumeBtn.textContent = currentState === 'paused' ? 'Riprendi' : 'Pausa';
 }
 
 export function initTrainerControls(handlers) {

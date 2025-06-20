@@ -27,14 +27,18 @@ let state = {
   countdown: 0,
   totalDuration: 0,
   message: '',
-  timerId: null,
+  logicTimerId: null, // Timer for state logic (1s tick)
+  uiTimerId: null,    // Timer for smooth UI updates (50ms tick)
+  pausedData: null,   // Stores data needed to resume correctly
   prevState: null
 };
 
 function clearTimers() {
-  clearInterval(state.timerId);
-  clearTimeout(state.timerId);
-  state.timerId = null;
+  clearInterval(state.logicTimerId);
+  clearTimeout(state.logicTimerId);
+  clearInterval(state.uiTimerId);
+  state.logicTimerId = null;
+  state.uiTimerId = null;
 }
 
 function setState(newState, payload = {}) {
@@ -46,7 +50,7 @@ function setState(newState, payload = {}) {
     case STATES.READY:
       state.exercise = state.workout[state.currentExerciseIndex];
       state.currentSeries = 1;
-      ui.updateTrainerUI(state); // Update UI to show the initial state and "Inizia" button
+      ui.updateTrainerUI(state);
       break;
 
     case STATES.PREPARING:
@@ -72,12 +76,7 @@ function setState(newState, payload = {}) {
           setState(STATES.FINISHED);
           return;
       }
-
-      setState(STATES.ANNOUNCING, {
-          phase: 'announcing',
-          message: 'Riposo',
-          nextState: STATES.REST_COUNTDOWN
-      });
+      setState(STATES.ANNOUNCING, { phase: 'announcing', message: 'Riposo', nextState: STATES.REST_COUNTDOWN });
       break;
 
     case STATES.REST_COUNTDOWN:
@@ -94,7 +93,7 @@ function setState(newState, payload = {}) {
 
     case STATES.ANNOUNCING:
       ui.playTick();
-      state.timerId = setTimeout(() => {
+      state.logicTimerId = setTimeout(() => {
         const next = state.nextState;
         state.nextState = null;
         setState(next);
@@ -104,83 +103,102 @@ function setState(newState, payload = {}) {
     case STATES.FINISHED:
         ui.showView('calendar');
         break;
-
-    case STATES.IDLE:
-    case STATES.PAUSED:
-      break;
   }
 }
 
-function runCountdown(seconds, message, totalDuration, onCompleteOrNextState) {
-    state.countdown = seconds;
+function runCountdown(seconds, message, totalDuration, onCompleteOrNextState, timeOffsetMs = 0) {
+    const totalDurationMs = totalDuration * 1000;
+    let remainingMs = (seconds * 1000) - timeOffsetMs;
+
+    state.countdown = Math.ceil(remainingMs / 1000);
     state.totalDuration = totalDuration;
     state.phase = message;
-    ui.updateTrainerUI(state);
-    ui.playTick();
+    
+    const startTime = Date.now();
+    
+    // UI Timer (smooth progress ring)
+    state.uiTimerId = setInterval(() => {
+        const elapsedMs = (Date.now() - startTime) + timeOffsetMs;
+        const progress = Math.min(100, (elapsedMs / totalDurationMs) * 100);
+        ui.updateProgressOnly(progress);
+    }, 50);
 
-    state.timerId = setInterval(() => {
-        state.countdown--;
+    // Logic Timer (1s tick)
+    state.logicTimerId = setInterval(() => {
+        remainingMs -= 1000;
+        state.countdown = Math.ceil(remainingMs / 1000);
         ui.updateTrainerUI(state);
-        if (state.countdown > 0) ui.playTick();
+        if (remainingMs > 0) ui.playTick();
         else { ui.playTick(); ui.playTick(); }
 
-        if (state.countdown <= 0) {
-            clearInterval(state.timerId);
+        if (remainingMs <= 0) {
+            clearTimers();
             if (typeof onCompleteOrNextState === 'function') {
-                state.timerId = setTimeout(onCompleteOrNextState, 1000);
+                state.logicTimerId = setTimeout(onCompleteOrNextState, 1000);
             } else {
                 setState(onCompleteOrNextState);
             }
         }
     }, 1000);
+    
+    // Initial UI update
+    ui.updateTrainerUI(state);
 }
 
 function runTempoCycle() {
-    const tempo = state.exercise.tempo;
-    const repCountMessage = `${state.currentRep} / ${state.exercise.reps}`;
-
-    const executePhase = (phaseName, duration, nextPhase) => {
+    const executePhase = (phaseName, duration, nextPhase, timeOffsetMs = 0) => {
         if (duration > 0) {
-            runCountdown(duration, phaseName.toUpperCase(), duration, nextPhase);
+            runCountdown(duration, phaseName.toUpperCase(), duration, nextPhase, timeOffsetMs);
         } else {
             nextPhase();
         }
     };
 
-    const doDown = () => executePhase('down', tempo.down, doUp);
-    const doHold = () => executePhase('hold', tempo.hold, doDown);
-    const doUp = () => {
+    const doDown = (offset) => executePhase('down', state.exercise.tempo.down, doUp, offset);
+    const doHold = (offset) => executePhase('hold', state.exercise.tempo.hold, doDown, offset);
+    const doUp = (offset) => {
         if (state.currentRep < state.exercise.reps) {
             state.currentRep++;
-            executePhase('up', tempo.up, doHold);
+            executePhase('up', state.exercise.tempo.up, doHold, offset);
         } else {
             setState(STATES.REST);
         }
     };
-    executePhase('up', tempo.up, doHold);
+    
+    state.pausedData ? doUp(state.pausedData.remainingMs) : doUp();
 }
 
 export function startTrainer(exercises) {
   if (!exercises || exercises.length === 0) return;
-  state.workout = JSON.parse(JSON.stringify(exercises));
-  state.currentExerciseIndex = 0;
+  state = { ...state, workout: JSON.parse(JSON.stringify(exercises)), currentExerciseIndex: 0 };
   ui.showView('trainer');
   setState(STATES.READY);
 }
 
 export function confirmStart() {
-  if (state.currentState === STATES.READY) {
-    setState(STATES.PREPARING);
-  }
+  if (state.currentState === STATES.READY) setState(STATES.PREPARING);
 }
 
 export function pauseOrResumeTrainer() {
     if (state.currentState === STATES.PAUSED) {
-        const restartState = state.prevState;
-        setState(restartState);
+        const { prevState, pausedData } = state;
+        state.currentState = prevState; // Restore state before calling logic
+        
+        if (pausedData.type === 'countdown') {
+            runCountdown(pausedData.remainingSecs, pausedData.message, pausedData.totalDuration, pausedData.onComplete);
+        } else if (pausedData.type === 'tempo') {
+            runTempoCycle();
+        }
     } else {
-        clearTimers();
+        const remainingMs = (state.countdown * 1000) - (1000 - (Date.now() % 1000));
+        state.pausedData = { 
+            type: state.exercise.type === 'reps' ? 'tempo' : 'countdown',
+            remainingMs: remainingMs,
+            remainingSecs: Math.ceil(remainingMs / 1000),
+            //... save other context if needed
+        };
         state.prevState = state.currentState;
+        clearTimers();
         setState(STATES.PAUSED);
     }
 }
