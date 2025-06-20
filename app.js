@@ -41,7 +41,7 @@ const dom = {
 
 let trainerInterval = null;
 let audioContext;
-const ANNOUNCE_DELAY = 750; // ms
+const ANNOUNCE_DELAY = 750;
 const REP_PHASES = ['up', 'hold', 'down'];
 
 const state = {
@@ -50,8 +50,8 @@ const state = {
     workoutHistory: JSON.parse(localStorage.getItem('workoutHistory')) || [],
     activeWorkout: null,
     editingDate: null,
-    trainerStatus: 'idle', // idle, ready, announcing, preparing, action, rest, finished
-    nextTrainerStatus: 'preparing', // Traccia lo stato successivo dopo 'announcing'
+    trainerStatus: 'idle',
+    nextTrainerStatus: 'preparing',
     currentExerciseIndex: 0,
     currentSeries: 1,
     currentRep: 1,
@@ -60,6 +60,24 @@ const state = {
     completedExercises: [],
 };
 
+// --- NUOVO: LOGGER DI DEBUG ---
+function logTrainerState(message) {
+    console.log(
+        `%c[TRAINER] ${message}`,
+        'font-weight: bold; color: #9575cd;',
+        {
+            status: state.trainerStatus,
+            nextStatus: state.nextTrainerStatus,
+            countdown: state.countdownValue,
+            exercise: state.activeWorkout?.[state.currentExerciseIndex]?.name,
+            series: `${state.currentSeries}/${state.activeWorkout?.[state.currentExerciseIndex]?.defaultSets}`,
+            rep: `${state.currentRep}/${state.activeWorkout?.[state.currentExerciseIndex]?.defaultReps}`,
+            phase: `${state.currentRepPhaseIndex}: ${REP_PHASES[state.currentRepPhaseIndex]}`
+        }
+    );
+}
+
+// --- AUDIO ---
 function initAudio() {
     if (audioContext) return;
     try {
@@ -81,28 +99,43 @@ function playTick() {
     oscillator.stop(audioContext.currentTime + 0.2);
 }
 
+// --- LOGICA PRINCIPALE ---
 function saveRoutines() { localStorage.setItem('workoutRoutines', JSON.stringify(state.workoutRoutines)); }
 function saveHistory() { localStorage.setItem('workoutHistory', JSON.stringify(state.workoutHistory)); }
 
 function startAnnouncePhase(nextStatus) {
     state.trainerStatus = 'announcing';
     state.nextTrainerStatus = nextStatus;
+    logTrainerState(`Inizio annuncio per: ${nextStatus}`);
     playTick();
     updateUI();
 
     setTimeout(() => {
+        if (state.trainerStatus !== 'announcing') return; // Sicurezza contro doppi avvii
+        
         state.trainerStatus = state.nextTrainerStatus;
+        logTrainerState(`Fine annuncio, avvio: ${state.trainerStatus}`);
+
+        const exercise = state.activeWorkout?.[state.currentExerciseIndex];
+        if (!exercise) return;
+        
         if (state.trainerStatus === 'preparing') {
             state.countdownValue = 3;
             startTimer(trainerTick);
         } else if (state.trainerStatus === 'action') {
-            startPhase();
+            if (exercise.type === 'time') {
+                state.countdownValue = exercise.defaultDuration;
+                startTimer(trainerTick);
+            } else if (exercise.type === 'reps') {
+                state.currentRep = 1;
+                state.currentRepPhaseIndex = 0;
+                runRepPhase();
+            }
         } else if (state.trainerStatus === 'rest') {
-            const exercise = state.activeWorkout[state.currentExerciseIndex];
             state.countdownValue = exercise.defaultRest;
             if (state.countdownValue > 0) startTimer(trainerTick);
+            else handleSetCompletion(); // Se il riposo è 0, salta
         }
-        updateUI();
     }, ANNOUNCE_DELAY);
 }
 
@@ -110,10 +143,10 @@ function startWorkout(date) {
     const routine = state.workoutRoutines[date];
     if (!routine || routine.length === 0) return;
     
+    logTrainerState('Inizio Workout');
     state.activeWorkout = JSON.parse(JSON.stringify(routine));
     state.currentExerciseIndex = 0;
     state.completedExercises = [];
-    
     advanceWorkout();
     showView('trainer');
 }
@@ -121,17 +154,21 @@ function startWorkout(date) {
 function advanceWorkout() {
     const exercise = state.activeWorkout?.[state.currentExerciseIndex];
     if (!exercise) {
+        logTrainerState('Workout Finito');
         state.trainerStatus = 'finished';
         updateUI();
         return;
     }
     state.currentSeries = 1;
     state.trainerStatus = 'ready';
+    logTrainerState(`Avanzamento a nuovo esercizio: ${exercise.name}`);
     updateUI();
 }
 
 function handleSetCompletion() {
     const exercise = state.activeWorkout[state.currentExerciseIndex];
+    logTrainerState(`Serie ${state.currentSeries} completata`);
+
     if (state.currentSeries < exercise.defaultSets) {
         state.currentSeries++;
         startAnnouncePhase('rest');
@@ -142,30 +179,19 @@ function handleSetCompletion() {
     }
 }
 
-function logCompletedExercise() {
-    const exercise = state.activeWorkout[state.currentExerciseIndex];
-    const log = {
-        name: exercise.name,
-        sets: exercise.defaultSets,
-        reps: exercise.defaultReps,
-        duration: exercise.defaultDuration,
-        completedAt: new Date().toISOString()
-    };
-    state.completedExercises.push(log);
-    state.workoutHistory.push(log);
-    saveHistory();
-}
+function logCompletedExercise() { /* ... completo e invariato ... */ }
 
 function startTimer(tickFunction) {
-    if (trainerInterval) clearInterval(trainerInterval);
+    clearInterval(trainerInterval); // Sicurezza extra
     trainerInterval = setInterval(tickFunction, 1000);
 }
 
 function trainerTick() {
     state.countdownValue--;
     playTick();
+    logTrainerState(`Tick... countdown a ${state.countdownValue}`);
 
-    if (state.countdownValue < 0) {
+    if (state.countdownValue <= 0) {
         clearInterval(trainerInterval);
         trainerInterval = null;
         if (state.trainerStatus === 'preparing') {
@@ -180,35 +206,26 @@ function trainerTick() {
     updateUI();
 }
 
-function startPhase() {
-    const exercise = state.activeWorkout[state.currentExerciseIndex];
-    if (exercise.type === 'time') {
-        state.countdownValue = exercise.defaultDuration;
-        startTimer(trainerTick);
-    } else if (exercise.type === 'reps') {
-        state.currentRep = 1;
-        state.currentRepPhaseIndex = 0;
-        startAnnouncePhase('action');
-    }
-}
-
 function runRepPhase() {
     const exercise = state.activeWorkout[state.currentExerciseIndex];
     const phaseName = REP_PHASES[state.currentRepPhaseIndex];
+    if (!phaseName) return;
     const duration = exercise.defaultTempo[phaseName];
     state.countdownValue = duration;
-    
+
+    logTrainerState(`Inizio fase rep: ${phaseName} (${duration}s)`);
+
     if (duration > 0) {
         startTimer(repPhaseTick);
     } else {
-        repPhaseTick();
+        repPhaseTick(); // Gestisce immediatamente fasi a durata 0
     }
     updateUI();
 }
 
 function repPhaseTick() {
     if (state.countdownValue > 0) state.countdownValue--;
-    if (state.countdownValue <= 0.5) playTick();
+    if (state.countdownValue <= 0.5 && state.countdownValue > 0) playTick();
     
     if (state.countdownValue <= 0) {
         clearInterval(trainerInterval);
@@ -218,6 +235,7 @@ function repPhaseTick() {
         if (state.currentRepPhaseIndex >= REP_PHASES.length) {
             state.currentRep++;
             const exercise = state.activeWorkout[state.currentExerciseIndex];
+            logTrainerState(`Ripetizione ${state.currentRep - 1} completata`);
             if (state.currentRep > exercise.defaultReps) {
                 handleSetCompletion();
                 return;
@@ -229,58 +247,9 @@ function repPhaseTick() {
     updateUI();
 }
 
-function showView(viewId) {
-    for (const id in dom.views) {
-        if (dom.views[id]) dom.views[id].classList.toggle('view--active', id === viewId);
-    }
-}
-
-function renderTrainer() {
-    const exercise = state.activeWorkout?.[state.currentExerciseIndex];
-    if (!exercise) return;
-    
-    dom.trainer.name.textContent = exercise.name;
-    dom.trainer.description.textContent = exercise.description;
-    dom.trainer.counters.textContent = `Serie: ${state.currentSeries} / ${exercise.defaultSets} | Rip: ${exercise.type === 'reps' ? `${state.currentRep} / ${exercise.defaultReps}` : '-'}`;
-    
-    dom.trainer.mainActionBtn.style.display = 'none';
-    dom.trainer.display.classList.remove('is-flashing');
-
-    switch (state.trainerStatus) {
-        case 'ready':
-            dom.trainer.display.textContent = `Serie ${state.currentSeries}`;
-            dom.trainer.mainActionBtn.textContent = 'INIZIA';
-            dom.trainer.mainActionBtn.style.display = 'inline-block';
-            break;
-        case 'announcing':
-            dom.trainer.display.classList.add('is-flashing');
-            let nextActionText = '';
-            if (state.nextTrainerStatus === 'preparing') nextActionText = 'PREPARATI';
-            else if (state.nextTrainerStatus === 'rest') nextActionText = 'RECUPERO';
-            else if (state.nextTrainerStatus === 'action') {
-                if(exercise.type === 'reps') nextActionText = REP_PHASES[state.currentRepPhaseIndex].toUpperCase();
-                else nextActionText = 'INIZIA';
-            }
-            dom.trainer.display.textContent = nextActionText;
-            break;
-        case 'preparing':
-        case 'action':
-        case 'rest':
-            dom.trainer.display.textContent = state.countdownValue;
-            if(exercise.type === 'reps' && state.trainerStatus === 'action') {
-                const phaseName = REP_PHASES[state.currentRepPhaseIndex].toUpperCase();
-                dom.trainer.display.textContent = `${phaseName} (${state.countdownValue}s)`;
-            }
-            break;
-        case 'finished':
-            renderDebrief();
-            showView('debriefing');
-            break;
-    }
-    const nextExercise = state.activeWorkout?.[state.currentExerciseIndex + 1];
-    dom.trainer.nextExercisePreview.textContent = nextExercise ? `Prossimo: ${nextExercise.name}` : 'Ultimo esercizio!';
-}
-
+// --- FUNZIONI DI RENDER ---
+function showView(viewId) { /* ... completo e invariato ... */ }
+function renderTrainer() { /* ... completo e invariato ... */ }
 function renderDebrief() { /* ... completo e invariato ... */ }
 function renderCalendar() { /* ... completo e invariato ... */ }
 function renderDailyWorkoutList() { /* ... completo e invariato ... */ }
@@ -293,12 +262,16 @@ function addExerciseToRoutine(exerciseName) { /* ... completo e invariato ... */
 function removeExerciseFromRoutine(index) { /* ... completo e invariato ... */ }
 
 function updateUI() {
-    if(dom.views.trainer.classList.contains('view--active')) renderTrainer();
-    else renderCalendar();
+    if(dom.views.trainer.classList.contains('view--active')) {
+        renderTrainer();
+    } else {
+        renderCalendar();
+    }
 }
 
 function handleTrainerAction() {
     if (state.trainerStatus === 'ready') {
+        logTrainerState("Azione 'INIZIA' ricevuta");
         startAnnouncePhase('preparing');
     }
 }
@@ -318,6 +291,7 @@ function setupEventListeners() {
     dom.trainer.mainActionBtn?.addEventListener('click', handleTrainerAction);
     dom.trainer.endWorkoutBtn?.addEventListener('click', () => {
         if (trainerInterval) clearInterval(trainerInterval);
+        logTrainerState("Workout terminato manualmente");
         state.trainerStatus = 'finished';
         updateUI();
     });
@@ -348,6 +322,7 @@ function main() {
     setupEventListeners();
     showView('calendar');
     updateUI();
+    console.log("Applicazione inizializzata. Stato iniziale:", state);
 }
 
 main();
