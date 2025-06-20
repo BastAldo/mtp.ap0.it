@@ -60,8 +60,10 @@ export function updateTrainerUI(state) {
   pauseResumeBtn.style.display = inProgress ? 'block' : 'none';
   terminateBtn.style.display = inProgress ? 'block' : 'none';
   
-  const canPause = currentState !== 'ready' && currentState !== 'paused' && currentState !== 'idle' && currentState !== 'finished';
-  pauseResumeBtn.disabled = !canPause;
+  // The button should be ENABLED if the state is pausable OR if it's already paused (to allow resume).
+  // It should be DISABLED only in terminal/initial states.
+  const canBeInterrupted = currentState === 'action' || currentState === 'rest_countdown' || currentState === 'announcing' || currentState === 'paused';
+  pauseResumeBtn.disabled = !canBeInterrupted;
   pauseResumeBtn.textContent = currentState === 'paused' ? 'Riprendi' : 'Pausa';
 }
 
