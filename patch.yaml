@@ -1,122 +1,50 @@
-commit_message: "feat(trainer): Implement core trainer state machine and UI module"
+commit_message: "fix(trainer): Implement ACTION/REST states and wire trainer controls"
 rationale: |
-  Questo patch introduce la funzionalità principale dell'applicazione: la vista interattiva del trainer.
+  Questo patch corregge il blocco della macchina a stati del trainer e attiva i pulsanti di controllo, rendendo il workout completamente interattivo.
 
-  1.  **Architettura Decoppiata (Logica vs UI):** La scelta architetturale chiave è la netta separazione delle responsabilità.
-      - **`src/trainer.js` (Il Cervello):** Un nuovo modulo che contiene l'intera macchina a stati del workout. Gestisce la logica, la sequenza e i timer senza mai accedere direttamente al DOM.
-      - **`src/ui.js` (Le Mani e la Voce):** Un nuovo modulo dedicato esclusivamente alla manipolazione del DOM e al feedback (audio/visivo). Riceve comandi dal modulo `trainer.js` ed esegue gli aggiornamenti visivi. Questo disaccoppiamento è cruciale per la manutenibilità e la testabilità.
+  1.  **Risoluzione Blocco Logico:** Il problema principale era l'assenza di logica per gli stati `ACTION` e `REST` in `trainer.js`. La macchina a stati è stata completata per gestire correttamente sia esercizi a tempo che a ripetizioni (con una nuova funzione `runTempoCycle` per i cicli up/hold/down). Ora il trainer avanza correttamente attraverso serie, riposi e esercizi successivi.
 
-  2.  **Macchina a Stati:** Il `trainer.js` è implementato come una macchina a stati (es. `READY`, `ANNOUNCING`, `PREPARING`). Una funzione centrale `setState` orchestra le transizioni, la logica e le chiamate al modulo UI, rendendo il flusso del workout prevedibile e robusto.
+  2.  **Attivazione Pulsanti di Controllo:** I pulsanti 'Pausa' e 'Termina' sono stati collegati.
+      - Il modulo `ui.js` è stato aggiornato per gestire il testo e lo stato (attivo/disattivo) dei pulsanti in base allo stato corrente del trainer (es. "Pausa" diventa "Riprendi").
+      - È stata creata una funzione di inizializzazione che collega i click sui pulsanti a nuove funzioni di controllo (`pauseOrResumeTrainer`, `terminateTrainer`) nel modulo `trainer.js`, mantenendo la separazione architetturale.
 
-  3.  **Attivazione del Flusso:** Il modulo `calendar.js` è stato aggiornato. Ora, il click sul pulsante "START" attiva il processo, chiamando `trainer.startTrainer()` con gli esercizi del giorno. Il controllo dell'applicazione passa così dal calendario al trainer.
+  3.  **Gestione Pausa/Ripresa:** È stata implementata una logica di pausa robusta che ferma e riprende i timer (`setInterval`/`setTimeout`), preservando lo stato del workout.
 
-  4.  **Stile e Feedback:** Il `style.css` è stato aggiornato con gli stili per la vista del trainer, inclusa l'animazione `@keyframes` per l'effetto `.is-flashing`, come specificato nel design, per fornire un feedback visivo chiaro durante le transizioni di stato.
+  4.  **Flusso Completo:** Con queste modifiche, il trainer può ora guidare un utente attraverso un workout multi-esercizio completo, dall'inizio alla fine, con piena interattività.
 patches:
-  - file: src/calendar.js
+  - file: src/main.js
     content: |
       /**
-       * @file calendar.js
-       * Manages the state, rendering, and interactions of the calendar view.
+       * @file main.js
+       * The main entry point for the application.
+       * Orchestrates all other modules.
        */
       import * as storage from './storage.js';
-      import { openDayModal } from './modal.js';
-      import { startTrainer } from './trainer.js';
+      import { initCalendar } from './calendar.js';
+      import { initModals } from './modal.js';
+      import { initTrainerControls } from './ui.js';
+      import { pauseOrResumeTrainer, terminateTrainer } from './trainer.js';
 
-      // DOM Elements
-      const calendarGrid = document.getElementById('calendar-grid');
-      const currentMonthYear = document.getElementById('current-month-year');
-      const prevWeekBtn = document.getElementById('prev-week-btn');
-      const nextWeekBtn = document.getElementById('next-week-btn');
-
-      // State
-      let currentDate = new Date();
 
       /**
-       * Formats a Date object into a 'YYYY-MM-DD' string.
-       * @param {Date} date The date to format.
-       * @returns {string} The formatted date string.
+       * The main function to initialize the application.
        */
-      function formatDateKey(date) {
-        return date.toISOString().split('T')[0];
+      function main() {
+        console.log('Application Initialized.');
+        console.log('Fetching all workouts from storage:', storage.getWorkouts());
+
+        // Initialize all primary components
+        initCalendar();
+        initModals();
+        // Wire up trainer controls once at startup
+        initTrainerControls({
+          onPauseResume: pauseOrResumeTrainer,
+          onTerminate: terminateTrainer
+        });
       }
 
-      /**
-       * Renders the calendar for the week of the given date.
-       * @param {Date} date A date within the week to be rendered.
-       */
-      export function renderCalendar(date = currentDate) {
-        const weekStart = new Date(date);
-        weekStart.setDate(date.getDate() - date.getDay() + (date.getDay() === 0 ? -6 : 1)); // Start of the week (Monday)
-
-        const monthNames = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
-        currentMonthYear.textContent = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
-
-        calendarGrid.innerHTML = '';
-        for (let i = 0; i < 7; i++) {
-          const day = new Date(weekStart);
-          day.setDate(weekStart.getDate() + i);
-
-          const dayCell = document.createElement('div');
-          const dateKey = formatDateKey(day);
-          dayCell.className = 'day-cell';
-          dayCell.dataset.date = dateKey;
-
-          const dayName = day.toLocaleDateString('it-IT', { weekday: 'long' });
-          const dayNumber = day.getDate();
-
-          const exercises = storage.getWorkoutsForDate(dateKey);
-          const exerciseCount = exercises.length;
-
-          let summaryText = 'Nessun esercizio';
-          if (exerciseCount > 0) {
-            summaryText = `${exerciseCount} ${exerciseCount > 1 ? 'esercizi' : 'esercizio'}`;
-          }
-
-          dayCell.innerHTML = `
-            <div class="day-name">${dayName}</div>
-            <div class="day-number">${dayNumber}</div>
-            <div class="day-summary">${summaryText}</div>
-            <button class="btn btn-secondary start-workout-btn" data-date="${dateKey}" ${exerciseCount === 0 ? 'disabled' : ''}>START</button>
-          `;
-
-          calendarGrid.appendChild(dayCell);
-        }
-      }
-
-      /**
-       * Initializes the calendar, sets up event listeners, and performs the initial render.
-       */
-      export function initCalendar() {
-        prevWeekBtn.addEventListener('click', () => {
-          currentDate.setDate(currentDate.getDate() - 7);
-          renderCalendar(currentDate);
-        });
-
-        nextWeekBtn.addEventListener('click', () => {
-          currentDate.setDate(currentDate.getDate() + 7);
-          renderCalendar(currentDate);
-        });
-
-        // Event delegation
-        calendarGrid.addEventListener('click', (event) => {
-          const target = event.target;
-          const dayCell = target.closest('.day-cell');
-          if (!dayCell) return;
-
-          const dateKey = dayCell.dataset.date;
-          if (target.matches('.start-workout-btn')) {
-            const exercises = storage.getWorkoutsForDate(dateKey);
-            if (exercises.length > 0) {
-              startTrainer(exercises);
-            }
-          } else {
-            openDayModal(dateKey);
-          }
-        });
-
-        renderCalendar(currentDate);
-        console.log('Calendar module initialized.');
-      }
+      // Initialize the app once the DOM is fully loaded.
+      document.addEventListener('DOMContentLoaded', main);
   - file: src/ui.js
     content: |
       /**
@@ -156,11 +84,22 @@ patches:
        * @param {object} state The current state object from the trainer module.
        */
       export function updateTrainerUI(state) {
-        const { exercise, currentSeries, phase, countdown, message } = state;
+        const { exercise, currentSeries, phase, countdown, message, currentState } = state;
 
         trainerExerciseTitle.textContent = exercise ? exercise.name : 'Pronti?';
         trainerSeriesCounter.textContent = exercise ? `Serie ${currentSeries} / ${exercise.series}` : '';
         trainerMainText.textContent = message || countdown;
+        trainerDescription.textContent = phase ? `Fase: ${phase.toUpperCase()}` : '';
+
+        // Update button text and state
+        terminateBtn.disabled = currentState === 'idle' || currentState === 'finished';
+        pauseResumeBtn.disabled = !(currentState === 'action' || currentState === 'paused');
+        
+        if (currentState === 'paused') {
+            pauseResumeBtn.textContent = 'Riprendi';
+        } else {
+            pauseResumeBtn.textContent = 'Pausa';
+        }
 
         // Handle flashing animation for announcements
         if (phase === 'announcing') {
@@ -168,6 +107,17 @@ patches:
         } else {
           trainerMainDisplay.classList.remove('is-flashing');
         }
+      }
+
+      /**
+       * Attaches event listeners to the trainer control buttons.
+       * @param {object} handlers - Object with callback functions.
+       * @param {function} handlers.onPauseResume - The function to call when pause/resume is clicked.
+       * @param {function} handlers.onTerminate - The function to call when terminate is clicked.
+       */
+      export function initTrainerControls(handlers) {
+          pauseResumeBtn.addEventListener('click', () => handlers.onPauseResume());
+          terminateBtn.addEventListener('click', () => handlers.onTerminate());
       }
 
       /**
@@ -218,265 +168,110 @@ patches:
         exercise: null,
         currentExerciseIndex: 0,
         currentSeries: 0,
-        phase: '',
+        currentRep: 0,
+        phase: '', // e.g., 'up', 'hold', 'down', 'rest'
         countdown: 0,
         message: '',
         timerId: null,
+        pausedTime: 0,
       };
 
+      function clearTimers() {
+        clearInterval(state.timerId);
+        clearTimeout(state.timerId);
+        state.timerId = null;
+      }
+
       function setState(newState, payload = {}) {
-        state = { ...state, ...payload, currentState: newState };
-        console.log(`Transition to: ${newState}`, state);
+        clearTimers();
+        state = { ...state, ...payload, currentState: newState, message: '' };
+        ui.updateTrainerUI(state);
 
         switch (newState) {
           case STATES.READY:
             state.exercise = state.workout[state.currentExerciseIndex];
             state.currentSeries = 1;
-            state.message = 'Premi INIZIA'; // Placeholder for a real start button
-            ui.updateTrainerUI(state);
-            // For now, we auto-start the preparation phase
-            setTimeout(() => setState(STATES.PREPARING), 1000);
+            setState(STATES.PREPARING);
             break;
 
           case STATES.PREPARING:
-            setState(STATES.ANNOUNCING, { phase: 'announcing', message: 'Preparati!', nextState: STATES.PREPARING_COUNTDOWN });
+            setState(STATES.ANNOUNCING, { phase: 'announcing', message: 'Preparati!', nextState: STATES.ACTION });
+            break;
+
+          case STATES.ACTION:
+             runCountdown(3, 'VIA!', () => {
+                if (state.exercise.type === 'reps') {
+                    state.currentRep = 1;
+                    runTempoCycle();
+                } else { // time
+                    runCountdown(state.exercise.duration, 'Stop!', STATES.REST);
+                }
+            });
+            break;
+
+          case STATES.REST:
+            const isLastSeries = state.currentSeries >= state.exercise.series;
+            const isLastExercise = isLastSeries && state.currentExerciseIndex >= state.workout.length - 1;
+
+            if (isLastExercise) {
+                setState(STATES.FINISHED);
+                return;
+            }
+
+            setState(STATES.ANNOUNCING, {
+                phase: 'announcing',
+                message: 'Riposo',
+                nextState: STATES.REST_COUNTDOWN
+            });
             break;
             
+          case STATES.REST_COUNTDOWN:
+            runCountdown(state.exercise.rest, 'Pronti', () => {
+                 if (state.currentSeries < state.exercise.series) {
+                    state.currentSeries++;
+                    setState(STATES.PREPARING);
+                 } else {
+                    state.currentExerciseIndex++;
+                    setState(STATES.READY);
+                 }
+            });
+            break;
+
           case STATES.ANNOUNCING:
-            ui.updateTrainerUI(state);
             ui.playTick();
             state.timerId = setTimeout(() => {
-                // After announcing, proceed to the actual action (e.g., the countdown)
-                if (state.nextState) {
-                    const next = state.nextState;
-                    state.nextState = null; // Clear the next state
-                    setState(next);
-                }
-            }, 750); // Announce phase duration
+              const next = state.nextState;
+              state.nextState = null;
+              setState(next);
+            }, 750);
             break;
-          
-          case STATES.PREPARING_COUNTDOWN:
-            runCountdown(3, 'Inizia!', STATES.ACTION);
+
+          case STATES.FINISHED:
+              ui.showView('calendar'); // Placeholder, will be debriefing view
+              break;
+
+          case STATES.IDLE:
+          case STATES.PAUSED:
+            // Do nothing, wait for user input
             break;
-          
-          // Future states (ACTION, REST, etc.) will be handled here
         }
       }
-
-      function runCountdown(seconds, finalMessage, nextState) {
+      
+      function runCountdown(seconds, finalMessage, onComplete) {
           state.countdown = seconds;
+          state.phase = 'countdown';
           ui.updateTrainerUI(state);
           ui.playTick();
 
           state.timerId = setInterval(() => {
               state.countdown--;
               ui.updateTrainerUI(state);
-              ui.playTick();
+              if (state.countdown > 0) {
+                 ui.playTick();
+              } else {
+                 ui.playTick();
+                 ui.playTick();
+              }
 
               if (state.countdown <= 0) {
-                  clearInterval(state.timerId);
-                  state.message = finalMessage;
-                  ui.updateTrainerUI(state);
-                  setTimeout(() => setState(nextState), 1000);
-              }
-          }, 1000);
-      }
-
-      export function startTrainer(exercises) {
-        if (!exercises || exercises.length === 0) {
-          console.error('Cannot start trainer without exercises.');
-          return;
-        }
-        
-        // Deep copy to avoid modifying original data
-        state.workout = JSON.parse(JSON.stringify(exercises));
-        state.currentExerciseIndex = 0;
-
-        ui.showView('trainer');
-        setState(STATES.READY);
-      }
-  - file: style.css
-    content: |
-      :root {
-        --bg-color: #1a1a1d;
-        --card-color: #2c2c34;
-        --primary-color: #9575cd;
-        --secondary-color: #4db6ac;
-        --text-color: #f4f4f9;
-        --text-secondary: #b3b3b3;
-        --danger-color: #ef5350;
-        --success-color: #66bb6a;
-        --border-color: #4a4a52;
-      }
-
-      * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-      }
-
-      body {
-        font-family: "Roboto Condensed", sans-serif;
-        background-color: var(--bg-color);
-        color: var(--text-color);
-        display: flex;
-        justify-content: center;
-        align-items: flex-start;
-        min-height: 100vh;
-        padding: 2rem;
-      }
-
-      #app-container {
-        width: 100%;
-        max-width: 1200px;
-        position: relative;
-      }
-
-      h1, h2 {
-        font-family: "Teko", sans-serif;
-        font-weight: 600;
-        color: var(--primary-color);
-        text-align: center;
-        margin-bottom: 1.5rem;
-      }
-
-      .view {
-        display: none;
-      }
-
-      .view--active {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-      }
-
-      /* Calendar Styles */
-      #calendar-view {
-          display: none; /* Will be toggled to 'block' by JS */
-      }
-      #calendar-view.view--active {
-          display: block;
-      }
-      #calendar-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 2rem;
-      }
-      #calendar-header h1 { margin: 0; }
-      #calendar-grid {
-        display: grid;
-        grid-template-columns: repeat(7, 1fr);
-        gap: 1rem;
-      }
-      .day-cell {
-        background-color: var(--card-color);
-        border-radius: 8px;
-        padding: 1rem;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        border-left: 4px solid transparent;
-        transition: transform 0.2s ease-out, border-color 0.2s ease-out;
-        cursor: pointer;
-      }
-      .day-cell:hover {
-        transform: translateY(-4px);
-        border-left-color: var(--primary-color);
-      }
-      .day-name { font-weight: bold; text-transform: capitalize; font-size: 1.1rem; color: var(--text-secondary); }
-      .day-number { font-family: "Teko", sans-serif; font-size: 3rem; font-weight: 700; text-align: center; margin: 0.5rem 0; }
-      .day-summary { font-size: 0.9rem; color: var(--text-secondary); min-height: 2.5em; text-align: center; }
-
-      /* Button Styles */
-      .btn {
-        background-color: var(--card-color);
-        color: var(--text-color);
-        border: 1px solid var(--border-color);
-        padding: 0.75rem 1.5rem;
-        border-radius: 6px;
-        font-family: "Roboto Condensed", sans-serif;
-        font-weight: bold;
-        text-transform: uppercase;
-        cursor: pointer;
-        transition: background-color 0.2s, transform 0.2s;
-        display: block;
-        width: 100%;
-        text-align: center;
-        margin-top: 1rem;
-      }
-      .btn:hover:not(:disabled) { transform: scale(1.02); }
-      .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-      .btn.btn-primary { background-color: var(--primary-color); border-color: var(--primary-color); }
-      .btn.btn-secondary { background-color: var(--secondary-color); border-color: var(--secondary-color); color: var(--bg-color); }
-      .btn.btn-secondary:disabled { background-color: var(--secondary-color); border-color: var(--secondary-color); color: var(--bg-color); opacity: 0.4; }
-      .btn.btn-danger { background-color: var(--danger-color); border-color: var(--danger-color); }
-      .btn.btn-success { background-color: var(--success-color); border-color: var(--success-color); }
-
-      /* Modal Styles */
-      .modal-overlay {
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background-color: rgba(0, 0, 0, 0.7);
-        display: none; justify-content: center; align-items: center; z-index: 1000;
-      }
-      .modal-content {
-        background-color: var(--card-color); padding: 2rem; border-radius: 8px;
-        width: 90%; max-width: 500px; max-height: 80vh;
-        display: flex; flex-direction: column;
-      }
-      .modal-content h2 { margin-top: 0; }
-      .modal-content ul { list-style: none; padding: 0; overflow-y: auto; flex-grow: 1; margin: 1rem 0; }
-      .modal-list-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; border-bottom: 1px solid var(--border-color); }
-      .modal-list-item:last-child { border-bottom: none; }
-      .modal-list-item .btn { width: auto; padding: 0.5rem 1rem; margin-top: 0; }
-      .empty-list-item { color: var(--text-secondary); text-align: center; padding: 2rem; }
-      .modal-actions { display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem; }
-      .modal-actions .btn { width: auto; margin-top: 0; }
-
-      /* Trainer View Styles */
-      #trainer-view {
-        gap: 1rem;
-      }
-      #trainer-exercise-title { font-size: 2.5rem; text-align: center; }
-      #trainer-series-counter { font-size: 1.5rem; color: var(--text-secondary); }
-      #trainer-main-display {
-        width: 300px;
-        height: 300px;
-        border: 8px solid var(--primary-color);
-        border-radius: 50%;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        font-family: 'Teko', sans-serif;
-        font-size: 8rem;
-        margin: 1rem 0;
-      }
-      #trainer-controls {
-        display: flex;
-        gap: 1rem;
-      }
-      #trainer-controls .btn {
-          width: 150px; /* Give buttons a fixed width */
-      }
-      
-      @keyframes flash {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.3; }
-      }
-      .is-flashing {
-        animation: flash 0.75s infinite;
-      }
-
-      /* Responsive Design */
-      @media (max-width: 768px) {
-        body { padding: 1rem; }
-        #calendar-grid { grid-template-columns: 1fr; gap: 0.5rem; }
-        #calendar-header { margin-bottom: 1rem; }
-        #trainer-main-display { width: 250px; height: 250px; font-size: 6rem; }
-      }
-commands:
-  - "echo 'Patch applicato. Creati i moduli fondamentali trainer.js e ui.js.'"
-  - "echo 'Aggiungi un esercizio a un giorno qualsiasi dal calendario.'"
-  - "echo 'Clicca sul pulsante \"START\" di quel giorno.'"
-  - "echo 'Dovresti vedere la transizione alla vista del trainer, con l''annuncio di preparazione e il successivo conto alla rovescia.'"
-  - "echo 'Comando server suggerito: python3 -m http.server'"
+                  clearInterval

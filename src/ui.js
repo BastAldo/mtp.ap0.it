@@ -35,11 +35,22 @@ export function showView(viewName) {
  * @param {object} state The current state object from the trainer module.
  */
 export function updateTrainerUI(state) {
-  const { exercise, currentSeries, phase, countdown, message } = state;
+  const { exercise, currentSeries, phase, countdown, message, currentState } = state;
 
   trainerExerciseTitle.textContent = exercise ? exercise.name : 'Pronti?';
   trainerSeriesCounter.textContent = exercise ? `Serie ${currentSeries} / ${exercise.series}` : '';
   trainerMainText.textContent = message || countdown;
+  trainerDescription.textContent = phase ? `Fase: ${phase.toUpperCase()}` : '';
+
+  // Update button text and state
+  terminateBtn.disabled = currentState === 'idle' || currentState === 'finished';
+  pauseResumeBtn.disabled = !(currentState === 'action' || currentState === 'paused');
+  
+  if (currentState === 'paused') {
+      pauseResumeBtn.textContent = 'Riprendi';
+  } else {
+      pauseResumeBtn.textContent = 'Pausa';
+  }
 
   // Handle flashing animation for announcements
   if (phase === 'announcing') {
@@ -47,6 +58,17 @@ export function updateTrainerUI(state) {
   } else {
     trainerMainDisplay.classList.remove('is-flashing');
   }
+}
+
+/**
+ * Attaches event listeners to the trainer control buttons.
+ * @param {object} handlers - Object with callback functions.
+ * @param {function} handlers.onPauseResume - The function to call when pause/resume is clicked.
+ * @param {function} handlers.onTerminate - The function to call when terminate is clicked.
+ */
+export function initTrainerControls(handlers) {
+    pauseResumeBtn.addEventListener('click', () => handlers.onPauseResume());
+    terminateBtn.addEventListener('click', () => handlers.onTerminate());
 }
 
 /**

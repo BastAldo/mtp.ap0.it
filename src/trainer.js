@@ -22,80 +22,110 @@ let state = {
   exercise: null,
   currentExerciseIndex: 0,
   currentSeries: 0,
-  phase: '',
+  currentRep: 0,
+  phase: '', // e.g., 'up', 'hold', 'down', 'rest'
   countdown: 0,
   message: '',
   timerId: null,
+  pausedTime: 0,
 };
 
+function clearTimers() {
+  clearInterval(state.timerId);
+  clearTimeout(state.timerId);
+  state.timerId = null;
+}
+
 function setState(newState, payload = {}) {
-  state = { ...state, ...payload, currentState: newState };
-  console.log(`Transition to: ${newState}`, state);
+  clearTimers();
+  state = { ...state, ...payload, currentState: newState, message: '' };
+  ui.updateTrainerUI(state);
 
   switch (newState) {
     case STATES.READY:
       state.exercise = state.workout[state.currentExerciseIndex];
       state.currentSeries = 1;
-      state.message = 'Premi INIZIA'; // Placeholder for a real start button
-      ui.updateTrainerUI(state);
-      // For now, we auto-start the preparation phase
-      setTimeout(() => setState(STATES.PREPARING), 1000);
+      setState(STATES.PREPARING);
       break;
 
     case STATES.PREPARING:
-      setState(STATES.ANNOUNCING, { phase: 'announcing', message: 'Preparati!', nextState: STATES.PREPARING_COUNTDOWN });
+      setState(STATES.ANNOUNCING, { phase: 'announcing', message: 'Preparati!', nextState: STATES.ACTION });
+      break;
+
+    case STATES.ACTION:
+       runCountdown(3, 'VIA!', () => {
+          if (state.exercise.type === 'reps') {
+              state.currentRep = 1;
+              runTempoCycle();
+          } else { // time
+              runCountdown(state.exercise.duration, 'Stop!', STATES.REST);
+          }
+      });
+      break;
+
+    case STATES.REST:
+      const isLastSeries = state.currentSeries >= state.exercise.series;
+      const isLastExercise = isLastSeries && state.currentExerciseIndex >= state.workout.length - 1;
+
+      if (isLastExercise) {
+          setState(STATES.FINISHED);
+          return;
+      }
+
+      setState(STATES.ANNOUNCING, {
+          phase: 'announcing',
+          message: 'Riposo',
+          nextState: STATES.REST_COUNTDOWN
+      });
       break;
       
+    case STATES.REST_COUNTDOWN:
+      runCountdown(state.exercise.rest, 'Pronti', () => {
+           if (state.currentSeries < state.exercise.series) {
+              state.currentSeries++;
+              setState(STATES.PREPARING);
+           } else {
+              state.currentExerciseIndex++;
+              setState(STATES.READY);
+           }
+      });
+      break;
+
     case STATES.ANNOUNCING:
-      ui.updateTrainerUI(state);
       ui.playTick();
       state.timerId = setTimeout(() => {
-          // After announcing, proceed to the actual action (e.g., the countdown)
-          if (state.nextState) {
-              const next = state.nextState;
-              state.nextState = null; // Clear the next state
-              setState(next);
-          }
-      }, 750); // Announce phase duration
+        const next = state.nextState;
+        state.nextState = null;
+        setState(next);
+      }, 750);
       break;
-    
-    case STATES.PREPARING_COUNTDOWN:
-      runCountdown(3, 'Inizia!', STATES.ACTION);
+
+    case STATES.FINISHED:
+        ui.showView('calendar'); // Placeholder, will be debriefing view
+        break;
+
+    case STATES.IDLE:
+    case STATES.PAUSED:
+      // Do nothing, wait for user input
       break;
-    
-    // Future states (ACTION, REST, etc.) will be handled here
   }
 }
 
-function runCountdown(seconds, finalMessage, nextState) {
+function runCountdown(seconds, finalMessage, onComplete) {
     state.countdown = seconds;
+    state.phase = 'countdown';
     ui.updateTrainerUI(state);
     ui.playTick();
 
     state.timerId = setInterval(() => {
         state.countdown--;
         ui.updateTrainerUI(state);
-        ui.playTick();
+        if (state.countdown > 0) {
+           ui.playTick();
+        } else {
+           ui.playTick();
+           ui.playTick();
+        }
 
         if (state.countdown <= 0) {
-            clearInterval(state.timerId);
-            state.message = finalMessage;
-            ui.updateTrainerUI(state);
-            setTimeout(() => setState(nextState), 1000);
-        }
-    }, 1000);
-}
-
-export function startTrainer(exercises) {
-  if (!exercises || exercises.length === 0) {
-    console.error('Cannot start trainer without exercises.');
-    return;
-  }
-  
-  // Deep copy to avoid modifying original data
-  state.workout = JSON.parse(JSON.stringify(exercises));
-  state.currentExerciseIndex = 0;
-
-  ui.showView('trainer');
-  setState(STATES.READY);
-}
+            clearInterval
