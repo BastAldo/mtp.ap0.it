@@ -10,8 +10,10 @@
   --border-color: #4a4a52;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: "Roboto Condensed", sans-serif; background-color: var(--bg-color); color: var(--text-color); display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding: 2rem; }
+body { font-family: "Roboto Condensed", sans-serif; background-color: var(--bg-color); color: var(--text-color); display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding: 1rem; }
 #app-container { width: 100%; max-width: 1200px; position: relative; }
+#main-header { display: flex; justify-content: flex-end; margin-bottom: 1rem; }
+#gemini-btn { width: auto; margin-top: 0; }
 h1, h2 { font-family: "Teko", sans-serif; font-weight: 600; color: var(--primary-color); text-align: center; margin-bottom: 1.5rem; }
 .view { display: none; }
 .view--active { display: flex; flex-direction: column; align-items: center; }
@@ -38,12 +40,14 @@ h1, h2 { font-family: "Teko", sans-serif; font-weight: 600; color: var(--primary
 .modal-content ul { list-style: none; padding: 0; overflow-y: auto; flex-grow: 1; margin: 1rem 0; }
 .modal-list-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; border-bottom: 1px solid var(--border-color); }
 .modal-list-item:last-child { border-bottom: none; }
+.modal-list-item .btn { width: auto; max-width: 120px; /* Fix for library buttons */ margin-top: 0; }
 .empty-list-item { color: var(--text-secondary); text-align: center; padding: 2rem; }
-.modal-actions { display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem; }
+.modal-actions { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem; }
 .modal-actions .btn { width: auto; margin-top: 0; }
 #trainer-view, #debriefing-view { gap: 1rem; }
 #trainer-exercise-title { font-size: 2.5rem; text-align: center; }
 #trainer-series-counter { font-size: 1.5rem; color: var(--text-secondary); min-height: 1.5rem; }
+#trainer-description { color: var(--text-secondary); text-align: center; }
 #trainer-main-display { width: 300px; height: 300px; margin: 1rem 0; position: relative; display: flex; justify-content: center; align-items: center; }
 #trainer-main-text { font-family: 'Teko', sans-serif; font-size: 5.5rem; line-height: 1; text-align: center; }
 #trainer-main-text small { font-size: 2.5rem; color: var(--text-secondary); }
@@ -52,7 +56,7 @@ h1, h2 { font-family: "Teko", sans-serif; font-weight: 600; color: var(--primary
 .progress-ring-fg { fill: transparent; stroke: var(--primary-color); stroke-width: 8; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; stroke-dasharray: 100; stroke-dashoffset: 100; }
 #trainer-controls { display: flex; gap: 1rem; }
 #trainer-controls .btn { width: 150px; }
-#debriefing-summary { list-style: none; padding: 0; width: 100%; max-width: 500px; }
+#debriefing-summary { list-style: none; padding: 0; width: 100%; max-width: 500px; background-color: var(--card-color); border-radius: 8px; }
 #debriefing-report-container { width: 100%; max-width: 500px; }
 #debriefing-report-container textarea { width: 100%; min-height: 150px; background-color: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.5rem; font-family: monospace; }
 @keyframes flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }

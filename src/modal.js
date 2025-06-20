@@ -13,6 +13,7 @@ const modalDateTitle = document.getElementById('modal-date-title');
 const modalExerciseList = document.getElementById('modal-exercise-list');
 const libraryExerciseList = document.getElementById('library-exercise-list');
 const addExerciseBtn = document.getElementById('add-exercise-btn');
+const addAllBtn = document.getElementById('add-all-btn');
 const closeDayModalBtn = document.getElementById('close-day-modal-btn');
 const closeLibraryModalBtn = document.getElementById('close-library-modal-btn');
 
@@ -61,7 +62,7 @@ export function openDayModal(dateKey) {
 
 function closeDayModal() {
   dayModal.style.display = 'none';
-  renderCalendar(); // Re-render calendar to reflect changes
+  renderCalendar();
 }
 
 function openLibraryModal() {
@@ -78,31 +79,35 @@ export function initModals() {
   closeLibraryModalBtn.addEventListener('click', closeLibraryModal);
   addExerciseBtn.addEventListener('click', openLibraryModal);
 
-  // Event delegation for removing exercises
+  addAllBtn.addEventListener('click', () => {
+    storage.saveWorkoutsForDate(currentEditingDateKey, ALL_EXERCISES);
+    renderDayExercises();
+  });
+
   modalExerciseList.addEventListener('click', (event) => {
     if (event.target.matches('.remove-exercise-btn')) {
       const indexToRemove = parseInt(event.target.dataset.index, 10);
       const exercises = storage.getWorkoutsForDate(currentEditingDateKey);
       exercises.splice(indexToRemove, 1);
       storage.saveWorkoutsForDate(currentEditingDateKey, exercises);
-      renderDayExercises(); // Re-render the list
+      renderDayExercises();
     }
   });
 
-  // Event delegation for adding exercises from the library
   libraryExerciseList.addEventListener('click', (event) => {
     if (event.target.matches('.add-from-library-btn')) {
       const exerciseId = event.target.dataset.id;
       const exerciseToAdd = ALL_EXERCISES.find(ex => ex.id === exerciseId);
       if (exerciseToAdd) {
-        const exercises = storage.getWorkoutsForDate(currentEditingDateKey);
-        exercises.push(exerciseToAdd);
-        storage.saveWorkoutsForDate(currentEditingDateKey, exercises);
-        renderDayExercises(); // Re-render the day's list
+        const currentExercises = storage.getWorkoutsForDate(currentEditingDateKey);
+        // Avoid duplicates
+        if (!currentExercises.some(ex => ex.id === exerciseId)) {
+          currentExercises.push(exerciseToAdd);
+          storage.saveWorkoutsForDate(currentEditingDateKey, currentExercises);
+        }
       }
+      renderDayExercises();
       closeLibraryModal();
     }
   });
-
-  console.log('Modal module initialized.');
 }

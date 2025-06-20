@@ -20,7 +20,7 @@ function generateTextReport(workout, lastSeries, terminated) {
 
     workout.forEach((exercise, index) => {
         const seriesCompleted = index < workout.length - 1 ? exercise.series : lastSeries;
-        report += `* ${exercise.name}: ${seriesCompleted} serie completate.\n`;
+        report += `* ${exercise.name}: ${seriesCompleted} / ${exercise.series} serie completate.\n`;
     });
 
     return report;
@@ -31,8 +31,11 @@ export function showDebriefing(workout, lastSeries, terminated = false) {
     workout.forEach((exercise, index) => {
         const seriesCompleted = index < workout.length - 1 ? exercise.series : lastSeries;
         const li = document.createElement('li');
-        li.className = 'modal-list-item';
-        li.textContent = `${exercise.name} (${seriesCompleted} / ${exercise.series} serie)`;
+        li.className = 'modal-list-item'; // Use consistent class
+        li.innerHTML = `
+          <span>${exercise.name}</span>
+          <span>${seriesCompleted} / ${exercise.series} serie</span>
+        `;
         summaryList.appendChild(li);
     });
 

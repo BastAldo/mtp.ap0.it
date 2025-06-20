@@ -13,6 +13,7 @@ const trainerExerciseTitle = document.getElementById('trainer-exercise-title');
 const trainerSeriesCounter = document.getElementById('trainer-series-counter');
 const trainerMainText = document.getElementById('trainer-main-text');
 const trainerMainDisplay = document.getElementById('trainer-main-display');
+const trainerDescription = document.getElementById('trainer-description');
 const startSessionBtn = document.getElementById('start-session-btn');
 const pauseResumeBtn = document.getElementById('pause-resume-btn');
 const terminateBtn = document.getElementById('terminate-btn');
@@ -29,11 +30,22 @@ export function showView(viewName) {
   if (views[viewName]) views[viewName].classList.add('view--active');
 }
 
+function getExerciseDetails(exercise) {
+  if (!exercise) return '';
+  if (exercise.type === 'reps') {
+    const tempo = exercise.tempo;
+    return `${exercise.series} serie × ${exercise.reps} rip. | Tempo: ${tempo.up}s-${tempo.hold}s-${tempo.down}s`;
+  } else { // time
+    return `${exercise.series} serie × ${exercise.duration} secondi`;
+  }
+}
+
 export function updateTrainerUI(state) {
   const { exercise, currentSeries, currentRep, phase, totalDuration, currentState, pausedState } = state;
   const displayState = currentState === 'paused' ? pausedState : state;
 
   trainerExerciseTitle.textContent = displayState.exercise ? displayState.exercise.name : 'Workout';
+  trainerDescription.textContent = getExerciseDetails(displayState.exercise);
   
   if (displayState.exercise) {
     let seriesText = `Serie ${displayState.currentSeries} / ${displayState.exercise.series}`;

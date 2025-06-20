@@ -14,6 +14,9 @@
   </head>
   <body>
     <div id="app-container">
+      <header id="main-header">
+        <a href="https://gemini.google.com" target="_blank" id="gemini-btn" class="btn btn-primary">Apri Gemini</a>
+      </header>
       <div id="calendar-view" class="view view--active">
         <header id="calendar-header">
           <button id="prev-week-btn" class="btn">&lt;</button>
@@ -43,7 +46,7 @@
 
       <div id="debriefing-view" class="view">
         <h1>Workout Completato!</h1>
-        <div id="debriefing-summary"></div>
+        <ul id="debriefing-summary"></ul>
         <div id="debriefing-report-container">
           <h2>Copia per il tuo coach:</h2>
           <textarea id="debriefing-text-report" readonly></textarea>
@@ -62,6 +65,7 @@
         <h2 id="modal-date-title"></h2>
         <ul id="modal-exercise-list"></ul>
         <div class="modal-actions">
+          <button id="add-all-btn" class="btn btn-primary">Aggiungi Tutti</button>
           <button id="add-exercise-btn" class="btn btn-secondary">
             Aggiungi Esercizio
           </button>
