@@ -28,6 +28,7 @@ let state = {
   message: '',
   timerId: null,
   pausedTime: 0,
+  prevState: null
 };
 
 function clearTimers() {
@@ -128,4 +129,65 @@ function runCountdown(seconds, finalMessage, onComplete) {
         }
 
         if (state.countdown <= 0) {
-            clearInterval
+            clearInterval(state.timerId);
+            state.message = finalMessage;
+            ui.updateTrainerUI(state);
+            state.timerId = setTimeout(onComplete, 1000);
+        }
+    }, 1000);
+}
+
+function runTempoCycle() {
+    const tempo = state.exercise.tempo;
+    state.message = `${state.currentRep} / ${state.exercise.reps}`;
+
+    const executePhase = (phaseName, duration, nextPhase) => {
+        if (duration > 0) {
+            state.phase = phaseName;
+            runCountdown(duration, phaseName.toUpperCase(), nextPhase);
+        } else {
+            nextPhase();
+        }
+    };
+    
+    const doDown = () => executePhase('down', tempo.down, doUp);
+    const doHold = () => executePhase('hold', tempo.hold, doDown);
+    const doUp = () => {
+        if (state.currentRep < state.exercise.reps) {
+            state.currentRep++;
+            state.message = `${state.currentRep} / ${state.exercise.reps}`;
+            executePhase('up', tempo.up, doHold);
+        } else {
+            setState(STATES.REST);
+        }
+    };
+    
+    executePhase('up', tempo.up, doHold);
+}
+
+export function startTrainer(exercises) {
+  if (!exercises || exercises.length === 0) return;
+  state.workout = JSON.parse(JSON.stringify(exercises));
+  state.currentExerciseIndex = 0;
+  ui.showView('trainer');
+  setState(STATES.READY);
+}
+
+export function pauseOrResumeTrainer() {
+    if (state.currentState === STATES.PAUSED) {
+        // Resuming: For now, we simply restart the logic of the state we were in.
+        const restartState = state.prevState;
+        setState(restartState);
+    } else {
+        // Pausing
+        clearTimers();
+        state.prevState = state.currentState;
+        setState(STATES.PAUSED);
+    }
+}
+
+export function terminateTrainer() {
+    clearTimers();
+    setState(STATES.IDLE);
+    ui.showView('calendar');
+}
