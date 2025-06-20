@@ -7,7 +7,6 @@ import { ALL_EXERCISES } from './workouts.js';
 import { renderCalendar } from './calendar.js';
 import { startTrainer } from './trainer.js';
 
-// DOM Elements
 const dayModal = document.getElementById('day-modal');
 const libraryModal = document.getElementById('library-modal');
 const modalDateTitle = document.getElementById('modal-date-title');
@@ -20,6 +19,7 @@ const closeDayModalBtn = document.getElementById('close-day-modal-btn');
 const closeLibraryModalBtn = document.getElementById('close-library-modal-btn');
 
 let currentEditingDateKey = null;
+let draggedItemIndex = null;
 
 function renderDayExercises() {
   modalExerciseList.innerHTML = '';
@@ -35,6 +35,8 @@ function renderDayExercises() {
   exercises.forEach((exercise, index) => {
     const li = document.createElement('li');
     li.className = 'modal-list-item';
+    li.draggable = true;
+    li.dataset.index = index;
     
     let content;
     if (exercise.type === 'rest') {
@@ -50,6 +52,9 @@ function renderDayExercises() {
     }
 
     li.innerHTML = `
+      <div class="drag-handle">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M4 11h16v2H4zm0-4h16v2H4zm0 8h16v2H4z"></path></svg>
+      </div>
       <div class="item-name">${content}</div>
       <button class="btn btn-danger remove-exercise-btn" data-index="${index}">Rimuovi</button>
     `;
@@ -83,19 +88,10 @@ function closeDayModal() {
   renderCalendar();
 }
 
-function openLibraryModal() {
-  renderLibrary();
-  libraryModal.style.display = 'flex';
-}
-
-function closeLibraryModal() {
-  libraryModal.style.display = 'none';
-}
-
 export function initModals() {
   closeDayModalBtn.addEventListener('click', closeDayModal);
-  closeLibraryModalBtn.addEventListener('click', closeLibraryModal);
-  addExerciseBtn.addEventListener('click', openLibraryModal);
+  closeLibraryModalBtn.addEventListener('click', () => libraryModal.style.display = 'none');
+  addExerciseBtn.addEventListener('click', () => libraryModal.style.display = 'flex');
 
   addRestBtn.addEventListener('click', () => {
     const currentExercises = storage.getWorkoutsForDate(currentEditingDateKey);
@@ -121,7 +117,7 @@ export function initModals() {
       renderDayExercises();
     }
   });
-
+  
   modalExerciseList.addEventListener('change', (event) => {
       if (event.target.matches('.inline-duration-input')) {
           const indexToUpdate = parseInt(event.target.dataset.index, 10);
@@ -147,4 +143,48 @@ export function initModals() {
       closeLibraryModal();
     }
   });
+
+  // --- Drag and Drop Event Listeners ---
+  modalExerciseList.addEventListener('dragstart', (e) => {
+    draggedItemIndex = parseInt(e.target.dataset.index, 10);
+    e.target.classList.add('dragging');
+  });
+
+  modalExerciseList.addEventListener('dragend', (e) => {
+    e.target.classList.remove('dragging');
+  });
+
+  modalExerciseList.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    const afterElement = getDragAfterElement(modalExerciseList, e.clientY);
+    const dragging = document.querySelector('.dragging');
+    if (afterElement == null) {
+      modalExerciseList.appendChild(dragging);
+    } else {
+      modalExerciseList.insertBefore(dragging, afterElement);
+    }
+  });
+
+  modalExerciseList.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const newIndex = Array.from(modalExerciseList.children).indexOf(e.target.closest('li'));
+    const exercises = storage.getWorkoutsForDate(currentEditingDateKey);
+    const [draggedItem] = exercises.splice(draggedItemIndex, 1);
+    exercises.splice(newIndex, 0, draggedItem);
+    storage.saveWorkoutsForDate(currentEditingDateKey, exercises);
+    renderDayExercises();
+  });
+}
+
+function getDragAfterElement(container, y) {
+  const draggableElements = [...container.querySelectorAll('li:not(.dragging)')];
+  return draggableElements.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closest.offset) {
+      return { offset: offset, element: child };
+    } else {
+      return closest;
+    }
+  }, { offset: Number.NEGATIVE_INFINITY }).element;
 }
