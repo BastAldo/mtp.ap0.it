@@ -24,6 +24,7 @@ let state = {
   phase: '',
   totalDuration: 0,
   animationFrameId: null,
+  // --- Pause/Resume State ---
   timerStartTime: 0,
   timeOffsetMs: 0,
   onTimerComplete: null,
@@ -45,6 +46,7 @@ function setState(newState, payload = {}) {
 
 function transitionTo(phaseText, duration, onCompleteAction) {
   setState(STATES.ANNOUNCING, { phase: phaseText, totalDuration: duration });
+  // Use a standard timeout for the announcing phase delay
   setTimeout(() => {
     if (state.currentState === STATES.ANNOUNCING) {
        if (onCompleteAction) onCompleteAction();
@@ -93,31 +95,35 @@ function runTempoCycle() {
 
 function handleRest() {
   const isLastSeries = state.currentSeries >= state.exercise.series;
-  if (isLastSeries) {
-    const isLastExercise = state.currentExerciseIndex >= state.workout.length - 1;
-    if (isLastExercise) {
+  const isLastExercise = state.currentExerciseIndex >= state.workout.length - 1;
+
+  // The absolute end of the workout. No rest needed.
+  if (isLastSeries && isLastExercise) {
       setState(STATES.FINISHED);
       const result = { ...state, wasTerminated: false };
       showDebriefing(result);
       return;
-    }
   }
-  
+
   const onRestComplete = () => {
-      if (state.currentSeries < state.exercise.series) {
-          state.currentSeries++;
-          startExercise();
-      } else {
+      if (isLastSeries) {
+          // Finished series for this exercise, move to the next.
           state.currentExerciseIndex++;
           state.currentSeries = 1;
           startExercise();
+      } else {
+          // More series of the same exercise.
+          state.currentSeries++;
+          startExercise();
       }
   };
+  
   transitionTo('Riposo', state.exercise.rest, () => runCountdown(state.exercise.rest, 'Riposo', onRestComplete));
 }
 
 function startExercise() {
   state.exercise = state.workout[state.currentExerciseIndex];
+  state.currentRep = 0; // Reset rep count for new exercise
   transitionTo("Pronti?", 3, () => {
       runCountdown(3, 'VIA!', () => {
           if (state.exercise.type === 'reps') {
@@ -143,16 +149,23 @@ export function confirmStart() {
 
 export function pauseOrResumeTrainer() {
   if (state.currentState === STATES.PAUSED) {
+      // RESUMING
       const ps = state.pausedState;
+      // Restore the state machine to where it was
+      state.currentState = ps.currentState; 
+      // Call the appropriate function to resume the timer
       runCountdown(ps.totalDuration, ps.phase, ps.onTimerComplete, ps.timeOffsetMs);
   } else {
+      // PAUSING
       clearTimers();
       const elapsed = (Date.now() - state.timerStartTime) + state.timeOffsetMs;
       const pausedContext = {
+          // Essential timer data
           totalDuration: state.totalDuration,
           phase: state.phase,
           onTimerComplete: state.onTimerComplete,
           timeOffsetMs: elapsed,
+          // Full state for UI
           exercise: state.exercise,
           currentSeries: state.currentSeries,
           currentRep: state.currentRep,
