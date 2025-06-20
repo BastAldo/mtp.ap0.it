@@ -7,7 +7,7 @@ import * as storage from './storage.js';
 import { initCalendar } from './calendar.js';
 import { initModals } from './modal.js';
 import { initTrainerControls } from './ui.js';
-import { pauseOrResumeTrainer, terminateTrainer } from './trainer.js';
+import { confirmStart, pauseOrResumeTrainer, terminateTrainer } from './trainer.js';
 
 
 /**
@@ -22,6 +22,7 @@ function main() {
   initModals();
   // Wire up trainer controls once at startup
   initTrainerControls({
+    onConfirmStart: confirmStart,
     onPauseResume: pauseOrResumeTrainer,
     onTerminate: terminateTrainer
   });
