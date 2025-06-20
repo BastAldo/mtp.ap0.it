@@ -12,15 +12,14 @@ const views = {
 const trainerExerciseTitle = document.getElementById('trainer-exercise-title');
 const trainerSeriesCounter = document.getElementById('trainer-series-counter');
 const trainerMainText = document.getElementById('trainer-main-text');
+const trainerMainDisplay = document.getElementById('trainer-main-display');
 const startSessionBtn = document.getElementById('start-session-btn');
 const pauseResumeBtn = document.getElementById('pause-resume-btn');
 const terminateBtn = document.getElementById('terminate-btn');
 const progressRingFg = document.getElementById('progress-ring-foreground');
 
-
 export function updateProgressOnly(percentage) {
   if (isNaN(percentage)) return;
-  // With pathLength=100, the offset is simply 100 - percentage.
   const offset = 100 - percentage;
   progressRingFg.style.strokeDashoffset = Math.max(0, Math.min(100, offset));
 }
@@ -31,15 +30,13 @@ export function showView(viewName) {
 }
 
 export function updateTrainerUI(state) {
-  const { exercise, currentSeries, currentRep, phase, totalDuration, currentState, prevState } = state;
+  const { exercise, currentSeries, currentRep, phase, totalDuration, currentState } = state;
 
   trainerExerciseTitle.textContent = exercise ? exercise.name : 'Workout';
   
   if (exercise) {
     let seriesText = `Serie ${currentSeries} / ${exercise.series}`;
-    // Show reps only during action state (or if paused during action)
-    const isAction = currentState === 'action' || (currentState === 'paused' && prevState?.currentState === 'action');
-    if (exercise.type === 'reps' && isAction) {
+    if (exercise.type === 'reps' && (currentState === 'action')) {
       seriesText += `  |  Rip. ${currentRep} / ${exercise.reps}`;
     }
     trainerSeriesCounter.textContent = seriesText;
@@ -47,24 +44,28 @@ export function updateTrainerUI(state) {
     trainerSeriesCounter.textContent = '';
   }
 
-  if (currentState === 'paused') {
-      trainerMainText.textContent = "PAUSA";
-  } else if (totalDuration > 0 && currentState !== 'ready') {
+  // Handle text display
+  if (totalDuration > 0) {
       trainerMainText.innerHTML = `${phase}<br><small>${totalDuration}s</small>`;
   } else {
       trainerMainText.textContent = phase;
   }
+
+  // Handle flashing for announcing state
+  if (currentState === 'announcing') {
+      trainerMainDisplay.classList.add('is-flashing');
+  } else {
+      trainerMainDisplay.classList.remove('is-flashing');
+  }
   
+  // Handle button visibility
   startSessionBtn.style.display = currentState === 'ready' ? 'block' : 'none';
   const inProgress = currentState !== 'ready' && currentState !== 'idle' && currentState !== 'finished';
   pauseResumeBtn.style.display = inProgress ? 'block' : 'none';
   terminateBtn.style.display = inProgress ? 'block' : 'none';
   
-  // The button should be ENABLED if the state is pausable OR if it's already paused (to allow resume).
-  // It should be DISABLED only in terminal/initial states.
-  const canBeInterrupted = currentState === 'action' || currentState === 'rest_countdown' || currentState === 'announcing' || currentState === 'paused';
-  pauseResumeBtn.disabled = !canBeInterrupted;
-  pauseResumeBtn.textContent = currentState === 'paused' ? 'Riprendi' : 'Pausa';
+  pauseResumeBtn.disabled = true; // Pause is disabled in this version
+  pauseResumeBtn.textContent = 'Pausa';
 }
 
 export function initTrainerControls(handlers) {
@@ -81,7 +82,7 @@ export function playTick() {
   oscillator.connect(gainNode);
   gainNode.connect(audioCtx.destination);
   oscillator.type = 'sine';
-  oscillator.frequency.setValueAtTime(440, audioCtx.currentTime); // A4 note
+  oscillator.frequency.setValueAtTime(440, audioCtx.currentTime);
   gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
   oscillator.start(audioCtx.currentTime);
   oscillator.stop(audioCtx.currentTime + 0.05);

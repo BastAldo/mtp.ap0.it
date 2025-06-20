@@ -8,10 +8,8 @@ const STATES = {
   IDLE: 'idle',
   READY: 'ready',
   ANNOUNCING: 'announcing',
-  PREPARING: 'preparing',
   ACTION: 'action',
   PAUSED: 'paused',
-  REST: 'rest',
   FINISHED: 'finished',
 };
 
@@ -26,7 +24,7 @@ let state = {
   totalDuration: 0,
   animationFrameId: null,
   timerStartTime: 0,
-  timeOffsetMs: 0, // Time already elapsed when resuming
+  timeOffsetMs: 0,
   onTimerComplete: null,
 };
 
@@ -40,93 +38,49 @@ function setState(newState, payload = {}) {
   state = { ...state, ...payload, currentState: newState };
   ui.updateTrainerUI(state);
 
-  switch (newState) {
-    case STATES.READY:
-      state.exercise = state.workout[state.currentExerciseIndex];
-      state.currentSeries = 1;
-      state.phase = "Pronto?";
-      ui.updateTrainerUI(state);
-      break;
-
-    case STATES.PREPARING:
-      setState(STATES.ANNOUNCING, { phase: 'Preparati!', onTimerComplete: () => setState(STATES.ACTION) });
-      break;
-
-    case STATES.ACTION:
-       runCountdown(3, 'VIA!', () => {
-          if (state.exercise.type === 'reps') {
-              state.currentRep = 1;
-              runTempoCycle();
-          } else {
-              runCountdown(state.exercise.duration, 'Azione', () => setState(STATES.REST));
-          }
-      });
-      break;
-
-    case STATES.REST:
-      const isLastSeries = state.currentSeries >= state.exercise.series;
-      const isLastExercise = isLastSeries && state.currentExerciseIndex >= state.workout.length - 1;
-      if (isLastExercise) {
-          setState(STATES.FINISHED);
-          return;
-      }
-      setState(STATES.ANNOUNCING, { phase: 'Riposo', onTimerComplete: () => setState(STATES.REST_COUNTDOWN) });
-      break;
-
-    case STATES.REST_COUNTDOWN:
-      runCountdown(state.exercise.rest, 'Riposo', () => {
-           if (state.currentSeries < state.exercise.series) {
-              state.currentSeries++;
-              setState(STATES.PREPARING);
-           } else {
-              state.currentExerciseIndex++;
-              setState(STATES.READY);
-           }
-      });
-      break;
-
-    case STATES.ANNOUNCING:
-      runCountdown(0.75, state.phase, state.onTimerComplete);
-      break;
-
-    case STATES.FINISHED:
-        ui.showView('calendar');
-        break;
+  if (newState === STATES.ANNOUNCING) {
+      ui.playTick();
+      setTimeout(() => {
+          if (state.onTimerComplete) state.onTimerComplete();
+      }, 750);
   }
 }
 
-function runCountdown(duration, phaseText, onComplete, timeOffsetMs = 0) {
-    state.totalDuration = duration;
-    state.phase = phaseText;
-    state.onTimerComplete = onComplete;
-    state.timeOffsetMs = timeOffsetMs;
-    state.timerStartTime = Date.now();
+function transitionTo(phaseText, onCompleteAction, duration = 0) {
+  state.phase = phaseText;
+  state.totalDuration = duration;
+  state.onTimerComplete = onCompleteAction;
+  setState(STATES.ANNOUNCING);
+}
 
-    // Initial UI update for the text and series/rep counters
-    ui.updateTrainerUI(state);
+function runCountdown(duration, onComplete) {
+    state.timerStartTime = Date.now();
+    state.timeOffsetMs = 0; // Countdown always starts fresh
 
     const tick = () => {
-        const elapsedMs = (Date.now() - state.timerStartTime) + state.timeOffsetMs;
+        const elapsedMs = Date.now() - state.timerStartTime;
         const progress = Math.min(100, (elapsedMs / (duration * 1000)) * 100);
         ui.updateProgressOnly(progress);
 
         if (elapsedMs >= duration * 1000) {
-            ui.playTick();
             clearTimers();
-            if (state.onTimerComplete) state.onTimerComplete();
+            if (onComplete) onComplete();
         } else {
             state.animationFrameId = requestAnimationFrame(tick);
         }
     };
-    
     tick();
+    ui.updateTrainerUI(state);
 }
 
 function runTempoCycle() {
     const tempo = state.exercise.tempo;
     const executePhase = (phaseName, duration, nextPhase) => {
-        if (duration > 0) runCountdown(duration, phaseName.toUpperCase(), nextPhase);
-        else nextPhase();
+        if (duration > 0) {
+          transitionTo(phaseName.toUpperCase(), () => runCountdown(duration, nextPhase), duration);
+        } else {
+            nextPhase();
+        }
     };
     const doDown = () => executePhase('down', tempo.down, doUp);
     const doHold = () => executePhase('hold', tempo.hold, doDown);
@@ -136,40 +90,69 @@ function runTempoCycle() {
             ui.updateTrainerUI(state);
             executePhase('up', tempo.up, doHold);
         } else {
-            setState(STATES.REST);
+            handleRest();
         }
     };
     doUp();
+}
+
+function handleRest() {
+  const isLastSeries = state.currentSeries >= state.exercise.series;
+  const isLastExercise = isLastSeries && state.currentExerciseIndex >= state.workout.length - 1;
+  if (isLastExercise) {
+      setState(STATES.FINISHED, {phase: 'Completato!'});
+      return;
+  }
+
+  const onRestComplete = () => {
+      if (state.currentSeries < state.exercise.series) {
+          state.currentSeries++;
+          startExercise();
+      } else {
+          state.currentExerciseIndex++;
+          state.exercise = state.workout[state.currentExerciseIndex];
+          state.currentSeries = 1;
+          startExercise();
+      }
+  };
+  
+  transitionTo('Riposo', () => runCountdown(state.exercise.rest, onRestComplete), state.exercise.rest);
+}
+
+function startExercise() {
+  state.exercise = state.workout[state.currentExerciseIndex];
+  transitionTo("Pronti?", () => {
+      runCountdown(3, 'VIA!', () => {
+          setState(STATES.ACTION);
+          if (state.exercise.type === 'reps') {
+              runTempoCycle();
+          } else {
+              transitionTo("Azione", () => runCountdown(state.exercise.duration, handleRest), state.exercise.duration);
+          }
+      }, 3);
+  });
 }
 
 export function startTrainer(exercises) {
   if (!exercises || exercises.length === 0) return;
   state = { ...state, workout: JSON.parse(JSON.stringify(exercises)), currentExerciseIndex: 0 };
   ui.showView('trainer');
-  setState(STATES.READY);
+  setState(STATES.READY, {phase: "Pronto?"});
 }
 
 export function confirmStart() {
-  if (state.currentState === STATES.READY) setState(STATES.PREPARING);
+  if (state.currentState === STATES.READY) {
+      startExercise();
+  }
 }
 
 export function pauseOrResumeTrainer() {
-  if (state.currentState === STATES.PAUSED) {
-      // RESUMING
-      const prevState = state.prevState;
-      state.currentState = prevState.currentState;
-      runCountdown(prevState.totalDuration, prevState.phase, prevState.onTimerComplete, prevState.timeOffsetMs);
-  } else {
-      // PAUSING
-      clearTimers();
-      const elapsed = (Date.now() - state.timerStartTime) + state.timeOffsetMs;
-      const pausedState = { ...state, timeOffsetMs: elapsed }; // Save the exact state when paused
-      setState(STATES.PAUSED, { prevState: pausedState });
-  }
+  // Pause/resume logic is complex with the new transition model and is disabled for now.
+  console.warn("Pause/Resume functionality is currently disabled.");
 }
 
 export function terminateTrainer() {
     clearTimers();
-    state = { ...state, currentState: STATES.IDLE }; // Reset state
+    state = { ...state, currentState: STATES.IDLE };
     ui.showView('calendar');
 }
