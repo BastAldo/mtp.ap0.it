@@ -30,16 +30,16 @@ function generateTextReport(result) {
     }
 
     result.workout.forEach((exercise, index) => {
-        if (index > result.currentExerciseIndex) return;
+        if (result.wasTerminated && index > result.currentExerciseIndex) return;
         
         const details = getExerciseDetails(exercise);
         report += `* ${exercise.name} ${details}:\n`;
 
-        if (index < result.currentExerciseIndex) {
+        if (!result.wasTerminated || index < result.currentExerciseIndex) {
             report += `  - Completato\n`;
         } else {
             if (exercise.type === 'rest') {
-                report += `  - Eseguito\n`;
+                report += `  - Eseguito parzialmente\n`;
             } else {
                 const seriesText = `  - Arrivato a ${result.currentSeries} / ${exercise.series} serie`;
                 const repText = exercise.type === 'reps' && result.currentRep > 0 ? `, ${result.currentRep} rip.` : '';
@@ -54,7 +54,7 @@ function generateTextReport(result) {
 export function showDebriefing(result) {
     summaryList.innerHTML = '';
     result.workout.forEach((exercise, index) => {
-        if (index > result.currentExerciseIndex && result.wasTerminated) return;
+        if (result.wasTerminated && index > result.currentExerciseIndex) return;
         
         const li = document.createElement('li');
         li.className = 'modal-list-item';

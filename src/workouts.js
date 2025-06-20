@@ -1,35 +1,18 @@
 /**
  * @file workouts.js
- * ---
- * Defines the complete list of all available exercises in the application.
- * This acts as the central database of workouts.
- *
- * Each exercise object has the following structure:
- * - id: A unique string identifier.
- * - name: The display name of the exercise.
- * - type: 'reps' or 'time'.
- *
- * For 'reps' type:
- * - series: Number of sets.
- * - reps: Number of repetitions per set.
- * - rest: Rest time in seconds between sets.
- * - tempo: An object { up, hold, down } defining the time in seconds for each phase of a rep.
- *
- * For 'time' type:
- * - series: Number of sets.
- * - duration: Duration in seconds for each set.
- * - rest: Rest time in seconds between sets.
+ * Contains the master list of all available exercises in the application.
  */
 
 export const ALL_EXERCISES = [
   {
-    id: 'fakepushup',
-    name: 'fake Piegamenti sulle braccia',
+    id: 'pushup',
+    name: 'Push Up',
     type: 'reps',
-    series: 1,
-    reps: 1,
-    rest: 6,
-    tempo: { up: 1, hold: 0, down: 2 },
+    series: 3,
+    reps: 10,
+    rest: 60, // seconds
+    tempo: { up: 1, hold: 1, down: 2 }, // seconds
+    description: "Esercizio a corpo libero per pettorali, tricipiti e spalle. Mantenere il corpo in linea retta dalla testa ai talloni."
   },
   {
     id: 'squat',
@@ -39,32 +22,26 @@ export const ALL_EXERCISES = [
     reps: 12,
     rest: 60,
     tempo: { up: 1, hold: 0, down: 2 },
-  },
-  {
-    id: 'pushup',
-    name: 'Piegamenti sulle braccia',
-    type: 'reps',
-    series: 3,
-    reps: 10,
-    rest: 60,
-    tempo: { up: 1, hold: 0, down: 2 },
+    description: "Esercizio fondamentale per gambe e glutei. Scendere come per sedersi su una sedia, mantenendo la schiena dritta."
   },
   {
     id: 'plank',
     name: 'Plank',
     type: 'time',
-    series: 3,
+    series: 1,
     duration: 45, // seconds
     rest: 45,
+    description: "Esercizio isometrico per il core. Mantenere una linea retta e contrarre gli addominali per tutta la durata."
   },
   {
-    id: 'lunges',
-    name: 'Affondi',
+    id: 'burpees',
+    name: 'Burpees',
     type: 'reps',
-    series: 3,
-    reps: 10, // per gamba
-    rest: 60,
+    series: 4,
+    reps: 8,
+    rest: 90,
     tempo: { up: 1, hold: 0, down: 1 },
+    description: "Esercizio total body ad alta intensità. Combina un push-up, uno squat e un salto verticale in un unico movimento fluido."
   },
   {
     id: 'jumping_jacks',
@@ -72,15 +49,17 @@ export const ALL_EXERCISES = [
     type: 'time',
     series: 1,
     duration: 60,
-    rest: 0,
+    rest: 30,
+    description: "Esercizio cardiovascolare classico per riscaldamento o per aumentare la frequenza cardiaca."
   },
   {
-    id: 'burpees',
-    name: 'Burpees',
+    id: 'calf_raises',
+    name: 'Calf Raises',
     type: 'reps',
     series: 3,
-    reps: 8,
-    rest: 90,
-    tempo: null, // Not tempo-based
-  },
+    reps: 15,
+    rest: 45,
+    tempo: { up: 1, hold: 1, down: 2 },
+    description: "Esercizio di isolamento per i polpacci. Sollevarsi sulla punta dei piedi, mantenere la contrazione e scendere lentamente."
+  }
 ];

@@ -12,7 +12,6 @@ const currentWeekRange = document.getElementById('current-week-range');
 const prevWeekBtn = document.getElementById('prev-week-btn');
 const nextWeekBtn = document.getElementById('next-week-btn');
 
-// State
 let currentDate = new Date();
 
 function formatDateKey(date) {
@@ -35,7 +34,6 @@ function formatWeekRange(start, end) {
 
 export function renderCalendar(date = currentDate) {
   const dateForWeek = new Date(date);
-  
   const dayOfWeek = dateForWeek.getDay();
   const offsetToMonday = (dayOfWeek === 0) ? 6 : dayOfWeek - 1;
   dateForWeek.setDate(dateForWeek.getDate() - offsetToMonday);
@@ -45,29 +43,42 @@ export function renderCalendar(date = currentDate) {
   weekEnd.setDate(weekStart.getDate() + 6);
   
   currentWeekRange.textContent = formatWeekRange(weekStart, weekEnd);
+  const history = storage.getHistory();
 
   calendarGrid.innerHTML = '';
   for (let i = 0; i < 7; i++) {
     const day = new Date(weekStart);
     day.setDate(weekStart.getDate() + i);
-    const dayCell = document.createElement('div');
     const dateKey = formatDateKey(day);
+
+    const dayCell = document.createElement('div');
     dayCell.className = 'day-cell';
     dayCell.dataset.date = dateKey;
+
     const dayName = day.toLocaleDateString('it-IT', { weekday: 'long' });
     const dayNumber = day.getDate();
-    const exercises = storage.getWorkoutsForDate(dateKey);
-    const exerciseCount = exercises.length;
+
+    const scheduledExercises = storage.getWorkoutsForDate(dateKey);
+    const hasHistory = history[dateKey] && history[dateKey].length > 0;
+    
     let summaryText = 'Nessun esercizio';
-    if (exerciseCount > 0) {
-      summaryText = `${exerciseCount} ${exerciseCount > 1 ? 'esercizi' : 'esercizio'}`;
+    if (scheduledExercises.length > 0) {
+      summaryText = `${scheduledExercises.length} ${scheduledExercises.length > 1 ? 'esercizi' : 'esercizio'}`;
     }
+    
+    let historyIndicator = '';
+    if(hasHistory) {
+      summaryText = 'Completato';
+      historyIndicator = `<div class="day-history-indicator">✓</div>`;
+    }
+
     dayCell.innerHTML = `
       <div class="day-name">${dayName}</div>
-      <div class="day-number">${dayNumber}</div>
+      <div class="day-number">${dayNumber} ${historyIndicator}</div>
       <div class="day-summary">${summaryText}</div>
-      <button class="btn btn-secondary start-workout-btn" data-date="${dateKey}" ${exerciseCount === 0 ? 'disabled' : ''}>START</button>
+      <button class="btn btn-secondary start-workout-btn" data-date="${dateKey}" ${scheduledExercises.length === 0 ? 'disabled' : ''}>START</button>
     `;
+
     calendarGrid.appendChild(dayCell);
   }
 }
@@ -92,7 +103,7 @@ export function initCalendar() {
     if (target.matches('.start-workout-btn')) {
       const exercises = storage.getWorkoutsForDate(dateKey);
       if (exercises.length > 0) {
-        startTrainer(exercises);
+        startTrainer(exercises, dateKey);
       }
     } else {
       openDayModal(dateKey);
