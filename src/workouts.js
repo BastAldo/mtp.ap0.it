@@ -46,5 +46,14 @@ export const ALL_EXERCISES = [
     series: 2,
     duration: 60,
     rest: 30
+  },
+  {
+    id: 'calf_raises',
+    name: 'Calf Raises',
+    type: 'reps',
+    series: 3,
+    reps: 15,
+    rest: 45,
+    tempo: { up: 1, hold: 1, down: 2 }
   }
 ];
