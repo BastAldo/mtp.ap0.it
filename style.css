@@ -29,8 +29,12 @@ h1, h2 { font-family: "Teko", sans-serif; font-weight: 600; color: var(--primary
 #calendar-view { display: none; }
 #calendar-view.view--active { display: block; }
 #calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
-#calendar-header h2 { margin: 0; font-size: 2rem; }
-#calendar-header .btn { flex-shrink: 0; }
+#calendar-header h2 { margin: 0; font-size: 2rem; padding: 0 1rem; text-align: center; }
+#calendar-header .btn {
+  width: auto; /* Override generic .btn width */
+  flex-shrink: 0;
+  margin-top: 0;
+}
 #calendar-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

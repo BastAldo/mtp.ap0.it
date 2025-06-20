@@ -34,12 +34,10 @@ function formatWeekRange(start, end) {
 }
 
 export function renderCalendar(date = currentDate) {
-  // Create a local copy to avoid mutating the module-level state unintentionally
   const dateForWeek = new Date(date);
   
-  // Robustly calculate the Monday of the week for the given date
-  const dayOfWeek = dateForWeek.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-  const offsetToMonday = (dayOfWeek === 0) ? 6 : dayOfWeek - 1; // Calculate how many days to go back
+  const dayOfWeek = dateForWeek.getDay();
+  const offsetToMonday = (dayOfWeek === 0) ? 6 : dayOfWeek - 1;
   dateForWeek.setDate(dateForWeek.getDate() - offsetToMonday);
   
   const weekStart = new Date(dateForWeek);
@@ -52,30 +50,24 @@ export function renderCalendar(date = currentDate) {
   for (let i = 0; i < 7; i++) {
     const day = new Date(weekStart);
     day.setDate(weekStart.getDate() + i);
-
     const dayCell = document.createElement('div');
     const dateKey = formatDateKey(day);
     dayCell.className = 'day-cell';
     dayCell.dataset.date = dateKey;
-
     const dayName = day.toLocaleDateString('it-IT', { weekday: 'long' });
     const dayNumber = day.getDate();
-
     const exercises = storage.getWorkoutsForDate(dateKey);
     const exerciseCount = exercises.length;
-
     let summaryText = 'Nessun esercizio';
     if (exerciseCount > 0) {
       summaryText = `${exerciseCount} ${exerciseCount > 1 ? 'esercizi' : 'esercizio'}`;
     }
-
     dayCell.innerHTML = `
       <div class="day-name">${dayName}</div>
       <div class="day-number">${dayNumber}</div>
       <div class="day-summary">${summaryText}</div>
       <button class="btn btn-secondary start-workout-btn" data-date="${dateKey}" ${exerciseCount === 0 ? 'disabled' : ''}>START</button>
     `;
-
     calendarGrid.appendChild(dayCell);
   }
 }
