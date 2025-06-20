@@ -35,9 +35,22 @@ function renderDayExercises() {
   exercises.forEach((exercise, index) => {
     const li = document.createElement('li');
     li.className = 'modal-list-item';
-    const name = exercise.type === 'rest' ? `Recupero ${exercise.duration}s` : exercise.name;
+    
+    let content;
+    if (exercise.type === 'rest') {
+      content = `
+        <span>Recupero</span>
+        <div class="inline-input-group">
+          <input type="number" value="${exercise.duration}" min="1" class="inline-duration-input" data-index="${index}" />
+          <span>s</span>
+        </div>
+      `;
+    } else {
+      content = `<span>${exercise.name}</span>`;
+    }
+
     li.innerHTML = `
-      <span>${name}</span>
+      <div class="item-name">${content}</div>
       <button class="btn btn-danger remove-exercise-btn" data-index="${index}">Rimuovi</button>
     `;
     modalExerciseList.appendChild(li);
@@ -85,13 +98,10 @@ export function initModals() {
   addExerciseBtn.addEventListener('click', openLibraryModal);
 
   addRestBtn.addEventListener('click', () => {
-    const duration = parseInt(prompt("Inserisci la durata del recupero in secondi:", "60"), 10);
-    if (duration && !isNaN(duration)) {
-      const currentExercises = storage.getWorkoutsForDate(currentEditingDateKey);
-      currentExercises.push({ id: `rest_${Date.now()}`, type: 'rest', name: 'Recupero', duration: duration });
-      storage.saveWorkoutsForDate(currentEditingDateKey, currentExercises);
-      renderDayExercises();
-    }
+    const currentExercises = storage.getWorkoutsForDate(currentEditingDateKey);
+    currentExercises.push({ id: `rest_${Date.now()}`, type: 'rest', name: 'Recupero', duration: 60 });
+    storage.saveWorkoutsForDate(currentEditingDateKey, currentExercises);
+    renderDayExercises();
   });
 
   startFromModalBtn.addEventListener('click', () => {
@@ -112,13 +122,25 @@ export function initModals() {
     }
   });
 
+  modalExerciseList.addEventListener('change', (event) => {
+      if (event.target.matches('.inline-duration-input')) {
+          const indexToUpdate = parseInt(event.target.dataset.index, 10);
+          const newDuration = parseInt(event.target.value, 10);
+          const exercises = storage.getWorkoutsForDate(currentEditingDateKey);
+          if (exercises[indexToUpdate] && exercises[indexToUpdate].type === 'rest' && !isNaN(newDuration) && newDuration > 0) {
+              exercises[indexToUpdate].duration = newDuration;
+              storage.saveWorkoutsForDate(currentEditingDateKey, exercises);
+          }
+      }
+  });
+
   libraryExerciseList.addEventListener('click', (event) => {
     if (event.target.matches('.add-from-library-btn')) {
       const exerciseId = event.target.dataset.id;
       const exerciseToAdd = ALL_EXERCISES.find(ex => ex.id === exerciseId);
       if (exerciseToAdd) {
         const currentExercises = storage.getWorkoutsForDate(currentEditingDateKey);
-        currentExercises.push(exerciseToAdd);
+        currentExercises.push(JSON.parse(JSON.stringify(exerciseToAdd)));
         storage.saveWorkoutsForDate(currentEditingDateKey, currentExercises);
       }
       renderDayExercises();
