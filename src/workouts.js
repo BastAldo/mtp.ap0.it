@@ -14,7 +14,7 @@ export const ALL_EXERCISES = [
     tempo: { up: 1, hold: 1, down: 2 } // seconds
   },
   {
-    id: 'pushup FAKE',
+    id: 'pushup_FAKE',
     name: 'Push Up FAKE',
     type: 'reps',
     series: 1,
