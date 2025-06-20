@@ -14,9 +14,6 @@
   </head>
   <body>
     <div id="app-container">
-      <header id="main-header">
-        <a href="https://gemini.google.com" target="_blank" id="gemini-btn" class="btn btn-primary">Apri Gemini</a>
-      </header>
       <div id="calendar-view" class="view view--active">
         <header id="calendar-header">
           <button id="prev-week-btn" class="btn">&lt;</button>
@@ -45,18 +42,21 @@
       </div>
 
       <div id="debriefing-view" class="view">
-        <h1>Workout Completato!</h1>
+        <h1>Workout Concluso</h1>
         <ul id="debriefing-summary"></ul>
         <div id="debriefing-report-container">
-          <h2>Copia per il tuo coach:</h2>
+          <h2>Report da Condividere:</h2>
           <textarea id="debriefing-text-report" readonly></textarea>
           <button id="copy-report-btn" class="btn btn-primary">
             Copia Report
           </button>
         </div>
-        <button id="return-to-calendar-btn" class="btn btn-secondary">
-          Torna al Calendario
-        </button>
+        <div class="debriefing-actions">
+          <a href="https://gemini.google.com/gem/3ddd32ed1a1a/644b02d78c11a9ed" target="_blank" id="gemini-btn" class="btn btn-primary">Incolla su Gemini</a>
+          <button id="return-to-calendar-btn" class="btn btn-secondary">
+            Torna al Calendario
+          </button>
+        </div>
       </div>
     </div>
 

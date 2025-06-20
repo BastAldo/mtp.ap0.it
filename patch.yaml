@@ -1,18 +1,12 @@
-commit_message: "feat(ui): Implement multiple UI/UX improvements and new features"
+commit_message: "fix(debriefing): Add full details to report and relocate Gemini button"
 rationale: |
-  Questo patch implementa una serie di miglioramenti e nuove funzionalità basate su un feedback dettagliato dell'utente, con l'obiettivo di migliorare la coerenza grafica, l'usabilità e aggiungere valore.
+  Questo patch corregge due importanti punti sollevati dall'utente, migliorando la precisione del report di debriefing e l'usabilità del flusso di condivisione.
 
-  1.  **Fix Layout Libreria Esercizi:** Il layout rotto nel modale della libreria è stato corretto. Il problema era nel CSS: ho modificato lo stile del pulsante all'interno della lista (`.modal-list-item .btn`) per impedirgli di occupare tutta la larghezza disponibile e per allinearsi correttamente a destra.
+  1.  **Report di Debriefing Dettagliato:** La logica in `debriefing.js` è stata completamente riscritta per essere più informativa. Ora il report testuale e il riepilogo visivo mostrano i dettagli completi di ogni esercizio (serie, ripetizioni, durata, tempo). Fondamentalmente, ora gestisce correttamente anche gli allenamenti interrotti, specificando l'esatta serie e ripetizione in cui l'utente si è fermato.
 
-  2.  **Coerenza Grafica Debriefing:** Hai ragione, la lista nel debriefing non era coerente. Ho aggiornato `debriefing.js` per utilizzare la stessa classe CSS (`.modal-list-item`) e la stessa struttura HTML usata nei modali, garantendo così uno stile uniforme in tutta l'applicazione.
+  2.  **Spostamento Pulsante Gemini:** Il pulsante per aprire Gemini è stato rimosso dall'header globale e spostato nella vista di Debriefing. Questa nuova posizione è strategicamente migliore, in quanto si allinea al workflow dell'utente: completare l'allenamento, copiare il report e avere immediatamente a disposizione il link per incollarlo e discuterne con Gemini.
 
-  3.  **Dettagli Esercizio nel Trainer:** Per dare più contesto durante l'allenamento, la vista del trainer ora mostra i dettagli dell'esercizio corrente (serie, ripetizioni/durata, tempo) nell'area descrittiva sotto l'anello di progresso. La funzione `updateTrainerUI` in `ui.js` è stata potenziata per questo scopo.
-
-  4.  **Nuova Funzione "Aggiungi Tutti":** Per velocizzare la creazione di workout di test o molto intensi, ho aggiunto il pulsante "Aggiungi Tutti" nel modale dell'allenamento giornaliero. Questo pulsante popola la giornata con tutti gli esercizi disponibili dalla libreria.
-
-  5.  **Aggiunta Pulsante Gemini:** Come richiesto, ho aggiunto un pulsante "Apri Gemini" nell'header. Questo link apre Gemini in un nuovo tab, come da te suggerito.
-
-  6.  **Storico Allenamenti (Prossimo Passo):** La richiesta dello storico è eccellente ma richiede modifiche significative al modello dati e alla logica del calendario. Per implementarla correttamente e senza fretta, verrà affrontata nel prossimo aggiornamento dedicato.
+  3.  **Miglioramento Strutturale:** Per supportare report più dettagliati, la comunicazione tra `trainer.js` e `debriefing.js` è stata migliorata, passando un oggetto di stato più ricco al termine del workout.
 patches:
   - file: index.html
     content: |
@@ -32,9 +26,6 @@ patches:
         </head>
         <body>
           <div id="app-container">
-            <header id="main-header">
-              <a href="https://gemini.google.com" target="_blank" id="gemini-btn" class="btn btn-primary">Apri Gemini</a>
-            </header>
             <div id="calendar-view" class="view view--active">
               <header id="calendar-header">
                 <button id="prev-week-btn" class="btn">&lt;</button>
@@ -63,18 +54,21 @@ patches:
             </div>
 
             <div id="debriefing-view" class="view">
-              <h1>Workout Completato!</h1>
+              <h1>Workout Concluso</h1>
               <ul id="debriefing-summary"></ul>
               <div id="debriefing-report-container">
-                <h2>Copia per il tuo coach:</h2>
+                <h2>Report da Condividere:</h2>
                 <textarea id="debriefing-text-report" readonly></textarea>
                 <button id="copy-report-btn" class="btn btn-primary">
                   Copia Report
                 </button>
               </div>
-              <button id="return-to-calendar-btn" class="btn btn-secondary">
-                Torna al Calendario
-              </button>
+              <div class="debriefing-actions">
+                <a href="https://gemini.google.com/gem/3ddd32ed1a1a/644b02d78c11a9ed" target="_blank" id="gemini-btn" class="btn btn-primary">Incolla su Gemini</a>
+                <button id="return-to-calendar-btn" class="btn btn-secondary">
+                  Torna al Calendario
+                </button>
+              </div>
             </div>
           </div>
 
@@ -105,212 +99,175 @@ patches:
           <script type="module" src="src/main.js"></script>
         </body>
       </html>
-  - file: src/ui.js
+  - file: src/trainer.js
     content: |
       /**
-       * @file ui.js
-       * Responsible for all direct DOM manipulations and user feedback (visual/audio).
+       * @file trainer.js
+       * Contains the entire state machine logic for the training session.
        */
+      import * as ui from './ui.js';
+      import { showDebriefing } from './debriefing.js';
 
-      // --- Elements ---
-      const views = {
-        calendar: document.getElementById('calendar-view'),
-        trainer: document.getElementById('trainer-view'),
-        debriefing: document.getElementById('debriefing-view')
+      const STATES = {
+        IDLE: 'idle',
+        READY: 'ready',
+        ANNOUNCING: 'announcing',
+        ACTION: 'action',
+        PAUSED: 'paused',
+        FINISHED: 'finished',
       };
-      const trainerExerciseTitle = document.getElementById('trainer-exercise-title');
-      const trainerSeriesCounter = document.getElementById('trainer-series-counter');
-      const trainerMainText = document.getElementById('trainer-main-text');
-      const trainerMainDisplay = document.getElementById('trainer-main-display');
-      const trainerDescription = document.getElementById('trainer-description');
-      const startSessionBtn = document.getElementById('start-session-btn');
-      const pauseResumeBtn = document.getElementById('pause-resume-btn');
-      const terminateBtn = document.getElementById('terminate-btn');
-      const progressRingFg = document.getElementById('progress-ring-foreground');
 
-      export function updateProgressOnly(percentage) {
-        if (isNaN(percentage)) return;
-        const offset = 100 - percentage;
-        progressRingFg.style.strokeDashoffset = Math.max(0, Math.min(100, offset));
+      let state = {
+        currentState: STATES.IDLE,
+        workout: [],
+        exercise: null,
+        currentExerciseIndex: 0,
+        currentSeries: 0,
+        currentRep: 0,
+        phase: '',
+        totalDuration: 0,
+        animationFrameId: null,
+        timerStartTime: 0,
+        timeOffsetMs: 0,
+        onTimerComplete: null,
+        pausedState: null,
+      };
+
+      function clearTimers() {
+        cancelAnimationFrame(state.animationFrameId);
+        state.animationFrameId = null;
       }
 
-      export function showView(viewName) {
-        Object.values(views).forEach(view => view.classList.remove('view--active'));
-        if (views[viewName]) views[viewName].classList.add('view--active');
-      }
-
-      function getExerciseDetails(exercise) {
-        if (!exercise) return '';
-        if (exercise.type === 'reps') {
-          const tempo = exercise.tempo;
-          return `${exercise.series} serie × ${exercise.reps} rip. | Tempo: ${tempo.up}s-${tempo.hold}s-${tempo.down}s`;
-        } else { // time
-          return `${exercise.series} serie × ${exercise.duration} secondi`;
+      function setState(newState, payload = {}) {
+        clearTimers();
+        state = { ...state, ...payload, currentState: newState };
+        if (newState !== STATES.PAUSED) {
+            ui.updateTrainerUI(state);
         }
       }
 
-      export function updateTrainerUI(state) {
-        const { exercise, currentSeries, currentRep, phase, totalDuration, currentState, pausedState } = state;
-        const displayState = currentState === 'paused' ? pausedState : state;
-
-        trainerExerciseTitle.textContent = displayState.exercise ? displayState.exercise.name : 'Workout';
-        trainerDescription.textContent = getExerciseDetails(displayState.exercise);
-        
-        if (displayState.exercise) {
-          let seriesText = `Serie ${displayState.currentSeries} / ${displayState.exercise.series}`;
-          const isAction = currentState === 'action' || (currentState === 'paused' && pausedState?.currentState === 'action');
-          if (displayState.exercise.type === 'reps' && isAction) {
-            seriesText += `  |  Rip. ${displayState.currentRep} / ${displayState.exercise.reps}`;
+      function transitionTo(phaseText, duration, onCompleteAction) {
+        setState(STATES.ANNOUNCING, { phase: phaseText, totalDuration: duration });
+        setTimeout(() => {
+          if (state.currentState === STATES.ANNOUNCING) {
+             if (onCompleteAction) onCompleteAction();
           }
-          trainerSeriesCounter.textContent = seriesText;
-        } else {
-          trainerSeriesCounter.textContent = '';
-        }
-
-        if (currentState === 'paused') {
-            const interruptedPhase = pausedState?.phase || '';
-            trainerMainText.innerHTML = `PAUSA<br><small style="text-transform: capitalize;">${interruptedPhase.toLowerCase()}</small>`;
-        } else if (displayState.totalDuration > 0) {
-            trainerMainText.innerHTML = `${displayState.phase}<br><small>${displayState.totalDuration}s</small>`;
-        } else {
-            trainerMainText.textContent = displayState.phase;
-        }
-
-        if (currentState === 'announcing') {
-            trainerMainDisplay.classList.add('is-flashing');
-        } else {
-            trainerMainDisplay.classList.remove('is-flashing');
-        }
-        
-        startSessionBtn.style.display = currentState === 'ready' ? 'block' : 'none';
-        const inProgress = currentState !== 'ready' && currentState !== 'idle' && currentState !== 'finished';
-        pauseResumeBtn.style.display = inProgress ? 'block' : 'none';
-        terminateBtn.style.display = inProgress ? 'block' : 'none';
-        
-        const canBeInterrupted = currentState === 'action' || currentState === 'announcing' || currentState === 'paused';
-        pauseResumeBtn.disabled = !canBeInterrupted;
-        pauseResumeBtn.textContent = currentState === 'paused' ? 'Riprendi' : 'Pausa';
+        }, 750);
       }
 
-      export function initTrainerControls(handlers) {
-          startSessionBtn.addEventListener('click', () => handlers.onConfirmStart());
-          pauseResumeBtn.addEventListener('click', () => handlers.onPauseResume());
-          terminateBtn.addEventListener('click', () => handlers.onTerminate());
-      }
-  - file: src/modal.js
-    content: |
-      /**
-       * @file modal.js
-       * Handles all logic for the workout editor and exercise library modals.
-       */
-      import * as storage from './storage.js';
-      import { ALL_EXERCISES } from './workouts.js';
-      import { renderCalendar } from './calendar.js';
-
-      // DOM Elements
-      const dayModal = document.getElementById('day-modal');
-      const libraryModal = document.getElementById('library-modal');
-      const modalDateTitle = document.getElementById('modal-date-title');
-      const modalExerciseList = document.getElementById('modal-exercise-list');
-      const libraryExerciseList = document.getElementById('library-exercise-list');
-      const addExerciseBtn = document.getElementById('add-exercise-btn');
-      const addAllBtn = document.getElementById('add-all-btn');
-      const closeDayModalBtn = document.getElementById('close-day-modal-btn');
-      const closeLibraryModalBtn = document.getElementById('close-library-modal-btn');
-
-      // State
-      let currentEditingDateKey = null;
-
-      function renderDayExercises() {
-        modalExerciseList.innerHTML = '';
-        const exercises = storage.getWorkoutsForDate(currentEditingDateKey);
-        if (exercises.length === 0) {
-          modalExerciseList.innerHTML = `<li class="empty-list-item">Aggiungi un esercizio per iniziare.</li>`;
-          return;
-        }
-
-        exercises.forEach((exercise, index) => {
-          const li = document.createElement('li');
-          li.className = 'modal-list-item';
-          li.innerHTML = `
-            <span>${exercise.name}</span>
-            <button class="btn btn-danger remove-exercise-btn" data-index="${index}">Rimuovi</button>
-          `;
-          modalExerciseList.appendChild(li);
-        });
-      }
-
-      function renderLibrary() {
-        libraryExerciseList.innerHTML = '';
-        ALL_EXERCISES.forEach(exercise => {
-          const li = document.createElement('li');
-          li.className = 'modal-list-item';
-          li.innerHTML = `
-            <span>${exercise.name}</span>
-            <button class="btn btn-success add-from-library-btn" data-id="${exercise.id}">Aggiungi</button>
-          `;
-          libraryExerciseList.appendChild(li);
-        });
-      }
-
-      export function openDayModal(dateKey) {
-        currentEditingDateKey = dateKey;
-        const date = new Date(dateKey + 'T00:00:00'); // Ensure correct date object
-        modalDateTitle.textContent = `Allenamento per ${date.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}`;
-        renderDayExercises();
-        dayModal.style.display = 'flex';
-      }
-
-      function closeDayModal() {
-        dayModal.style.display = 'none';
-        renderCalendar();
-      }
-
-      function openLibraryModal() {
-        renderLibrary();
-        libraryModal.style.display = 'flex';
-      }
-
-      function closeLibraryModal() {
-        libraryModal.style.display = 'none';
-      }
-
-      export function initModals() {
-        closeDayModalBtn.addEventListener('click', closeDayModal);
-        closeLibraryModalBtn.addEventListener('click', closeLibraryModal);
-        addExerciseBtn.addEventListener('click', openLibraryModal);
-
-        addAllBtn.addEventListener('click', () => {
-          storage.saveWorkoutsForDate(currentEditingDateKey, ALL_EXERCISES);
-          renderDayExercises();
-        });
-
-        modalExerciseList.addEventListener('click', (event) => {
-          if (event.target.matches('.remove-exercise-btn')) {
-            const indexToRemove = parseInt(event.target.dataset.index, 10);
-            const exercises = storage.getWorkoutsForDate(currentEditingDateKey);
-            exercises.splice(indexToRemove, 1);
-            storage.saveWorkoutsForDate(currentEditingDateKey, exercises);
-            renderDayExercises();
-          }
-        });
-
-        libraryExerciseList.addEventListener('click', (event) => {
-          if (event.target.matches('.add-from-library-btn')) {
-            const exerciseId = event.target.dataset.id;
-            const exerciseToAdd = ALL_EXERCISES.find(ex => ex.id === exerciseId);
-            if (exerciseToAdd) {
-              const currentExercises = storage.getWorkoutsForDate(currentEditingDateKey);
-              // Avoid duplicates
-              if (!currentExercises.some(ex => ex.id === exerciseId)) {
-                currentExercises.push(exerciseToAdd);
-                storage.saveWorkoutsForDate(currentEditingDateKey, currentExercises);
+      function runCountdown(duration, phaseText, onComplete, timeOffsetMs = 0) {
+          setState(STATES.ACTION, { phase: phaseText, totalDuration: duration });
+          state.onTimerComplete = onComplete;
+          state.timeOffsetMs = timeOffsetMs;
+          state.timerStartTime = Date.now();
+          const tick = () => {
+              const elapsedMs = (Date.now() - state.timerStartTime) + state.timeOffsetMs;
+              const progress = Math.min(100, (elapsedMs / (duration * 1000)) * 100);
+              ui.updateProgressOnly(progress);
+              if (elapsedMs >= duration * 1000) {
+                  clearTimers();
+                  if (state.onTimerComplete) state.onTimerComplete();
+              } else {
+                  state.animationFrameId = requestAnimationFrame(tick);
               }
+          };
+          tick();
+      }
+      
+      function runTempoCycle() {
+          const tempo = state.exercise.tempo;
+          const executePhase = (phaseName, duration, nextPhase) => {
+              if (duration > 0) transitionTo(phaseName.toUpperCase(), duration, () => runCountdown(duration, phaseName.toUpperCase(), nextPhase));
+              else nextPhase();
+          };
+          const doDown = () => executePhase('down', tempo.down, doUp);
+          const doHold = () => executePhase('hold', tempo.hold, doDown);
+          const doUp = () => {
+              if (state.currentRep < state.exercise.reps) {
+                  state.currentRep++;
+                  ui.updateTrainerUI(state);
+                  executePhase('up', tempo.up, doHold);
+              } else {
+                  handleRest();
+              }
+          };
+          doUp();
+      }
+
+      function handleRest() {
+        const isLastSeries = state.currentSeries >= state.exercise.series;
+        const isLastExercise = isLastSeries && state.currentExerciseIndex >= state.workout.length - 1;
+        if (isLastExercise) {
+            setState(STATES.FINISHED);
+            const result = { ...state, wasTerminated: false };
+            showDebriefing(result);
+            return;
+        }
+        const onRestComplete = () => {
+            if (state.currentSeries < state.exercise.series) {
+                state.currentSeries++;
+                startExercise();
+            } else {
+                state.currentExerciseIndex++;
+                state.currentSeries = 1;
+                startExercise();
             }
-            renderDayExercises();
-            closeLibraryModal();
-          }
+        };
+        transitionTo('Riposo', state.exercise.rest, () => runCountdown(state.exercise.rest, 'Riposo', onRestComplete));
+      }
+
+      function startExercise() {
+        state.exercise = state.workout[state.currentExerciseIndex];
+        transitionTo("Pronti?", 3, () => {
+            runCountdown(3, 'VIA!', () => {
+                if (state.exercise.type === 'reps') {
+                    runTempoCycle();
+                } else {
+                    transitionTo("Azione", state.exercise.duration, () => runCountdown(state.exercise.duration, "Azione", handleRest));
+                }
+            });
         });
+      }
+
+      export function startTrainer(exercises) {
+        if (!exercises || exercises.length === 0) return;
+        const freshState = { workout: JSON.parse(JSON.stringify(exercises)), currentExerciseIndex: 0 };
+        state = { ...state, ...freshState };
+        ui.showView('trainer');
+        setState(STATES.READY, {phase: "Pronto?"});
+      }
+
+      export function confirmStart() {
+        if (state.currentState === STATES.READY) startExercise();
+      }
+
+      export function pauseOrResumeTrainer() {
+        if (state.currentState === STATES.PAUSED) {
+            const ps = state.pausedState;
+            runCountdown(ps.totalDuration, ps.phase, ps.onTimerComplete, ps.timeOffsetMs);
+        } else {
+            clearTimers();
+            const elapsed = (Date.now() - state.timerStartTime) + state.timeOffsetMs;
+            const pausedContext = {
+                totalDuration: state.totalDuration,
+                phase: state.phase,
+                onTimerComplete: state.onTimerComplete,
+                timeOffsetMs: elapsed,
+                exercise: state.exercise,
+                currentSeries: state.currentSeries,
+                currentRep: state.currentRep,
+                currentState: state.currentState
+            };
+            setState(STATES.PAUSED, { pausedState: pausedContext });
+            ui.updateTrainerUI(state);
+        }
+      }
+
+      export function terminateTrainer() {
+          clearTimers();
+          const result = { ...state, wasTerminated: true };
+          showDebriefing(result);
+          setState(STATES.IDLE, { phase: '' });
       }
   - file: src/debriefing.js
     content: |
@@ -326,36 +283,64 @@ patches:
       const copyBtn = document.getElementById('copy-report-btn');
       const returnBtn = document.getElementById('return-to-calendar-btn');
 
-      function generateTextReport(workout, lastSeries, terminated) {
+      function getExerciseDetails(exercise) {
+        if (!exercise) return '';
+        if (exercise.type === 'reps') {
+          return `(${exercise.series} × ${exercise.reps} rip., Tempo: ${exercise.tempo.up}-${exercise.tempo.hold}-${exercise.tempo.down})`;
+        }
+        return `(${exercise.series} × ${exercise.duration}s)`;
+      }
+
+      function generateTextReport(result) {
           let report = `Report Allenamento del ${new Date().toLocaleDateString('it-IT')}:\n`;
-          if (terminated) {
+          if (result.wasTerminated) {
               report += "(Allenamento interrotto manualmente)\n\n";
           } else {
               report += "(Allenamento completato)\n\n";
           }
 
-          workout.forEach((exercise, index) => {
-              const seriesCompleted = index < workout.length - 1 ? exercise.series : lastSeries;
-              report += `* ${exercise.name}: ${seriesCompleted} / ${exercise.series} serie completate.\n`;
+          result.workout.forEach((exercise, index) => {
+              if (index > result.currentExerciseIndex) return;
+
+              const details = getExerciseDetails(exercise);
+              report += `* ${exercise.name} ${details}:\n`;
+
+              if (index < result.currentExerciseIndex) {
+                  report += `  - Completato (${exercise.series} / ${exercise.series} serie)\n`;
+              } else {
+                  const seriesText = `  - Arrivato a ${result.currentSeries} / ${exercise.series} serie`;
+                  const repText = exercise.type === 'reps' && result.currentRep > 0 ? `, ${result.currentRep} rip.` : '';
+                  report += `${seriesText}${repText}\n`;
+              }
           });
 
           return report;
       }
 
-      export function showDebriefing(workout, lastSeries, terminated = false) {
+      export function showDebriefing(result) {
           summaryList.innerHTML = '';
-          workout.forEach((exercise, index) => {
-              const seriesCompleted = index < workout.length - 1 ? exercise.series : lastSeries;
+          result.workout.forEach((exercise, index) => {
+              if (index > result.currentExerciseIndex) return;
+              
               const li = document.createElement('li');
-              li.className = 'modal-list-item'; // Use consistent class
+              li.className = 'modal-list-item';
+              const details = getExerciseDetails(exercise);
+
+              let status = '';
+              if (index < result.currentExerciseIndex) {
+                  status = `${exercise.series} / ${exercise.series} serie`;
+              } else {
+                  status = `Serie ${result.currentSeries}, Rip. ${result.currentRep}`;
+              }
+
               li.innerHTML = `
-                <span>${exercise.name}</span>
-                <span>${seriesCompleted} / ${exercise.series} serie</span>
+                <span class="debrief-exercise-name">${exercise.name} <small>${details}</small></span>
+                <span class="debrief-status">${status}</span>
               `;
               summaryList.appendChild(li);
           });
 
-          reportTextArea.value = generateTextReport(workout, lastSeries, terminated);
+          reportTextArea.value = generateTextReport(result);
           showView('debriefing');
       }
 
@@ -390,8 +375,6 @@ patches:
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body { font-family: "Roboto Condensed", sans-serif; background-color: var(--bg-color); color: var(--text-color); display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding: 1rem; }
       #app-container { width: 100%; max-width: 1200px; position: relative; }
-      #main-header { display: flex; justify-content: flex-end; margin-bottom: 1rem; }
-      #gemini-btn { width: auto; margin-top: 0; }
       h1, h2 { font-family: "Teko", sans-serif; font-weight: 600; color: var(--primary-color); text-align: center; margin-bottom: 1.5rem; }
       .view { display: none; }
       .view--active { display: flex; flex-direction: column; align-items: center; }
@@ -418,14 +401,14 @@ patches:
       .modal-content ul { list-style: none; padding: 0; overflow-y: auto; flex-grow: 1; margin: 1rem 0; }
       .modal-list-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; border-bottom: 1px solid var(--border-color); }
       .modal-list-item:last-child { border-bottom: none; }
-      .modal-list-item .btn { width: auto; max-width: 120px; /* Fix for library buttons */ margin-top: 0; }
+      .modal-list-item .btn { width: auto; max-width: 120px; margin-top: 0; }
       .empty-list-item { color: var(--text-secondary); text-align: center; padding: 2rem; }
       .modal-actions { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem; }
       .modal-actions .btn { width: auto; margin-top: 0; }
       #trainer-view, #debriefing-view { gap: 1rem; }
       #trainer-exercise-title { font-size: 2.5rem; text-align: center; }
       #trainer-series-counter { font-size: 1.5rem; color: var(--text-secondary); min-height: 1.5rem; }
-      #trainer-description { color: var(--text-secondary); text-align: center; }
+      #trainer-description { color: var(--text-secondary); text-align: center; padding: 0 1rem; }
       #trainer-main-display { width: 300px; height: 300px; margin: 1rem 0; position: relative; display: flex; justify-content: center; align-items: center; }
       #trainer-main-text { font-family: 'Teko', sans-serif; font-size: 5.5rem; line-height: 1; text-align: center; }
       #trainer-main-text small { font-size: 2.5rem; color: var(--text-secondary); }
@@ -435,8 +418,11 @@ patches:
       #trainer-controls { display: flex; gap: 1rem; }
       #trainer-controls .btn { width: 150px; }
       #debriefing-summary { list-style: none; padding: 0; width: 100%; max-width: 500px; background-color: var(--card-color); border-radius: 8px; }
+      .debrief-exercise-name small { color: var(--text-secondary); }
       #debriefing-report-container { width: 100%; max-width: 500px; }
       #debriefing-report-container textarea { width: 100%; min-height: 150px; background-color: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.5rem; font-family: monospace; }
+      .debriefing-actions { display: flex; gap: 1rem; width: 100%; max-width: 500px; }
+      .debriefing-actions .btn { flex-grow: 1; }
       @keyframes flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
       .is-flashing { animation: flash 0.75s infinite; }
       @media (max-width: 768px) {

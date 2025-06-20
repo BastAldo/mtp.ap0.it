@@ -96,7 +96,8 @@ function handleRest() {
   const isLastExercise = isLastSeries && state.currentExerciseIndex >= state.workout.length - 1;
   if (isLastExercise) {
       setState(STATES.FINISHED);
-      showDebriefing(state.workout, state.currentSeries);
+      const result = { ...state, wasTerminated: false };
+      showDebriefing(result);
       return;
   }
   const onRestComplete = () => {
@@ -127,7 +128,8 @@ function startExercise() {
 
 export function startTrainer(exercises) {
   if (!exercises || exercises.length === 0) return;
-  state = { ...state, workout: JSON.parse(JSON.stringify(exercises)), currentExerciseIndex: 0 };
+  const freshState = { workout: JSON.parse(JSON.stringify(exercises)), currentExerciseIndex: 0 };
+  state = { ...state, ...freshState };
   ui.showView('trainer');
   setState(STATES.READY, {phase: "Pronto?"});
 }
@@ -160,6 +162,7 @@ export function pauseOrResumeTrainer() {
 
 export function terminateTrainer() {
     clearTimers();
-    showDebriefing(state.workout, state.currentSeries, true);
+    const result = { ...state, wasTerminated: true };
+    showDebriefing(result);
     setState(STATES.IDLE, { phase: '' });
 }

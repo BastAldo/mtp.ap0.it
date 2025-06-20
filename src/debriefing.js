@@ -10,36 +10,64 @@ const reportTextArea = document.getElementById('debriefing-text-report');
 const copyBtn = document.getElementById('copy-report-btn');
 const returnBtn = document.getElementById('return-to-calendar-btn');
 
-function generateTextReport(workout, lastSeries, terminated) {
+function getExerciseDetails(exercise) {
+  if (!exercise) return '';
+  if (exercise.type === 'reps') {
+    return `(${exercise.series} × ${exercise.reps} rip., Tempo: ${exercise.tempo.up}-${exercise.tempo.hold}-${exercise.tempo.down})`;
+  }
+  return `(${exercise.series} × ${exercise.duration}s)`;
+}
+
+function generateTextReport(result) {
     let report = `Report Allenamento del ${new Date().toLocaleDateString('it-IT')}:\n`;
-    if (terminated) {
+    if (result.wasTerminated) {
         report += "(Allenamento interrotto manualmente)\n\n";
     } else {
         report += "(Allenamento completato)\n\n";
     }
 
-    workout.forEach((exercise, index) => {
-        const seriesCompleted = index < workout.length - 1 ? exercise.series : lastSeries;
-        report += `* ${exercise.name}: ${seriesCompleted} / ${exercise.series} serie completate.\n`;
+    result.workout.forEach((exercise, index) => {
+        if (index > result.currentExerciseIndex) return;
+
+        const details = getExerciseDetails(exercise);
+        report += `* ${exercise.name} ${details}:\n`;
+
+        if (index < result.currentExerciseIndex) {
+            report += `  - Completato (${exercise.series} / ${exercise.series} serie)\n`;
+        } else {
+            const seriesText = `  - Arrivato a ${result.currentSeries} / ${exercise.series} serie`;
+            const repText = exercise.type === 'reps' && result.currentRep > 0 ? `, ${result.currentRep} rip.` : '';
+            report += `${seriesText}${repText}\n`;
+        }
     });
 
     return report;
 }
 
-export function showDebriefing(workout, lastSeries, terminated = false) {
+export function showDebriefing(result) {
     summaryList.innerHTML = '';
-    workout.forEach((exercise, index) => {
-        const seriesCompleted = index < workout.length - 1 ? exercise.series : lastSeries;
+    result.workout.forEach((exercise, index) => {
+        if (index > result.currentExerciseIndex) return;
+        
         const li = document.createElement('li');
-        li.className = 'modal-list-item'; // Use consistent class
+        li.className = 'modal-list-item';
+        const details = getExerciseDetails(exercise);
+
+        let status = '';
+        if (index < result.currentExerciseIndex) {
+            status = `${exercise.series} / ${exercise.series} serie`;
+        } else {
+            status = `Serie ${result.currentSeries}, Rip. ${result.currentRep}`;
+        }
+
         li.innerHTML = `
-          <span>${exercise.name}</span>
-          <span>${seriesCompleted} / ${exercise.series} serie</span>
+          <span class="debrief-exercise-name">${exercise.name} <small>${details}</small></span>
+          <span class="debrief-status">${status}</span>
         `;
         summaryList.appendChild(li);
     });
 
-    reportTextArea.value = generateTextReport(workout, lastSeries, terminated);
+    reportTextArea.value = generateTextReport(result);
     showView('debriefing');
 }
 
