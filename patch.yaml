@@ -1,191 +1,47 @@
-commit_message: "fix(trainer): Correct flashing state and implement robust pause/resume"
+commit_message: "feat(debriefing): Implement debriefing view and refine pause UI"
 rationale: |
-  Questo patch corregge due bug critici nell'interfaccia del trainer: il lampeggio persistente e la funzionalità di pausa non funzionante.
+  Questo patch introduce l'ultima vista principale dell'applicazione, il Debriefing, e apporta un piccolo ma significativo miglioramento all'interfaccia della modalità pausa.
 
-  1.  **Correzione Stato Lampeggiante:** Il problema del lampeggio continuo era dovuto a una gestione errata dello stato in `trainer.js`. Lo stato non veniva aggiornato dopo la fase di 'announcing', lasciando l'UI bloccata in quella modalità visiva. Il flusso è stato corretto per garantire che lo `currentState` venga esplicitamente cambiato al termine del preavviso, rimuovendo così la classe `.is-flashing`.
+  1.  **UI Pausa Migliorata:** Come da richiesta, l'interfaccia utente ora mostra quale fase specifica è stata interrotta quando il workout è in pausa. Questa modifica, contenuta in `ui.js`, aumenta la chiarezza per l'utente.
 
-  2.  **Implementazione Pausa/Ripresa Robusta:** La funzionalità di pausa/ripresa, precedentemente disabilitata, è stata completamente implementata.
-      - In `trainer.js`, la funzione `pauseOrResumeTrainer` ora salva correttamente lo stato del timer (usando `Date.now()` per calcolare l'offset in millisecondi) e lo ripristina alla ripresa.
-      - La funzione `runCountdown` è stata aggiornata per accettare un `timeOffsetMs` e riprendere l'animazione dal punto esatto in cui si era interrotta.
-      - In `ui.js`, la logica per abilitare/disabilitare il pulsante di pausa è stata corretta per permettere all'utente di cliccare su "Pausa" e "Riprendi" nei momenti appropriati.
+  2.  **Nuovo Modulo `debriefing.js`:** Per mantere l'architettura pulita e modulare, tutta la logica per la vista di riepilogo è stata incapsulata in un nuovo modulo. Questo modulo è responsabile per il rendering del riepilogo, la generazione del report testuale e la gestione dei suoi controlli (copia e torna al calendario).
+
+  3.  **Flusso di Fine Workout:** Il modulo `trainer.js` è stato aggiornato per reindirizzare l'utente alla vista di debriefing al termine di un allenamento (sia per completamento naturale che per interruzione manuale). Il trainer ora passa i dati del workout completato al modulo di debriefing.
+
+  4.  **Funzionalità di Copia:** È stata implementata la funzionalità "Copia su Appunti" utilizzando l'API `navigator.clipboard`, fornendo un modo semplice per l'utente di condividere il report del proprio allenamento.
 patches:
-  - file: src/trainer.js
+  - file: src/main.js
     content: |
       /**
-       * @file trainer.js
-       * Contains the entire state machine logic for the training session.
+       * @file main.js
+       * The main entry point for the application.
+       * Orchestrates all other modules.
        */
-      import * as ui from './ui.js';
+      import { initCalendar } from './calendar.js';
+      import { initModals } from './modal.js';
+      import { initTrainerControls } from './ui.js';
+      import { confirmStart, pauseOrResumeTrainer, terminateTrainer } from './trainer.js';
+      import { initDebriefing } from './debriefing.js';
 
-      const STATES = {
-        IDLE: 'idle',
-        READY: 'ready',
-        ANNOUNCING: 'announcing',
-        ACTION: 'action',
-        PAUSED: 'paused',
-        FINISHED: 'finished',
-      };
-
-      let state = {
-        currentState: STATES.IDLE,
-        workout: [],
-        exercise: null,
-        currentExerciseIndex: 0,
-        currentSeries: 0,
-        currentRep: 0,
-        phase: '',
-        totalDuration: 0,
-        animationFrameId: null,
-        // --- Pause/Resume State ---
-        timerStartTime: 0,
-        timeOffsetMs: 0,
-        onTimerComplete: null,
-        pausedState: null,
-      };
-
-      function clearTimers() {
-        cancelAnimationFrame(state.animationFrameId);
-        state.animationFrameId = null;
-      }
-
-      function setState(newState, payload = {}) {
-        clearTimers();
-        state = { ...state, ...payload, currentState: newState };
-        ui.updateTrainerUI(state);
-      }
-
-      function transitionTo(phaseText, duration, onCompleteAction) {
-        setState(STATES.ANNOUNCING, { phase: phaseText, totalDuration: duration });
-        setTimeout(() => {
-          if (state.currentState === STATES.ANNOUNCING) { // Ensure we haven't been paused/terminated
-             if (onCompleteAction) onCompleteAction();
-          }
-        }, 750);
-      }
-
-      function runCountdown(duration, phaseText, onComplete, timeOffsetMs = 0) {
-          setState(STATES.ACTION, { phase: phaseText, totalDuration: duration });
-          
-          state.onTimerComplete = onComplete;
-          state.timeOffsetMs = timeOffsetMs;
-          state.timerStartTime = Date.now();
-
-          const tick = () => {
-              const elapsedMs = (Date.now() - state.timerStartTime) + state.timeOffsetMs;
-              const progress = Math.min(100, (elapsedMs / (duration * 1000)) * 100);
-              ui.updateProgressOnly(progress);
-
-              if (elapsedMs >= duration * 1000) {
-                  clearTimers();
-                  if (state.onTimerComplete) state.onTimerComplete();
-              } else {
-                  state.animationFrameId = requestAnimationFrame(tick);
-              }
-          };
-          tick();
-      }
-      
-      function runTempoCycle() {
-          const tempo = state.exercise.tempo;
-          const executePhase = (phaseName, duration, nextPhase) => {
-              if (duration > 0) {
-                transitionTo(phaseName.toUpperCase(), duration, () => runCountdown(duration, phaseName.toUpperCase(), nextPhase));
-              } else {
-                  nextPhase();
-              }
-          };
-          const doDown = () => executePhase('down', tempo.down, doUp);
-          const doHold = () => executePhase('hold', tempo.hold, doDown);
-          const doUp = () => {
-              if (state.currentRep < state.exercise.reps) {
-                  state.currentRep++;
-                  ui.updateTrainerUI(state); // Update rep counter before starting phase
-                  executePhase('up', tempo.up, doHold);
-              } else {
-                  handleRest();
-              }
-          };
-          doUp();
-      }
-
-      function handleRest() {
-        const isLastSeries = state.currentSeries >= state.exercise.series;
-        const isLastExercise = isLastSeries && state.currentExerciseIndex >= state.workout.length - 1;
-        if (isLastExercise) {
-            setState(STATES.FINISHED, {phase: 'Completato!'});
-            setTimeout(() => ui.showView('calendar'), 2000);
-            return;
-        }
-
-        const onRestComplete = () => {
-            if (state.currentSeries < state.exercise.series) {
-                state.currentSeries++;
-                startExercise();
-            } else {
-                state.currentExerciseIndex++;
-                state.currentSeries = 1;
-                startExercise();
-            }
-        };
+      /**
+       * The main function to initialize the application.
+       */
+      function main() {
+        console.log('Application Initialized.');
         
-        transitionTo('Riposo', state.exercise.rest, () => runCountdown(state.exercise.rest, 'Riposo', onRestComplete));
-      }
-
-      function startExercise() {
-        state.exercise = state.workout[state.currentExerciseIndex];
-        transitionTo("Pronti?", 3, () => {
-            runCountdown(3, 'VIA!', () => {
-                if (state.exercise.type === 'reps') {
-                    runTempoCycle();
-                } else {
-                    transitionTo("Azione", state.exercise.duration, () => runCountdown(state.exercise.duration, "Azione", handleRest));
-                }
-            });
+        // Initialize all primary components
+        initCalendar();
+        initModals();
+        initDebriefing();
+        initTrainerControls({
+          onConfirmStart: confirmStart,
+          onPauseResume: pauseOrResumeTrainer,
+          onTerminate: terminateTrainer
         });
       }
 
-      export function startTrainer(exercises) {
-        if (!exercises || exercises.length === 0) return;
-        state = { ...state, workout: JSON.parse(JSON.stringify(exercises)), currentExerciseIndex: 0 };
-        ui.showView('trainer');
-        setState(STATES.READY, {phase: "Pronto?"});
-      }
-
-      export function confirmStart() {
-        if (state.currentState === STATES.READY) {
-            startExercise();
-        }
-      }
-
-      export function pauseOrResumeTrainer() {
-        if (state.currentState === STATES.PAUSED) {
-            // RESUMING
-            const ps = state.pausedState;
-            runCountdown(ps.totalDuration, ps.phase, ps.onTimerComplete, ps.timeOffsetMs);
-        } else {
-            // PAUSING
-            clearTimers();
-            const elapsed = (Date.now() - state.timerStartTime) + state.timeOffsetMs;
-            // Save all context needed to resume the countdown
-            const pausedState = {
-                totalDuration: state.totalDuration,
-                phase: state.phase,
-                onTimerComplete: state.onTimerComplete,
-                timeOffsetMs: elapsed,
-                // also save visual state
-                exercise: state.exercise,
-                currentSeries: state.currentSeries,
-                currentRep: state.currentRep,
-            };
-            setState(STATES.PAUSED, { pausedState });
-        }
-      }
-
-      export function terminateTrainer() {
-          clearTimers();
-          setState(STATES.IDLE, { phase: '' });
-          ui.showView('calendar');
-      }
+      // Initialize the app once the DOM is fully loaded.
+      document.addEventListener('DOMContentLoaded', main);
   - file: src/ui.js
     content: |
       /**
@@ -221,14 +77,14 @@ patches:
 
       export function updateTrainerUI(state) {
         const { exercise, currentSeries, currentRep, phase, totalDuration, currentState, pausedState } = state;
-
         const displayState = currentState === 'paused' ? pausedState : state;
 
         trainerExerciseTitle.textContent = displayState.exercise ? displayState.exercise.name : 'Workout';
         
         if (displayState.exercise) {
           let seriesText = `Serie ${displayState.currentSeries} / ${displayState.exercise.series}`;
-          if (displayState.exercise.type === 'reps') {
+          const isAction = currentState === 'action' || (currentState === 'paused' && pausedState?.currentState === 'action');
+          if (displayState.exercise.type === 'reps' && isAction) {
             seriesText += `  |  Rip. ${displayState.currentRep} / ${displayState.exercise.reps}`;
           }
           trainerSeriesCounter.textContent = seriesText;
@@ -237,7 +93,8 @@ patches:
         }
 
         if (currentState === 'paused') {
-            trainerMainText.textContent = "PAUSA";
+            const interruptedPhase = pausedState?.phase || '';
+            trainerMainText.innerHTML = `PAUSA<br><small style="text-transform: capitalize;">${interruptedPhase.toLowerCase()}</small>`;
         } else if (displayState.totalDuration > 0) {
             trainerMainText.innerHTML = `${displayState.phase}<br><small>${displayState.totalDuration}s</small>`;
         } else {
@@ -265,9 +122,297 @@ patches:
           pauseResumeBtn.addEventListener('click', () => handlers.onPauseResume());
           terminateBtn.addEventListener('click', () => handlers.onTerminate());
       }
+  - file: src/trainer.js
+    content: |
+      /**
+       * @file trainer.js
+       * Contains the entire state machine logic for the training session.
+       */
+      import * as ui from './ui.js';
+      import { showDebriefing } from './debriefing.js';
 
-      let audioCtx;
-      export function playTick() {
-        // Method body removed for brevity in this example.
-        // Assume it works as intended.
+      const STATES = {
+        IDLE: 'idle',
+        READY: 'ready',
+        ANNOUNCING: 'announcing',
+        ACTION: 'action',
+        PAUSED: 'paused',
+        FINISHED: 'finished',
+      };
+
+      let state = {
+        currentState: STATES.IDLE,
+        workout: [],
+        exercise: null,
+        currentExerciseIndex: 0,
+        currentSeries: 0,
+        currentRep: 0,
+        phase: '',
+        totalDuration: 0,
+        animationFrameId: null,
+        timerStartTime: 0,
+        timeOffsetMs: 0,
+        onTimerComplete: null,
+        pausedState: null,
+      };
+
+      function clearTimers() {
+        cancelAnimationFrame(state.animationFrameId);
+        state.animationFrameId = null;
+      }
+
+      function setState(newState, payload = {}) {
+        clearTimers();
+        state = { ...state, ...payload, currentState: newState };
+        if (newState !== STATES.PAUSED) {
+            ui.updateTrainerUI(state);
+        }
+      }
+
+      function transitionTo(phaseText, duration, onCompleteAction) {
+        setState(STATES.ANNOUNCING, { phase: phaseText, totalDuration: duration });
+        setTimeout(() => {
+          if (state.currentState === STATES.ANNOUNCING) {
+             if (onCompleteAction) onCompleteAction();
+          }
+        }, 750);
+      }
+
+      function runCountdown(duration, phaseText, onComplete, timeOffsetMs = 0) {
+          setState(STATES.ACTION, { phase: phaseText, totalDuration: duration });
+          state.onTimerComplete = onComplete;
+          state.timeOffsetMs = timeOffsetMs;
+          state.timerStartTime = Date.now();
+          const tick = () => {
+              const elapsedMs = (Date.now() - state.timerStartTime) + state.timeOffsetMs;
+              const progress = Math.min(100, (elapsedMs / (duration * 1000)) * 100);
+              ui.updateProgressOnly(progress);
+              if (elapsedMs >= duration * 1000) {
+                  clearTimers();
+                  if (state.onTimerComplete) state.onTimerComplete();
+              } else {
+                  state.animationFrameId = requestAnimationFrame(tick);
+              }
+          };
+          tick();
+      }
+      
+      function runTempoCycle() {
+          const tempo = state.exercise.tempo;
+          const executePhase = (phaseName, duration, nextPhase) => {
+              if (duration > 0) transitionTo(phaseName.toUpperCase(), duration, () => runCountdown(duration, phaseName.toUpperCase(), nextPhase));
+              else nextPhase();
+          };
+          const doDown = () => executePhase('down', tempo.down, doUp);
+          const doHold = () => executePhase('hold', tempo.hold, doDown);
+          const doUp = () => {
+              if (state.currentRep < state.exercise.reps) {
+                  state.currentRep++;
+                  ui.updateTrainerUI(state);
+                  executePhase('up', tempo.up, doHold);
+              } else {
+                  handleRest();
+              }
+          };
+          doUp();
+      }
+
+      function handleRest() {
+        const isLastSeries = state.currentSeries >= state.exercise.series;
+        const isLastExercise = isLastSeries && state.currentExerciseIndex >= state.workout.length - 1;
+        if (isLastExercise) {
+            setState(STATES.FINISHED);
+            showDebriefing(state.workout, state.currentSeries);
+            return;
+        }
+        const onRestComplete = () => {
+            if (state.currentSeries < state.exercise.series) {
+                state.currentSeries++;
+                startExercise();
+            } else {
+                state.currentExerciseIndex++;
+                state.currentSeries = 1;
+                startExercise();
+            }
+        };
+        transitionTo('Riposo', state.exercise.rest, () => runCountdown(state.exercise.rest, 'Riposo', onRestComplete));
+      }
+
+      function startExercise() {
+        state.exercise = state.workout[state.currentExerciseIndex];
+        transitionTo("Pronti?", 3, () => {
+            runCountdown(3, 'VIA!', () => {
+                if (state.exercise.type === 'reps') {
+                    runTempoCycle();
+                } else {
+                    transitionTo("Azione", state.exercise.duration, () => runCountdown(state.exercise.duration, "Azione", handleRest));
+                }
+            });
+        });
+      }
+
+      export function startTrainer(exercises) {
+        if (!exercises || exercises.length === 0) return;
+        state = { ...state, workout: JSON.parse(JSON.stringify(exercises)), currentExerciseIndex: 0 };
+        ui.showView('trainer');
+        setState(STATES.READY, {phase: "Pronto?"});
+      }
+
+      export function confirmStart() {
+        if (state.currentState === STATES.READY) startExercise();
+      }
+
+      export function pauseOrResumeTrainer() {
+        if (state.currentState === STATES.PAUSED) {
+            const ps = state.pausedState;
+            runCountdown(ps.totalDuration, ps.phase, ps.onTimerComplete, ps.timeOffsetMs);
+        } else {
+            clearTimers();
+            const elapsed = (Date.now() - state.timerStartTime) + state.timeOffsetMs;
+            const pausedContext = {
+                totalDuration: state.totalDuration,
+                phase: state.phase,
+                onTimerComplete: state.onTimerComplete,
+                timeOffsetMs: elapsed,
+                exercise: state.exercise,
+                currentSeries: state.currentSeries,
+                currentRep: state.currentRep,
+                currentState: state.currentState
+            };
+            setState(STATES.PAUSED, { pausedState: pausedContext });
+            ui.updateTrainerUI(state);
+        }
+      }
+
+      export function terminateTrainer() {
+          clearTimers();
+          showDebriefing(state.workout, state.currentSeries, true);
+          setState(STATES.IDLE, { phase: '' });
+      }
+  - file: src/debriefing.js
+    content: |
+      /**
+       * @file debriefing.js
+       * Handles the display and logic of the post-workout debriefing screen.
+       */
+      import { showView } from './ui.js';
+      import { renderCalendar } from './calendar.js';
+
+      const summaryList = document.getElementById('debriefing-summary');
+      const reportTextArea = document.getElementById('debriefing-text-report');
+      const copyBtn = document.getElementById('copy-report-btn');
+      const returnBtn = document.getElementById('return-to-calendar-btn');
+
+      function generateTextReport(workout, lastSeries, terminated) {
+          let report = `Report Allenamento del ${new Date().toLocaleDateString('it-IT')}:\n`;
+          if (terminated) {
+              report += "(Allenamento interrotto manualmente)\n\n";
+          } else {
+              report += "(Allenamento completato)\n\n";
+          }
+
+          workout.forEach((exercise, index) => {
+              const seriesCompleted = index < workout.length - 1 ? exercise.series : lastSeries;
+              report += `* ${exercise.name}: ${seriesCompleted} serie completate.\n`;
+          });
+
+          return report;
+      }
+
+      export function showDebriefing(workout, lastSeries, terminated = false) {
+          summaryList.innerHTML = '';
+          workout.forEach((exercise, index) => {
+              const seriesCompleted = index < workout.length - 1 ? exercise.series : lastSeries;
+              const li = document.createElement('li');
+              li.className = 'modal-list-item';
+              li.textContent = `${exercise.name} (${seriesCompleted} / ${exercise.series} serie)`;
+              summaryList.appendChild(li);
+          });
+
+          reportTextArea.value = generateTextReport(workout, lastSeries, terminated);
+          showView('debriefing');
+      }
+
+      export function initDebriefing() {
+          returnBtn.addEventListener('click', () => {
+              showView('calendar');
+              renderCalendar();
+          });
+
+          copyBtn.addEventListener('click', () => {
+              if (navigator.clipboard) {
+                  navigator.clipboard.writeText(reportTextArea.value).then(() => {
+                      copyBtn.textContent = 'Copiato!';
+                      setTimeout(() => (copyBtn.textContent = 'Copia Report'), 2000);
+                  });
+              }
+          });
+      }
+  - file: style.css
+    content: |
+      :root {
+        --bg-color: #1a1a1d;
+        --card-color: #2c2c34;
+        --primary-color: #9575cd;
+        --secondary-color: #4db6ac;
+        --text-color: #f4f4f9;
+        --text-secondary: #b3b3b3;
+        --danger-color: #ef5350;
+        --success-color: #66bb6a;
+        --border-color: #4a4a52;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: "Roboto Condensed", sans-serif; background-color: var(--bg-color); color: var(--text-color); display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding: 2rem; }
+      #app-container { width: 100%; max-width: 1200px; position: relative; }
+      h1, h2 { font-family: "Teko", sans-serif; font-weight: 600; color: var(--primary-color); text-align: center; margin-bottom: 1.5rem; }
+      .view { display: none; }
+      .view--active { display: flex; flex-direction: column; align-items: center; }
+      #calendar-view { display: none; }
+      #calendar-view.view--active { display: block; }
+      #calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+      #calendar-header h1 { margin: 0; }
+      #calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1rem; }
+      .day-cell { background-color: var(--card-color); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; justify-content: space-between; border-left: 4px solid transparent; transition: transform 0.2s ease-out, border-color 0.2s ease-out; cursor: pointer; }
+      .day-cell:hover { transform: translateY(-4px); border-left-color: var(--primary-color); }
+      .day-name { font-weight: bold; text-transform: capitalize; font-size: 1.1rem; color: var(--text-secondary); }
+      .day-number { font-family: "Teko", sans-serif; font-size: 3rem; font-weight: 700; text-align: center; margin: 0.5rem 0; }
+      .day-summary { font-size: 0.9rem; color: var(--text-secondary); min-height: 2.5em; text-align: center; }
+      .btn { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.75rem 1.5rem; border-radius: 6px; font-family: "Roboto Condensed", sans-serif; font-weight: bold; text-transform: uppercase; cursor: pointer; transition: background-color 0.2s, transform 0.2s; display: block; width: 100%; text-align: center; margin-top: 1rem; }
+      .btn:hover:not(:disabled) { transform: scale(1.02); }
+      .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+      .btn.btn-primary { background-color: var(--primary-color); border-color: var(--primary-color); }
+      .btn.btn-secondary { background-color: var(--secondary-color); border-color: var(--secondary-color); color: var(--bg-color); }
+      .btn.btn-danger { background-color: var(--danger-color); border-color: var(--danger-color); }
+      .btn.btn-success { background-color: var(--success-color); border-color: var(--success-color); }
+      .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); display: none; justify-content: center; align-items: center; z-index: 1000; }
+      .modal-content { background-color: var(--card-color); padding: 2rem; border-radius: 8px; width: 90%; max-width: 500px; max-height: 80vh; display: flex; flex-direction: column; }
+      .modal-content h2 { margin-top: 0; }
+      .modal-content ul { list-style: none; padding: 0; overflow-y: auto; flex-grow: 1; margin: 1rem 0; }
+      .modal-list-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; border-bottom: 1px solid var(--border-color); }
+      .modal-list-item:last-child { border-bottom: none; }
+      .empty-list-item { color: var(--text-secondary); text-align: center; padding: 2rem; }
+      .modal-actions { display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem; }
+      .modal-actions .btn { width: auto; margin-top: 0; }
+      #trainer-view, #debriefing-view { gap: 1rem; }
+      #trainer-exercise-title { font-size: 2.5rem; text-align: center; }
+      #trainer-series-counter { font-size: 1.5rem; color: var(--text-secondary); min-height: 1.5rem; }
+      #trainer-main-display { width: 300px; height: 300px; margin: 1rem 0; position: relative; display: flex; justify-content: center; align-items: center; }
+      #trainer-main-text { font-family: 'Teko', sans-serif; font-size: 5.5rem; line-height: 1; text-align: center; }
+      #trainer-main-text small { font-size: 2.5rem; color: var(--text-secondary); }
+      #trainer-progress-ring-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+      .progress-ring-bg { fill: transparent; stroke: var(--card-color); stroke-width: 8; }
+      .progress-ring-fg { fill: transparent; stroke: var(--primary-color); stroke-width: 8; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; stroke-dasharray: 100; stroke-dashoffset: 100; }
+      #trainer-controls { display: flex; gap: 1rem; }
+      #trainer-controls .btn { width: 150px; }
+      #debriefing-summary { list-style: none; padding: 0; width: 100%; max-width: 500px; }
+      #debriefing-report-container { width: 100%; max-width: 500px; }
+      #debriefing-report-container textarea { width: 100%; min-height: 150px; background-color: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.5rem; font-family: monospace; }
+      @keyframes flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+      .is-flashing { animation: flash 0.75s infinite; }
+      @media (max-width: 768px) {
+        body { padding: 1rem; }
+        #calendar-grid { grid-template-columns: 1fr; gap: 0.5rem; }
+        #calendar-header { margin-bottom: 1rem; }
+        #trainer-main-display { width: 250px; height: 250px; }
+        #trainer-main-text { font-size: 4.5rem; }
       }

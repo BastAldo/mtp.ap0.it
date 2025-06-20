@@ -3,6 +3,7 @@
  * Contains the entire state machine logic for the training session.
  */
 import * as ui from './ui.js';
+import { showDebriefing } from './debriefing.js';
 
 const STATES = {
   IDLE: 'idle',
@@ -23,7 +24,6 @@ let state = {
   phase: '',
   totalDuration: 0,
   animationFrameId: null,
-  // --- Pause/Resume State ---
   timerStartTime: 0,
   timeOffsetMs: 0,
   onTimerComplete: null,
@@ -38,13 +38,15 @@ function clearTimers() {
 function setState(newState, payload = {}) {
   clearTimers();
   state = { ...state, ...payload, currentState: newState };
-  ui.updateTrainerUI(state);
+  if (newState !== STATES.PAUSED) {
+      ui.updateTrainerUI(state);
+  }
 }
 
 function transitionTo(phaseText, duration, onCompleteAction) {
   setState(STATES.ANNOUNCING, { phase: phaseText, totalDuration: duration });
   setTimeout(() => {
-    if (state.currentState === STATES.ANNOUNCING) { // Ensure we haven't been paused/terminated
+    if (state.currentState === STATES.ANNOUNCING) {
        if (onCompleteAction) onCompleteAction();
     }
   }, 750);
@@ -52,16 +54,13 @@ function transitionTo(phaseText, duration, onCompleteAction) {
 
 function runCountdown(duration, phaseText, onComplete, timeOffsetMs = 0) {
     setState(STATES.ACTION, { phase: phaseText, totalDuration: duration });
-    
     state.onTimerComplete = onComplete;
     state.timeOffsetMs = timeOffsetMs;
     state.timerStartTime = Date.now();
-
     const tick = () => {
         const elapsedMs = (Date.now() - state.timerStartTime) + state.timeOffsetMs;
         const progress = Math.min(100, (elapsedMs / (duration * 1000)) * 100);
         ui.updateProgressOnly(progress);
-
         if (elapsedMs >= duration * 1000) {
             clearTimers();
             if (state.onTimerComplete) state.onTimerComplete();
@@ -75,18 +74,15 @@ function runCountdown(duration, phaseText, onComplete, timeOffsetMs = 0) {
 function runTempoCycle() {
     const tempo = state.exercise.tempo;
     const executePhase = (phaseName, duration, nextPhase) => {
-        if (duration > 0) {
-          transitionTo(phaseName.toUpperCase(), duration, () => runCountdown(duration, phaseName.toUpperCase(), nextPhase));
-        } else {
-            nextPhase();
-        }
+        if (duration > 0) transitionTo(phaseName.toUpperCase(), duration, () => runCountdown(duration, phaseName.toUpperCase(), nextPhase));
+        else nextPhase();
     };
     const doDown = () => executePhase('down', tempo.down, doUp);
     const doHold = () => executePhase('hold', tempo.hold, doDown);
     const doUp = () => {
         if (state.currentRep < state.exercise.reps) {
             state.currentRep++;
-            ui.updateTrainerUI(state); // Update rep counter before starting phase
+            ui.updateTrainerUI(state);
             executePhase('up', tempo.up, doHold);
         } else {
             handleRest();
@@ -99,11 +95,10 @@ function handleRest() {
   const isLastSeries = state.currentSeries >= state.exercise.series;
   const isLastExercise = isLastSeries && state.currentExerciseIndex >= state.workout.length - 1;
   if (isLastExercise) {
-      setState(STATES.FINISHED, {phase: 'Completato!'});
-      setTimeout(() => ui.showView('calendar'), 2000);
+      setState(STATES.FINISHED);
+      showDebriefing(state.workout, state.currentSeries);
       return;
   }
-
   const onRestComplete = () => {
       if (state.currentSeries < state.exercise.series) {
           state.currentSeries++;
@@ -114,7 +109,6 @@ function handleRest() {
           startExercise();
       }
   };
-  
   transitionTo('Riposo', state.exercise.rest, () => runCountdown(state.exercise.rest, 'Riposo', onRestComplete));
 }
 
@@ -139,37 +133,33 @@ export function startTrainer(exercises) {
 }
 
 export function confirmStart() {
-  if (state.currentState === STATES.READY) {
-      startExercise();
-  }
+  if (state.currentState === STATES.READY) startExercise();
 }
 
 export function pauseOrResumeTrainer() {
   if (state.currentState === STATES.PAUSED) {
-      // RESUMING
       const ps = state.pausedState;
       runCountdown(ps.totalDuration, ps.phase, ps.onTimerComplete, ps.timeOffsetMs);
   } else {
-      // PAUSING
       clearTimers();
       const elapsed = (Date.now() - state.timerStartTime) + state.timeOffsetMs;
-      // Save all context needed to resume the countdown
-      const pausedState = {
+      const pausedContext = {
           totalDuration: state.totalDuration,
           phase: state.phase,
           onTimerComplete: state.onTimerComplete,
           timeOffsetMs: elapsed,
-          // also save visual state
           exercise: state.exercise,
           currentSeries: state.currentSeries,
           currentRep: state.currentRep,
+          currentState: state.currentState
       };
-      setState(STATES.PAUSED, { pausedState });
+      setState(STATES.PAUSED, { pausedState: pausedContext });
+      ui.updateTrainerUI(state);
   }
 }
 
 export function terminateTrainer() {
     clearTimers();
+    showDebriefing(state.workout, state.currentSeries, true);
     setState(STATES.IDLE, { phase: '' });
-    ui.showView('calendar');
 }

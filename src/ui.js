@@ -31,14 +31,14 @@ export function showView(viewName) {
 
 export function updateTrainerUI(state) {
   const { exercise, currentSeries, currentRep, phase, totalDuration, currentState, pausedState } = state;
-
   const displayState = currentState === 'paused' ? pausedState : state;
 
   trainerExerciseTitle.textContent = displayState.exercise ? displayState.exercise.name : 'Workout';
   
   if (displayState.exercise) {
     let seriesText = `Serie ${displayState.currentSeries} / ${displayState.exercise.series}`;
-    if (displayState.exercise.type === 'reps') {
+    const isAction = currentState === 'action' || (currentState === 'paused' && pausedState?.currentState === 'action');
+    if (displayState.exercise.type === 'reps' && isAction) {
       seriesText += `  |  Rip. ${displayState.currentRep} / ${displayState.exercise.reps}`;
     }
     trainerSeriesCounter.textContent = seriesText;
@@ -47,7 +47,8 @@ export function updateTrainerUI(state) {
   }
 
   if (currentState === 'paused') {
-      trainerMainText.textContent = "PAUSA";
+      const interruptedPhase = pausedState?.phase || '';
+      trainerMainText.innerHTML = `PAUSA<br><small style="text-transform: capitalize;">${interruptedPhase.toLowerCase()}</small>`;
   } else if (displayState.totalDuration > 0) {
       trainerMainText.innerHTML = `${displayState.phase}<br><small>${displayState.totalDuration}s</small>`;
   } else {
@@ -74,10 +75,4 @@ export function initTrainerControls(handlers) {
     startSessionBtn.addEventListener('click', () => handlers.onConfirmStart());
     pauseResumeBtn.addEventListener('click', () => handlers.onPauseResume());
     terminateBtn.addEventListener('click', () => handlers.onTerminate());
-}
-
-let audioCtx;
-export function playTick() {
-  // Method body removed for brevity in this example.
-  // Assume it works as intended.
 }
