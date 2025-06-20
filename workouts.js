@@ -30,6 +30,16 @@ export const WORKOUTS = [
         defaultTempo: { up: 2, hold: 0, down: 2 }
     },
     {
+        id: 'ex_squa_fake_test',
+        name: "Squat a Corpo Libero",
+        description: "Scendi come se ti sedessi, schiena dritta e petto in fuori.",
+        type: 'reps',
+        defaultSets: 1,
+        defaultReps: 1,
+        defaultRest: 1,
+        defaultTempo: { up: 2, hold: 0, down: 2 }
+    },
+    {
         id: 'ex_pushup',
         name: "Push-up",
         description: "Partendo dalla posizione di plank, piega i gomiti per abbassare il petto verso il pavimento e poi spingi per tornare su.",
