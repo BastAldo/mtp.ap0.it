@@ -8,32 +8,42 @@ import { startTrainer } from './trainer.js';
 
 // DOM Elements
 const calendarGrid = document.getElementById('calendar-grid');
-const currentMonthYear = document.getElementById('current-month-year');
+const currentWeekRange = document.getElementById('current-week-range');
 const prevWeekBtn = document.getElementById('prev-week-btn');
 const nextWeekBtn = document.getElementById('next-week-btn');
 
 // State
 let currentDate = new Date();
 
-/**
- * Formats a Date object into a 'YYYY-MM-DD' string.
- * @param {Date} date The date to format.
- * @returns {string} The formatted date string.
- */
 function formatDateKey(date) {
   return date.toISOString().split('T')[0];
 }
 
-/**
- * Renders the calendar for the week of the given date.
- * @param {Date} date A date within the week to be rendered.
- */
+function formatWeekRange(start, end) {
+  const startDay = start.getDate();
+  const startMonth = start.toLocaleDateString('it-IT', { month: 'long' });
+  const endDay = end.getDate();
+  const endMonth = end.toLocaleDateString('it-IT', { month: 'long' });
+  const year = start.getFullYear();
+
+  if (startMonth === endMonth) {
+    return `${startDay} - ${endDay} ${startMonth} ${year}`;
+  } else {
+    return `${startDay} ${startMonth} - ${endDay} ${endMonth} ${year}`;
+  }
+}
+
 export function renderCalendar(date = currentDate) {
   const weekStart = new Date(date);
-  weekStart.setDate(date.getDate() - date.getDay() + (date.getDay() === 0 ? -6 : 1)); // Start of the week (Monday)
+  // Set to Monday of the current week
+  const dayOfWeek = date.getDay(); // Sunday = 0, Monday = 1
+  const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+  weekStart.setDate(diff);
 
-  const monthNames = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
-  currentMonthYear.textContent = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  
+  currentWeekRange.textContent = formatWeekRange(weekStart, weekEnd);
 
   calendarGrid.innerHTML = '';
   for (let i = 0; i < 7; i++) {
@@ -67,9 +77,6 @@ export function renderCalendar(date = currentDate) {
   }
 }
 
-/**
- * Initializes the calendar, sets up event listeners, and performs the initial render.
- */
 export function initCalendar() {
   prevWeekBtn.addEventListener('click', () => {
     currentDate.setDate(currentDate.getDate() - 7);
@@ -81,7 +88,6 @@ export function initCalendar() {
     renderCalendar(currentDate);
   });
 
-  // Event delegation
   calendarGrid.addEventListener('click', (event) => {
     const target = event.target;
     const dayCell = target.closest('.day-cell');
@@ -99,5 +105,4 @@ export function initCalendar() {
   });
 
   renderCalendar(currentDate);
-  console.log('Calendar module initialized.');
 }

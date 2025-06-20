@@ -1,200 +1,220 @@
-commit_message: "fix(trainer): Finalize state machine flow and re-enable robust pause/resume"
+commit_message: "refactor(ui): Improve responsive layout and enhance headers"
 rationale: |
-  Questo patch finale corregge l'ultimo bug noto nel flusso della macchina a stati e implementa una funzionalità di Pausa/Ripresa completa e robusta, portando l'applicazione a uno stato funzionalmente completo.
+  Questo è un patch di rifinitura finale che migliora significativamente la responsività e l'usabilità dell'interfaccia, basandosi sul feedback dell'utente.
 
-  1.  **Correzione Flusso di Fine Allenamento:** È stato corretto un bug critico in `trainer.js` che causava un ciclo errato alla fine dell'ultimo esercizio. La logica è stata riscritta per garantire che, al termine dell'ultima serie, il workout termini immediatamente e si passi alla vista di Debriefing, eliminando il ciclo "riposo - pronti - via".
+  1.  **Aggiunta Header App:** È stata aggiunta un'intestazione globale all'applicazione per fornire un titolo e un'identità visiva costanti.
 
-  2.  **Re-implementazione Pausa/Ripresa:** La funzionalità di Pausa/Ripresa è stata completamente riscritta e riattivata. Ora è possibile mettere in pausa durante qualsiasi fase attiva del trainer. Lo stato esatto del timer e dell'esercizio viene "congelato" e ripristinato correttamente alla ripresa, garantendo un'interruzione e una continuazione precise e senza bug.
+  2.  **Griglia Calendario Responsiva:** Il problema di layout del calendario è stato risolto in modo definitivo. Sostituendo `repeat(7, 1fr)` con `repeat(auto-fit, minmax(150px, 1fr))`, la griglia ora adatta fluidamente il numero di colonne alla larghezza disponibile dello schermo, eliminando la necessità di media query multiple e garantendo una visualizzazione ottimale su qualsiasi dispositivo, dai desktop ai tablet.
 
-  3.  **Centratura Pulsanti Modale:** Come da feedback estetico, i pulsanti nel modale di gestione dell'allenamento sono stati centrati tramite una modifica al CSS, migliorando l'equilibrio del layout.
+  3.  **Header Calendario Informativo:** Accogliendo il suggerimento dell'utente, l'header del calendario è stato potenziato. Ora, invece di visualizzare solo il mese, mostra l'intervallo di date completo della settimana visualizzata (es. "16 Giugno - 22 Giugno 2025"). Questo fornisce un contesto molto più chiaro e preciso.
 patches:
-  - file: src/trainer.js
+  - file: index.html
+    content: |
+      <!DOCTYPE html>
+      <html lang="it">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>Mio Trainer Personale</title>
+          <link rel="stylesheet" href="style.css" />
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+          <link
+            href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:ital,wght@0,400;0,700;1,400&family=Teko:wght@400;600;700&display=swap"
+            rel="stylesheet"
+          />
+        </head>
+        <body>
+          <div id="app-container">
+            <header id="app-header">
+              <h1>Mio Trainer Personale</h1>
+            </header>
+
+            <div id="calendar-view" class="view view--active">
+              <header id="calendar-header">
+                <button id="prev-week-btn" class="btn">&lt;</button>
+                <h2 id="current-week-range"></h2>
+                <button id="next-week-btn" class="btn">&gt;</button>
+              </header>
+              <div id="calendar-grid"></div>
+            </div>
+
+            <div id="trainer-view" class="view">
+              <h1 id="trainer-exercise-title"></h1>
+              <div id="trainer-series-counter"></div>
+              <div id="trainer-main-display">
+                <svg id="trainer-progress-ring-svg" viewBox="0 0 100 100">
+                  <circle class="progress-ring-bg" cx="50" cy="50" r="45"></circle>
+                  <circle id="progress-ring-foreground" class="progress-ring-fg" cx="50" cy="50" r="45" pathLength="100"></circle>
+                </svg>
+                <span id="trainer-main-text"></span>
+              </div>
+              <div id="trainer-description"></div>
+              <div id="trainer-controls">
+                <button id="start-session-btn" class="btn btn-success">Inizia</button>
+                <button id="pause-resume-btn" class="btn"></button>
+                <button id="terminate-btn" class="btn btn-danger"></button>
+              </div>
+              <div id="trainer-full-description"></div>
+            </div>
+
+            <div id="debriefing-view" class="view">
+              <h1>Workout Concluso</h1>
+              <ul id="debriefing-summary"></ul>
+              <div id="debriefing-report-container">
+                <h2>Report da Condividere:</h2>
+                <textarea id="debriefing-text-report" readonly></textarea>
+                <button id="copy-report-btn" class="btn btn-primary">
+                  Copia Report
+                </button>
+              </div>
+              <div class="debriefing-actions">
+                <a href="https://gemini.google.com/gem/3ddd32ed1a1a/644b02d78c11a9ed" target="_blank" id="gemini-btn" class="btn btn-primary">Incolla su Gemini</a>
+                <button id="return-to-calendar-btn" class="btn btn-secondary">
+                  Torna al Calendario
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div id="day-modal" class="modal-overlay" style="display: none">
+            <div class="modal-content">
+              <h2 id="modal-date-title"></h2>
+              <ul id="modal-exercise-list"></ul>
+              <div class="modal-actions">
+                <button id="start-from-modal-btn" class="btn btn-success">Inizia Allenamento</button>
+                <button id="add-exercise-btn" class="btn btn-secondary">
+                  Aggiungi Esercizio
+                </button>
+                <button id="close-day-modal-btn" class="btn">Chiudi</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="library-modal" class="modal-overlay" style="display: none">
+            <div class="modal-content">
+              <h2>Libreria Esercizi</h2>
+              <ul id="library-exercise-list"></ul>
+              <div class="modal-actions">
+                <button id="close-library-modal-btn" class="btn">Chiudi</button>
+              </div>
+            </div>
+          </div>
+
+          <script type="module" src="src/main.js"></script>
+        </body>
+      </html>
+  - file: src/calendar.js
     content: |
       /**
-       * @file trainer.js
-       * Contains the entire state machine logic for the training session.
+       * @file calendar.js
+       * Manages the state, rendering, and interactions of the calendar view.
        */
-      import * as ui from './ui.js';
-      import { showDebriefing } from './debriefing.js';
+      import * as storage from './storage.js';
+      import { openDayModal } from './modal.js';
+      import { startTrainer } from './trainer.js';
 
-      const STATES = {
-        IDLE: 'idle',
-        READY: 'ready',
-        ANNOUNCING: 'announcing',
-        ACTION: 'action',
-        PAUSED: 'paused',
-        FINISHED: 'finished',
-      };
+      // DOM Elements
+      const calendarGrid = document.getElementById('calendar-grid');
+      const currentWeekRange = document.getElementById('current-week-range');
+      const prevWeekBtn = document.getElementById('prev-week-btn');
+      const nextWeekBtn = document.getElementById('next-week-btn');
 
-      let state = {
-        currentState: STATES.IDLE,
-        workout: [],
-        exercise: null,
-        currentExerciseIndex: 0,
-        currentSeries: 0,
-        currentRep: 0,
-        phase: '',
-        totalDuration: 0,
-        animationFrameId: null,
-        // --- Pause/Resume State ---
-        timerStartTime: 0,
-        timeOffsetMs: 0,
-        onTimerComplete: null,
-        pausedState: null,
-      };
+      // State
+      let currentDate = new Date();
 
-      function clearTimers() {
-        cancelAnimationFrame(state.animationFrameId);
-        state.animationFrameId = null;
+      function formatDateKey(date) {
+        return date.toISOString().split('T')[0];
       }
 
-      function setState(newState, payload = {}) {
-        clearTimers();
-        state = { ...state, ...payload, currentState: newState };
-        if (newState !== STATES.PAUSED) {
-            ui.updateTrainerUI(state);
-        }
-      }
+      function formatWeekRange(start, end) {
+        const startDay = start.getDate();
+        const startMonth = start.toLocaleDateString('it-IT', { month: 'long' });
+        const endDay = end.getDate();
+        const endMonth = end.toLocaleDateString('it-IT', { month: 'long' });
+        const year = start.getFullYear();
 
-      function transitionTo(phaseText, duration, onCompleteAction) {
-        setState(STATES.ANNOUNCING, { phase: phaseText, totalDuration: duration });
-        // Use a standard timeout for the announcing phase delay
-        setTimeout(() => {
-          if (state.currentState === STATES.ANNOUNCING) {
-             if (onCompleteAction) onCompleteAction();
-          }
-        }, 750);
-      }
-
-      function runCountdown(duration, phaseText, onComplete, timeOffsetMs = 0) {
-          setState(STATES.ACTION, { phase: phaseText, totalDuration: duration });
-          state.onTimerComplete = onComplete;
-          state.timeOffsetMs = timeOffsetMs;
-          state.timerStartTime = Date.now();
-          const tick = () => {
-              const elapsedMs = (Date.now() - state.timerStartTime) + state.timeOffsetMs;
-              const progress = Math.min(100, (elapsedMs / (duration * 1000)) * 100);
-              ui.updateProgressOnly(progress);
-              if (elapsedMs >= duration * 1000) {
-                  clearTimers();
-                  if (state.onTimerComplete) state.onTimerComplete();
-              } else {
-                  state.animationFrameId = requestAnimationFrame(tick);
-              }
-          };
-          tick();
-      }
-      
-      function runTempoCycle() {
-          const tempo = state.exercise.tempo;
-          const executePhase = (phaseName, duration, nextPhase) => {
-              if (duration > 0) transitionTo(phaseName.toUpperCase(), duration, () => runCountdown(duration, phaseName.toUpperCase(), nextPhase));
-              else nextPhase();
-          };
-          const doDown = () => executePhase('down', tempo.down, doUp);
-          const doHold = () => executePhase('hold', tempo.hold, doDown);
-          const doUp = () => {
-              if (state.currentRep < state.exercise.reps) {
-                  state.currentRep++;
-                  ui.updateTrainerUI(state);
-                  executePhase('up', tempo.up, doHold);
-              } else {
-                  handleRest();
-              }
-          };
-          doUp();
-      }
-
-      function handleRest() {
-        const isLastSeries = state.currentSeries >= state.exercise.series;
-        const isLastExercise = state.currentExerciseIndex >= state.workout.length - 1;
-
-        // The absolute end of the workout. No rest needed.
-        if (isLastSeries && isLastExercise) {
-            setState(STATES.FINISHED);
-            const result = { ...state, wasTerminated: false };
-            showDebriefing(result);
-            return;
-        }
-
-        const onRestComplete = () => {
-            if (isLastSeries) {
-                // Finished series for this exercise, move to the next.
-                state.currentExerciseIndex++;
-                state.currentSeries = 1;
-                startExercise();
-            } else {
-                // More series of the same exercise.
-                state.currentSeries++;
-                startExercise();
-            }
-        };
-        
-        transitionTo('Riposo', state.exercise.rest, () => runCountdown(state.exercise.rest, 'Riposo', onRestComplete));
-      }
-
-      function startExercise() {
-        state.exercise = state.workout[state.currentExerciseIndex];
-        state.currentRep = 0; // Reset rep count for new exercise
-        transitionTo("Pronti?", 3, () => {
-            runCountdown(3, 'VIA!', () => {
-                if (state.exercise.type === 'reps') {
-                    runTempoCycle();
-                } else {
-                    transitionTo("Azione", state.exercise.duration, () => runCountdown(state.exercise.duration, "Azione", handleRest));
-                }
-            });
-        });
-      }
-
-      export function startTrainer(exercises) {
-        if (!exercises || exercises.length === 0) return;
-        const freshState = { workout: JSON.parse(JSON.stringify(exercises)), currentExerciseIndex: 0, currentSeries: 0, currentRep: 0 };
-        state = { ...state, ...freshState };
-        ui.showView('trainer');
-        setState(STATES.READY, {phase: "Pronto?"});
-      }
-
-      export function confirmStart() {
-        if (state.currentState === STATES.READY) startExercise();
-      }
-
-      export function pauseOrResumeTrainer() {
-        if (state.currentState === STATES.PAUSED) {
-            // RESUMING
-            const ps = state.pausedState;
-            // Restore the state machine to where it was
-            state.currentState = ps.currentState; 
-            // Call the appropriate function to resume the timer
-            runCountdown(ps.totalDuration, ps.phase, ps.onTimerComplete, ps.timeOffsetMs);
+        if (startMonth === endMonth) {
+          return `${startDay} - ${endDay} ${startMonth} ${year}`;
         } else {
-            // PAUSING
-            clearTimers();
-            const elapsed = (Date.now() - state.timerStartTime) + state.timeOffsetMs;
-            const pausedContext = {
-                // Essential timer data
-                totalDuration: state.totalDuration,
-                phase: state.phase,
-                onTimerComplete: state.onTimerComplete,
-                timeOffsetMs: elapsed,
-                // Full state for UI
-                exercise: state.exercise,
-                currentSeries: state.currentSeries,
-                currentRep: state.currentRep,
-                currentState: state.currentState
-            };
-            setState(STATES.PAUSED, { pausedState: pausedContext });
-            ui.updateTrainerUI(state);
+          return `${startDay} ${startMonth} - ${endDay} ${endMonth} ${year}`;
         }
       }
 
-      export function terminateTrainer() {
-          clearTimers();
-          const result = { ...state, wasTerminated: true };
-          showDebriefing(result);
-          setState(STATES.IDLE, { phase: '' });
+      export function renderCalendar(date = currentDate) {
+        const weekStart = new Date(date);
+        // Set to Monday of the current week
+        const dayOfWeek = date.getDay(); // Sunday = 0, Monday = 1
+        const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+        weekStart.setDate(diff);
+
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        
+        currentWeekRange.textContent = formatWeekRange(weekStart, weekEnd);
+
+        calendarGrid.innerHTML = '';
+        for (let i = 0; i < 7; i++) {
+          const day = new Date(weekStart);
+          day.setDate(weekStart.getDate() + i);
+
+          const dayCell = document.createElement('div');
+          const dateKey = formatDateKey(day);
+          dayCell.className = 'day-cell';
+          dayCell.dataset.date = dateKey;
+
+          const dayName = day.toLocaleDateString('it-IT', { weekday: 'long' });
+          const dayNumber = day.getDate();
+
+          const exercises = storage.getWorkoutsForDate(dateKey);
+          const exerciseCount = exercises.length;
+
+          let summaryText = 'Nessun esercizio';
+          if (exerciseCount > 0) {
+            summaryText = `${exerciseCount} ${exerciseCount > 1 ? 'esercizi' : 'esercizio'}`;
+          }
+
+          dayCell.innerHTML = `
+            <div class="day-name">${dayName}</div>
+            <div class="day-number">${dayNumber}</div>
+            <div class="day-summary">${summaryText}</div>
+            <button class="btn btn-secondary start-workout-btn" data-date="${dateKey}" ${exerciseCount === 0 ? 'disabled' : ''}>START</button>
+          `;
+
+          calendarGrid.appendChild(dayCell);
+        }
       }
-  - file: src/style.css
+
+      export function initCalendar() {
+        prevWeekBtn.addEventListener('click', () => {
+          currentDate.setDate(currentDate.getDate() - 7);
+          renderCalendar(currentDate);
+        });
+
+        nextWeekBtn.addEventListener('click', () => {
+          currentDate.setDate(currentDate.getDate() + 7);
+          renderCalendar(currentDate);
+        });
+
+        calendarGrid.addEventListener('click', (event) => {
+          const target = event.target;
+          const dayCell = target.closest('.day-cell');
+          if (!dayCell) return;
+
+          const dateKey = dayCell.dataset.date;
+          if (target.matches('.start-workout-btn')) {
+            const exercises = storage.getWorkoutsForDate(dateKey);
+            if (exercises.length > 0) {
+              startTrainer(exercises);
+            }
+          } else {
+            openDayModal(dateKey);
+          }
+        });
+
+        renderCalendar(currentDate);
+      }
+  - file: style.css
     content: |
       :root {
         --bg-color: #1a1a1d;
@@ -210,20 +230,36 @@ patches:
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body { font-family: "Roboto Condensed", sans-serif; background-color: var(--bg-color); color: var(--text-color); display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding: 1rem; }
       #app-container { width: 100%; max-width: 1200px; position: relative; }
+      #app-header {
+        text-align: center;
+        padding-bottom: 1rem;
+        margin-bottom: 2rem;
+        border-bottom: 1px solid var(--border-color);
+      }
+      #app-header h1 {
+        font-size: 2rem;
+        margin: 0;
+        color: var(--text-color);
+      }
       h1, h2 { font-family: "Teko", sans-serif; font-weight: 600; color: var(--primary-color); text-align: center; margin-bottom: 1.5rem; }
       .view { display: none; }
       .view--active { display: flex; flex-direction: column; align-items: center; }
       #calendar-view { display: none; }
       #calendar-view.view--active { display: block; }
       #calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
-      #calendar-header h1 { margin: 0; }
-      #calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1rem; }
+      #calendar-header h2 { margin: 0; font-size: 2rem; }
+      #calendar-header .btn { flex-shrink: 0; }
+      #calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1rem;
+      }
       .day-cell { background-color: var(--card-color); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; justify-content: space-between; border-left: 4px solid transparent; transition: transform 0.2s ease-out, border-color 0.2s ease-out; cursor: pointer; }
       .day-cell:hover { transform: translateY(-4px); border-left-color: var(--primary-color); }
       .day-name { font-weight: bold; text-transform: capitalize; font-size: 1.1rem; color: var(--text-secondary); }
       .day-number { font-family: "Teko", sans-serif; font-size: 3rem; font-weight: 700; text-align: center; margin: 0.5rem 0; }
       .day-summary { font-size: 0.9rem; color: var(--text-secondary); min-height: 2.5em; text-align: center; }
-      .btn { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.75rem 1.5rem; border-radius: 6px; font-family: "Roboto Condensed", sans-serif; font-weight: bold; text-transform: uppercase; cursor: pointer; transition: background-color 0.2s, transform 0.2s; display: block; width: 100%; text-align: center; margin-top: 1rem; }
+      .btn { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.75rem 1.5rem; border-radius: 6px; font-family: "Roboto Condensed", sans-serif; font-weight: bold; text-transform: uppercase; cursor: pointer; transition: background-color 0.2s, transform 0.2s; display: block; width: 100%; text-align: center; margin-top: 1rem; text-decoration: none; }
       .btn:hover:not(:disabled) { transform: scale(1.02); }
       .btn:disabled { opacity: 0.5; cursor: not-allowed; }
       .btn.btn-primary { background-color: var(--primary-color); border-color: var(--primary-color); }
@@ -261,10 +297,3 @@ patches:
       .debriefing-actions .btn { flex-grow: 1; margin-top: 0; }
       @keyframes flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
       .is-flashing { animation: flash 0.75s infinite; }
-      @media (max-width: 768px) {
-        body { padding: 1rem; }
-        #calendar-grid { grid-template-columns: 1fr; gap: 0.5rem; }
-        #calendar-header { margin-bottom: 1rem; }
-        #trainer-main-display { width: 250px; height: 250px; }
-        #trainer-main-text { font-size: 4.5rem; }
-      }
