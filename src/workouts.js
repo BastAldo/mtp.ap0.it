@@ -15,6 +15,16 @@ export const ALL_EXERCISES = [
     description: "Esercizio a corpo libero per pettorali, tricipiti e spalle. Mantenere il corpo in linea retta dalla testa ai talloni."
   },
   {
+    id: 'fake_pushup',
+    name: 'fake Push Up',
+    type: 'reps',
+    series: 1,
+    reps: 1,
+    rest: 1, // seconds
+    tempo: { up: 1, hold: 1, down: 2 }, // seconds
+    description: "Esercizio a corpo libero per pettorali, tricipiti e spalle. Mantenere il corpo in linea retta dalla testa ai talloni."
+  },
+  {
     id: 'squat',
     name: 'Squat a corpo libero',
     type: 'reps',
