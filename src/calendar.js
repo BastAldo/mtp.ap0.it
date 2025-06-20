@@ -4,6 +4,7 @@
  */
 import * as storage from './storage.js';
 import { openDayModal } from './modal.js';
+import { startTrainer } from './trainer.js';
 
 // DOM Elements
 const calendarGrid = document.getElementById('calendar-grid');
@@ -59,7 +60,7 @@ export function renderCalendar(date = currentDate) {
       <div class="day-name">${dayName}</div>
       <div class="day-number">${dayNumber}</div>
       <div class="day-summary">${summaryText}</div>
-      <button class="btn btn-secondary start-workout-btn" ${exerciseCount === 0 ? 'disabled' : ''}>START</button>
+      <button class="btn btn-secondary start-workout-btn" data-date="${dateKey}" ${exerciseCount === 0 ? 'disabled' : ''}>START</button>
     `;
 
     calendarGrid.appendChild(dayCell);
@@ -80,12 +81,19 @@ export function initCalendar() {
     renderCalendar(currentDate);
   });
 
-  // Event delegation for opening the modal
+  // Event delegation
   calendarGrid.addEventListener('click', (event) => {
-    const dayCell = event.target.closest('.day-cell');
-    // Open modal only if a day-cell is clicked, but not the start button inside it
-    if (dayCell && !event.target.matches('.start-workout-btn')) {
-      const dateKey = dayCell.dataset.date;
+    const target = event.target;
+    const dayCell = target.closest('.day-cell');
+    if (!dayCell) return;
+
+    const dateKey = dayCell.dataset.date;
+    if (target.matches('.start-workout-btn')) {
+      const exercises = storage.getWorkoutsForDate(dateKey);
+      if (exercises.length > 0) {
+        startTrainer(exercises);
+      }
+    } else {
       openDayModal(dateKey);
     }
   });
