@@ -1,74 +1,271 @@
 :root {
   --bg-color: #1a1a1d;
   --card-color: #2c2c34;
-  --primary-color: #9575cd;
-  --secondary-color: #4db6ac;
+  --primary-color: #9575cd; /* Purple */
+  --secondary-color: #4db6ac; /* Teal */
   --text-color: #f4f4f9;
   --text-secondary: #b3b3b3;
   --danger-color: #ef5350;
   --success-color: #66bb6a;
-  --border-color: #4a4a52;
+  --border-radius: 8px;
+  --transition-speed: 0.2s;
 }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: "Roboto Condensed", sans-serif; background-color: var(--bg-color); color: var(--text-color); display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding: 1rem; }
-#app-container { width: 100%; max-width: 1200px; position: relative; }
-#app-header { text-align: center; padding-bottom: 1rem; margin-bottom: 2rem; border-bottom: 1px solid var(--border-color); }
-#app-header h1 { font-size: 2rem; margin: 0; color: var(--text-color); }
-h1, h2 { font-family: "Teko", sans-serif; font-weight: 600; color: var(--primary-color); text-align: center; margin-bottom: 1.5rem; }
-.view { display: none; }
-.view--active { display: flex; flex-direction: column; align-items: center; }
-#calendar-view { display: none; }
-#calendar-view.view--active { display: block; }
-#calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
-#calendar-header h2 { margin: 0; font-size: 2rem; padding: 0 1rem; text-align: center; }
-#calendar-header .btn { width: auto; flex-shrink: 0; margin-top: 0; }
-#calendar-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; }
-.day-cell { background-color: var(--card-color); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; justify-content: space-between; border-left: 4px solid transparent; transition: transform 0.2s ease-out, border-color 0.2s ease-out; cursor: pointer; }
-.day-cell:hover { transform: translateY(-4px); border-left-color: var(--primary-color); }
-.day-name { font-weight: bold; text-transform: capitalize; font-size: 1.1rem; color: var(--text-secondary); }
-.day-number { font-family: "Teko", sans-serif; font-size: 3rem; font-weight: 700; text-align: center; margin: 0.5rem 0; }
-.day-summary { font-size: 0.9rem; color: var(--text-secondary); min-height: 2.5em; text-align: center; }
-.btn { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.75rem 1.5rem; border-radius: 6px; font-family: "Roboto Condensed", sans-serif; font-weight: bold; text-transform: uppercase; cursor: pointer; transition: background-color 0.2s, transform 0.2s; display: block; width: 100%; text-align: center; margin-top: 1rem; text-decoration: none; }
-.btn:hover:not(:disabled) { transform: scale(1.02); }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn.btn-primary { background-color: var(--primary-color); border-color: var(--primary-color); }
-.btn.btn-secondary { background-color: var(--secondary-color); border-color: var(--secondary-color); color: var(--bg-color); }
-.btn.btn-danger { background-color: var(--danger-color); border-color: var(--danger-color); }
-.btn.btn-success { background-color: var(--success-color); border-color: var(--success-color); }
-.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); display: none; justify-content: center; align-items: center; z-index: 1000; }
-.modal-content { background-color: var(--card-color); padding: 2rem; border-radius: 8px; width: 90%; max-width: 500px; max-height: 80vh; display: flex; flex-direction: column; }
-.modal-content h2 { margin-top: 0; }
-.modal-content ul { list-style: none; padding: 0; overflow-y: auto; flex-grow: 1; margin: 1rem 0; }
-.modal-list-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; border-bottom: 1px solid var(--border-color); gap: 1rem; }
-.modal-list-item.dragging { opacity: 0.5; background-color: var(--primary-color); }
-.drag-handle { cursor: move; color: var(--text-secondary); display: flex; align-items: center; padding-right: 0.5rem; }
-.modal-list-item .item-name { flex-grow: 1; display: flex; justify-content: space-between; align-items: center; }
-.modal-list-item:last-child { border-bottom: none; }
-.modal-list-item .btn { width: auto; max-width: 120px; margin-top: 0; flex-shrink: 0; }
-.inline-input-group { display: flex; align-items: center; gap: 0.5rem; }
-.inline-duration-input { width: 60px; background-color: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px; padding: 0.25rem; text-align: center; }
-.empty-list-item { color: var(--text-secondary); text-align: center; padding: 2rem; }
-.modal-actions { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; margin-top: 1.5rem; }
-.modal-actions .btn { width: auto; margin-top: 0; flex-shrink: 0; }
-#trainer-view, #debriefing-view { gap: 1rem; }
-#trainer-exercise-title { font-size: 2.5rem; text-align: center; }
-#trainer-series-counter { font-size: 1.5rem; color: var(--text-secondary); min-height: 1.5rem; }
-#trainer-description { color: var(--text-secondary); text-align: center; padding: 0 1rem; }
-#trainer-full-description { font-size: 0.9rem; max-width: 400px; text-align: center; color: var(--text-secondary); margin-top: 1rem; }
-#trainer-main-display { width: 300px; height: 300px; margin: 1rem 0; position: relative; display: flex; justify-content: center; align-items: center; }
-#trainer-main-text { font-family: 'Teko', sans-serif; font-size: 5.5rem; line-height: 1; text-align: center; }
-#trainer-main-text.trainer-main-text--small { font-size: 4.5rem; }
-#trainer-main-text small { font-size: 2.5rem; color: var(--text-secondary); }
-#trainer-progress-ring-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-.progress-ring-bg { fill: transparent; stroke: var(--card-color); stroke-width: 8; }
-.progress-ring-fg { fill: transparent; stroke: var(--primary-color); stroke-width: 8; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; stroke-dasharray: 100; stroke-dashoffset: 100; }
-#trainer-controls { display: flex; gap: 1rem; }
-#trainer-controls .btn { width: 150px; }
-#debriefing-summary { list-style: none; padding: 0; width: 100%; max-width: 500px; background-color: var(--card-color); border-radius: 8px; }
-.debrief-exercise-name small { color: var(--text-secondary); display: block; font-size: 0.8rem; }
-#debriefing-report-container { width: 100%; max-width: 500px; }
-#debriefing-report-container textarea { width: 100%; min-height: 150px; background-color: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.5rem; font-family: monospace; }
-.debriefing-actions { display: flex; gap: 1rem; width: 100%; max-width: 500px; }
-.debriefing-actions .btn { flex-grow: 1; margin-top: 0; }
-@keyframes flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-.is-flashing { animation: flash 0.75s infinite; }
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Roboto', sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+#app-container {
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+/* Views */
+.view {
+  display: none;
+}
+.view--active {
+  display: block;
+}
+
+/* Calendar */
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.calendar-header h1 {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-size: 2rem;
+  color: var(--primary-color);
+  text-align: center;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.day-cell {
+  background-color: var(--card-color);
+  border-radius: var(--border-radius);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border-left: 4px solid transparent;
+  transition: transform var(--transition-speed) ease, border-color var(--transition-speed) ease;
+}
+
+.day-cell:hover {
+  transform: translateY(-3px);
+  border-left-color: var(--primary-color);
+}
+
+.day-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.day-name {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.day-number {
+  font-size: 1.2rem;
+  color: var(--text-secondary);
+}
+
+.day-summary {
+  margin-bottom: 16px;
+  color: var(--text-secondary);
+  flex-grow: 1;
+  min-height: 40px;
+}
+
+/* Buttons */
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--border-radius);
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform var(--transition-speed) ease, background-color var(--transition-speed) ease;
+  text-transform: uppercase;
+}
+.btn:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background-color: var(--primary-color);
+  color: white;
+}
+.btn-secondary {
+  background-color: var(--secondary-color);
+  color: white;
+}
+.btn-danger {
+  background-color: var(--danger-color);
+  color: white;
+}
+.btn-icon {
+  padding: 10px;
+  font-size: 1.5rem;
+  background-color: var(--card-color);
+  color: var(--text-color);
+}
+
+/* Modal System */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+.modal-content {
+  background-color: var(--card-color);
+  padding: 30px;
+  border-radius: var(--border-radius);
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+.modal-content h2 {
+  margin-bottom: 20px;
+  color: var(--primary-color);
+}
+.modal-content ul {
+  list-style: none;
+  margin-bottom: 20px;
+  overflow-y: auto;
+  flex-grow: 1;
+}
+.modal-content li {
+  padding: 15px;
+  background-color: var(--bg-color);
+  border-radius: var(--border-radius);
+  margin-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+ .modal-content li .remove-exercise-btn {
+  background-color: transparent;
+  color: var(--danger-color);
+  border: none;
+  cursor: pointer;
+  font-size: 1.2rem;
+ }
+#exercise-library-list li {
+  cursor: pointer;
+  transition: background-color var(--transition-speed) ease;
+}
+#exercise-library-list li:hover {
+  background-color: var(--primary-color);
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+#search-exercise-input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 20px;
+    border-radius: var(--border-radius);
+    border: 2px solid var(--text-secondary);
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-size: 1rem;
+}
+
+/* Trainer View */
+#trainer-view {
+  text-align: center;
+  display: none; /* Hidden by default */
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: calc(100vh - 40px);
+}
+#trainer-view.view--active {
+  display: flex;
+}
+
+.trainer-title {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-size: 2.5rem;
+  color: var(--primary-color);
+  margin-bottom: 0.2em;
+}
+
+.trainer-series-counter {
+  font-size: 1.5rem;
+  color: var(--text-secondary);
+  margin-bottom: 1em;
+}
+
+.trainer-main-display {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-size: 10rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 0.2em;
+  width: 100%;
+}
+
+.trainer-description {
+  font-size: 1.2rem;
+  color: var(--text-secondary);
+  margin-bottom: 2em;
+  min-height: 2em;
+}
+
+.trainer-controls {
+  display: flex;
+  gap: 20px;
+}
+
+/* Flashing Animation */
+@keyframes flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.is-flashing {
+  animation: flash 0.5s infinite;
+}
