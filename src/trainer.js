@@ -46,7 +46,6 @@ function setState(newState, payload = {}) {
 
 function transitionTo(phaseText, duration, onCompleteAction) {
   setState(STATES.ANNOUNCING, { phase: phaseText, totalDuration: duration });
-  // Use a standard timeout for the announcing phase delay
   setTimeout(() => {
     if (state.currentState === STATES.ANNOUNCING) {
        if (onCompleteAction) onCompleteAction();
@@ -94,10 +93,9 @@ function runTempoCycle() {
 }
 
 function handleRest() {
+  // First, check if the workout is absolutely over. If so, finish immediately.
   const isLastSeries = state.currentSeries >= state.exercise.series;
   const isLastExercise = state.currentExerciseIndex >= state.workout.length - 1;
-
-  // The absolute end of the workout. No rest needed.
   if (isLastSeries && isLastExercise) {
       setState(STATES.FINISHED);
       const result = { ...state, wasTerminated: false };
@@ -105,19 +103,24 @@ function handleRest() {
       return;
   }
 
+  // If not, define what to do AFTER the rest is complete.
   const onRestComplete = () => {
-      if (isLastSeries) {
-          // Finished series for this exercise, move to the next.
+      // Re-evaluate state at the moment the rest finishes.
+      const wasLastSeries = state.currentSeries >= state.exercise.series;
+
+      if (wasLastSeries) {
+          // End of series for this exercise, move to the next one.
           state.currentExerciseIndex++;
           state.currentSeries = 1;
           startExercise();
       } else {
-          // More series of the same exercise.
+          // More series of the same exercise to do.
           state.currentSeries++;
           startExercise();
       }
   };
   
+  // Start the rest period.
   transitionTo('Riposo', state.exercise.rest, () => runCountdown(state.exercise.rest, 'Riposo', onRestComplete));
 }
 
@@ -151,21 +154,16 @@ export function pauseOrResumeTrainer() {
   if (state.currentState === STATES.PAUSED) {
       // RESUMING
       const ps = state.pausedState;
-      // Restore the state machine to where it was
-      state.currentState = ps.currentState; 
-      // Call the appropriate function to resume the timer
       runCountdown(ps.totalDuration, ps.phase, ps.onTimerComplete, ps.timeOffsetMs);
   } else {
       // PAUSING
       clearTimers();
       const elapsed = (Date.now() - state.timerStartTime) + state.timeOffsetMs;
       const pausedContext = {
-          // Essential timer data
           totalDuration: state.totalDuration,
           phase: state.phase,
           onTimerComplete: state.onTimerComplete,
           timeOffsetMs: elapsed,
-          // Full state for UI
           exercise: state.exercise,
           currentSeries: state.currentSeries,
           currentRep: state.currentRep,
