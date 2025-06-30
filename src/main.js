@@ -1,5 +1,9 @@
 import store from './modules/store.js';
 import { init as initCalendarView } from './views/CalendarView.js';
+import { loadFromStorage, saveToStorage } from './modules/storage.js';
+import { mockWorkouts } from './modules/_mockData.js';
+
+const WORKOUTS_STORAGE_KEY = 'workouts';
 
 // Cache delle viste per performance
 const views = {
@@ -8,14 +12,28 @@ const views = {
     debriefing: document.getElementById('debriefing-view'),
 };
 
-// --- Inizializzazione Viste ---
-// Per ora, inizializziamo solo la vista calendario
-initCalendarView(views.calendar);
+// --- Funzione di Inizializzazione App ---
+function initializeApp() {
+  let workouts = loadFromStorage(WORKOUTS_STORAGE_KEY);
 
+  // Se non ci sono dati in localStorage, popola con i dati mock
+  if (!workouts) {
+    console.log('Nessun dato trovato in localStorage. Popolamento con dati mock.');
+    saveToStorage(WORKOUTS_STORAGE_KEY, mockWorkouts);
+    workouts = mockWorkouts;
+  }
 
-// --- Logica di Cambio Vista (semplificata per ora) ---
-let currentActiveView = views.calendar; // Impostiamo la vista iniziale
+  // Invia i dati allo store
+  store.dispatch({ type: 'SET_WORKOUTS', payload: workouts });
 
+  // Inizializza le viste
+  initCalendarView(views.calendar);
+
+  // Aggiungere qui l'inizializzazione di altre viste...
+}
+
+// --- Logica di Cambio Vista ---
+let currentActiveView = views.calendar;
 function handleViewChange() {
     const state = store.getState();
     const newActiveViewEl = views[state.currentView];
@@ -28,5 +46,5 @@ function handleViewChange() {
 }
 
 store.subscribe(handleViewChange);
-
-console.log('App "Mio Trainer Personale" inizializzata.');
+initializeApp();
+console.log('App "Mio Trainer Personale" inizializzata e dati caricati.');

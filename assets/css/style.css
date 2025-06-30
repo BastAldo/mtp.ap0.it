@@ -67,7 +67,7 @@ body {
 
 .calendar-grid {
     display: grid;
-    grid-template-columns: 1fr; /* Mobile: una colonna */
+    grid-template-columns: 1fr;
     gap: 0.5rem;
 }
 
@@ -76,7 +76,7 @@ body {
     border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 1rem;
-    min-height: 120px;
+    min-height: 150px;
     display: flex;
     flex-direction: column;
 }
@@ -92,6 +92,34 @@ body {
 
 .day-cell__body {
     margin-top: 0.5rem;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.exercise-count {
+  font-size: 0.9rem;
+  color: var(--secondary-color);
+}
+
+.start-btn {
+  background-color: var(--secondary-color);
+  color: var(--bg-color);
+  border: none;
+  padding: 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  text-transform: uppercase;
+  width: 100%;
+  margin-top: 1rem; /* Spazio tra count e bottone */
+  transition: opacity 0.2s;
+}
+
+.start-btn:hover {
+  opacity: 0.85;
 }
 
 
@@ -102,7 +130,7 @@ body {
     }
 
     .calendar-grid {
-        grid-template-columns: repeat(7, 1fr); /* Desktop: 7 colonne */
+        grid-template-columns: repeat(7, 1fr);
         gap: 1rem;
     }
 

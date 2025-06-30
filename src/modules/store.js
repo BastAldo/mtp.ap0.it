@@ -2,9 +2,9 @@
 
 function createStore() {
     let state = {
-        currentView: 'calendar', // 'calendar', 'trainer', 'debriefing'
-        focusedDate: new Date(), // Traccia la data per la navigazione del calendario
-        workouts: {},
+        currentView: 'calendar',
+        focusedDate: new Date(),
+        workouts: {}, // Qui verranno memorizzati tutti gli allenamenti caricati
     };
 
     const subscribers = new Set();
@@ -17,9 +17,7 @@ function createStore() {
         const oldState = state;
         switch (action.type) {
             case 'CHANGE_VIEW':
-                if (state.currentView !== action.payload) {
-                    state = { ...state, currentView: action.payload };
-                }
+                state = { ...state, currentView: action.payload };
                 break;
 
             case 'PREV_WEEK': {
@@ -36,13 +34,17 @@ function createStore() {
                 break;
             }
 
+            case 'SET_WORKOUTS':
+                state = { ...state, workouts: action.payload };
+                break;
+
             default:
                 console.warn(`Azione non riconosciuta: ${action.type}`);
-                return; // Nessuna notifica se l'azione non è valida
+                return;
         }
-        // Notifica solo se lo stato è effettivamente cambiato
+
         if (state !== oldState) {
-            console.log(`Action: ${action.type}`, state);
+            console.log(`Action: ${action.type}`, action.payload);
             notify();
         }
     }

@@ -1,18 +1,22 @@
 // --- Modulo di Persistenza Dati per localStorage ---
 
 /**
- * Carica i dati dal localStorage e li valida contro uno schema.
+ * Carica i dati dal localStorage e li valida.
  * @param {string} key La chiave da cui caricare.
  * @returns {object | null} I dati validati o null se non validi/presenti.
  */
 export function loadFromStorage(key) {
-    // Logica futura:
-    // 1. Leggere da localStorage.
-    // 2. Parsare il JSON.
-    // 3. Validare lo schema.
-    // 4. Ritornare i dati o null.
-    console.log(`Placeholder: caricamento da storage per la chiave "${key}"`);
+  try {
+    const serializedData = localStorage.getItem(key);
+    if (serializedData === null) {
+      return null;
+    }
+    // Futuro: Aggiungere qui la validazione dello schema.
+    return JSON.parse(serializedData);
+  } catch (error) {
+    console.error(`Errore nel caricare dati da localStorage per la chiave "${key}":`, error);
     return null;
+  }
 }
 
 /**
@@ -21,8 +25,10 @@ export function loadFromStorage(key) {
  * @param {object} data I dati da salvare.
  */
 export function saveToStorage(key, data) {
-    // Logica futura:
-    // 1. Stringify dei dati.
-    // 2. Salvare in localStorage.
-    console.log(`Placeholder: salvataggio su storage per la chiave "${key}"`);
+  try {
+    const serializedData = JSON.stringify(data);
+    localStorage.setItem(key, serializedData);
+  } catch (error) {
+    console.error(`Errore nel salvare dati in localStorage per la chiave "${key}":`, error);
+  }
 }
