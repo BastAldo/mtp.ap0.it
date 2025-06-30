@@ -5,12 +5,15 @@
  * Nessun altro modulo dovrebbe accedere a document.getElementById o simili.
  */
 import { getWeekStartDate, formatDate, formatDateForDisplay } from './utils.js';
+import { EXERCISES } from './config.js';
 
 // Riferimenti agli elementi principali della UI
 const views = document.querySelectorAll('.view');
 export const calendarView = document.getElementById('calendar-view');
 export const trainerView = document.getElementById('trainer-view');
 export const debriefingView = document.getElementById('debriefing-view');
+export const modalOverlay = document.getElementById('modal-overlay');
+const modalContent = document.getElementById('modal-content');
 
 /**
  * Mostra una vista specifica e nasconde tutte le altre.
@@ -69,4 +72,65 @@ export function renderCalendar(weekDate, schedule) {
     gridHtml += '</div>';
 
     calendarView.innerHTML = headerHtml + gridHtml;
+}
+
+/** Apre la modale */
+export function openModal() {
+    modalOverlay.classList.add('modal-overlay--active');
+}
+
+/** Chiude la modale */
+export function closeModal() {
+    modalOverlay.classList.remove('modal-overlay--active');
+}
+
+/**
+ * Renderizza la modale che mostra gli esercizi del giorno.
+ * @param {string} dateKey - La data YYYY-MM-DD.
+ * @param {object} schedule - L'oggetto schedule completo.
+ */
+export function renderDailyWorkoutModal(dateKey, schedule) {
+    const scheduledIds = schedule[dateKey] || [];
+    const scheduledExercises = scheduledIds.map(id => EXERCISES.find(ex => ex.id === id));
+
+    let listItems = scheduledExercises.map(ex => `
+        <li class="modal-list-item">
+            <span>${ex.name}</span>
+            <button class="btn btn-danger" data-action="remove-exercise" data-exercise-id="${ex.id}">Rimuovi</button>
+        </li>
+    `).join('');
+
+    if (scheduledExercises.length === 0) {
+        listItems = '<p>Nessun esercizio pianificato per oggi.</p>';
+    }
+
+    modalContent.innerHTML = `
+        <h3>Allenamento del ${dateKey}</h3>
+        <ul class="modal-list">${listItems}</ul>
+        <div class="modal-actions">
+            <button class="btn btn-primary" data-action="show-library">Aggiungi Esercizio</button>
+            <button class="btn" data-action="close-modal">Chiudi</button>
+        </div>
+    `;
+}
+
+/** Renderizza la modale che mostra la libreria di esercizi. */
+export function renderExerciseLibraryModal() {
+    let listItems = EXERCISES.map(ex => `
+        <li class="modal-list-item">
+            <div>
+                <strong>${ex.name}</strong>
+                <p style="color: var(--text-secondary); font-size: 0.9em;">${ex.description}</p>
+            </div>
+            <button class="btn btn-secondary" data-action="add-exercise" data-exercise-id="${ex.id}">Aggiungi</button>
+        </li>
+    `).join('');
+
+    modalContent.innerHTML = `
+        <h3>Libreria Esercizi</h3>
+        <ul class="modal-list">${listItems}</ul>
+        <div class="modal-actions">
+            <button class="btn" data-action="close-modal">Chiudi</button>
+        </div>
+    `;
 }

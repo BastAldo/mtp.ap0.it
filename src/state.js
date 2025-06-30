@@ -12,4 +12,10 @@ export const state = {
      * @type {Date}
      */
     currentDate: new Date(),
+
+    /**
+     * La chiave della data (YYYY-MM-DD) attualmente selezionata per la modifica.
+     * @type {string | null}
+     */
+    selectedDateKey: null,
 };

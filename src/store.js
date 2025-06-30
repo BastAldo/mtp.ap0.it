@@ -33,3 +33,37 @@ export function saveSchedule(schedule) {
         console.error("Failed to save schedule to localStorage", error);
     }
 }
+
+/**
+ * Aggiunge un ID esercizio a una data specifica nel programma.
+ * @param {string} dateKey La data in formato YYYY-MM-DD.
+ * @param {string} exerciseId L'ID dell'esercizio da aggiungere.
+ */
+export function addExerciseToDate(dateKey, exerciseId) {
+    const schedule = getSchedule();
+    if (!schedule[dateKey]) {
+        schedule[dateKey] = [];
+    }
+    // Evita duplicati
+    if (!schedule[dateKey].includes(exerciseId)) {
+        schedule[dateKey].push(exerciseId);
+    }
+    saveSchedule(schedule);
+}
+
+/**
+ * Rimuove un ID esercizio da una data specifica nel programma.
+ * @param {string} dateKey La data in formato YYYY-MM-DD.
+ * @param {string} exerciseId L'ID dell'esercizio da rimuovere.
+ */
+export function removeExerciseFromDate(dateKey, exerciseId) {
+    const schedule = getSchedule();
+    if (schedule[dateKey]) {
+        schedule[dateKey] = schedule[dateKey].filter(id => id !== exerciseId);
+        // Se l'array diventa vuoto, rimuovi la chiave della data
+        if (schedule[dateKey].length === 0) {
+            delete schedule[dateKey];
+        }
+    }
+    saveSchedule(schedule);
+}
