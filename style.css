@@ -12,6 +12,7 @@
     --text-secondary: #b3b3b3;
     --danger-color: #ef5350;
     --success-color: #66bb6a;
+    --border-color: #4a4a52;
 
     --font-main: 'Roboto Condensed', sans-serif;
 }
@@ -36,7 +37,7 @@ body {
 }
 
 #app-container {
-    max-width: 900px;
+    max-width: 1200px;
     margin: 2rem auto;
     padding: 0 1rem;
 }
@@ -54,4 +55,98 @@ h1, h2, h3, h4, h5, h6 {
 
 .view--active {
     display: block;
+}
+
+/* --- Stili Calendario --- */
+
+.calendar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 1rem;
+}
+
+.day-cell {
+    background-color: var(--card-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: transform 0.2s ease-out, border-left 0.2s ease-out;
+    border-left: 4px solid transparent;
+}
+
+.day-cell:hover {
+    transform: translateY(-4px);
+    border-left: 4px solid var(--primary-color);
+}
+
+.day-cell-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-weight: 700;
+}
+
+.day-cell-header .day-name {
+    font-size: 0.9em;
+    color: var(--text-secondary);
+}
+
+.day-cell-header .day-number {
+    font-size: 1.5em;
+    color: var(--primary-color);
+}
+
+.day-cell-body {
+    margin: 2rem 0;
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+.day-cell-footer {
+    text-align: center;
+}
+
+/* --- Stili Componenti Generici --- */
+
+.btn {
+    background-color: var(--card-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    padding: 0.5rem 1rem;
+    font-family: var(--font-main);
+    font-size: 1em;
+    font-weight: 700;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.2s;
+}
+
+.btn:hover {
+    transform: scale(1.05);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.btn-secondary {
+    background-color: var(--secondary-color);
+    border-color: var(--secondary-color);
+    color: #1a1a1d;
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background-color: #5dcbb8;
 }
