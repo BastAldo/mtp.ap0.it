@@ -1,47 +1,35 @@
 /**
  * @file config.js
- *
- * Contiene dati di configurazione statici per l'applicazione,
- * come la lista degli esercizi disponibili.
+ * Manages the workout configuration screen.
  */
+import * as storage from './storage.js';
 
-export const EXERCISES = [
-    {
-        id: 'ex01',
-        name: 'Push Up',
-        description: 'Classico piegamento sulle braccia.',
-        type: 'reps', // 'reps' o 'time'
-        series: 3,
-        reps: 10,
-        tempo: { up: 1, hold: 0, down: 2 }, // Durata in secondi per ogni fase
-        rest: 60, // Secondi di riposo tra le serie
-    },
-    {
-        id: 'ex02',
-        name: 'Plank',
-        description: 'Mantenere la posizione isometrica.',
-        type: 'time',
-        series: 3,
-        duration: 45, // Durata in secondi
-        rest: 60,
-    },
-    {
-        id: 'ex03',
-        name: 'Squat',
-        description: 'Piegamento sulle gambe a corpo libero.',
-        type: 'reps',
-        series: 4,
-        reps: 15,
-        tempo: { up: 1, hold: 1, down: 2 },
-        rest: 60,
-    },
-    {
-        id: 'ex04',
-        name: 'Jumping Jacks',
-        description: 'Esercizio cardio.',
-        type: 'time',
-        series: 2,
-        duration: 60,
-        rest: 75,
-    }
-];
+const exercisesList = document.getElementById('exercises-list');
+
+/**
+ * Loads all exercises from storage and displays them in the list.
+ */
+export function loadExercises() {
+    const exercises = storage.getAllExercises();
+    exercisesList.innerHTML = ''; // Clear existing list
+    exercises.forEach(exercise => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+            <input type="checkbox" id="ex-${exercise.id}" data-exercise-id="${exercise.id}">
+            <label for="ex-${exercise.id}">${exercise.name}</label>
+        `;
+        exercisesList.appendChild(li);
+    });
+}
+
+/**
+ * Gets the selected exercises from the checkboxes.
+ * @returns {object[]} An array of the selected exercise objects.
+ */
+export function getSelectedExercises() {
+    const selectedCheckboxes = exercisesList.querySelectorAll('input[type="checkbox"]:checked');
+    const selectedIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.exerciseId);
+
+    // Get the full exercise objects from storage based on the selected IDs
+    return selectedIds.map(id => storage.getExerciseById(id)).filter(ex => ex);
+}

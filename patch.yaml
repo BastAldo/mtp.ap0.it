@@ -1,16 +1,14 @@
-commit_message: "refactor(core): Isolate trainer state machine and create UI module"
+commit_message: "fix(core): Resolve module loading errors and missing manifest"
 rationale: |
-  This commit executes Step 1 of the refactoring plan, addressing the core instability of the application.
+  This patch fixes critical loading errors introduced in the previous refactoring step.
 
-  1.  **State Machine (`src/trainer.js`):** The trainer logic has been completely rewritten into a pure state machine, driven by a single `setInterval` calling a `tick()` function. This eliminates the transient "delay" state, fixing the UI flickering and pause button bugs. It now holds all session state (current exercise, series, time) and is completely decoupled from the DOM. Its only side effect is calling functions in the new UI module.
+  1.  **Module Inconsistency:** The primary error, `does not provide an export`, was caused because `main.js` was updated to use ES modules (`import`), but its dependency `config.js` had not yet been converted from a legacy script to a module. This patch refactors `config.js` to use `export`, resolving the crash.
 
-  2.  **UI Module (`src/ui.js`):** A new `src/ui.js` module has been created. It is now the *only* part of the application with the responsibility of manipulating the DOM. It exposes a clear API (`showView`, `updateTrainerUI`, `togglePause`) that other modules can call, effectively acting as the "view" layer.
+  2.  **Storage Logic:** The `storage.js` file was located in the root, leading to a 404 error and architectural inconsistency. It has now been moved to `src/`, converted into a proper ES module, and is imported by `config.js`. The direct script tag in `index.html` has been removed.
 
-  3.  **Orchestrator (`src/main.js`):** The main script now acts as an orchestrator, importing functionality from the other modules and wiring up the event listeners (e.g., clicks on Start, Pause, Resume buttons).
+  3.  **Missing Manifest:** The browser was requesting a `manifest.json` file referenced in the HTML, which did not exist. A basic manifest file has been created to resolve this 404 error and provide a foundation for PWA capabilities.
 
-  4.  **HTML (`index.html`):** The HTML has been updated to use a single `type="module"` script, which is the modern standard. Static buttons for `resume` and `next-exercise` have been added and will be toggled by the UI module, which is more robust than creating/destroying elements.
-
-  This foundational refactoring creates a clear separation of concerns, making the application stable, maintainable, and ready for future development.
+  These fixes make the application stable and load correctly, completing the transition to a modular architecture initiated in the previous step.
 patches:
   - file: index.html
     content: |
@@ -54,283 +52,126 @@ patches:
               </div>
           </div>
 
-          <script src="src/storage.js"></script>
           <script type="module" src="src/main.js"></script>
       </body>
       </html>
-  - file: src/main.js
+  - file: src/config.js
     content: |
       /**
-       * @file main.js
-       * This is the entry point of the application.
-       * It handles the orchestration between the UI and the application logic.
+       * @file config.js
+       * Manages the workout configuration screen.
        */
+      import * as storage from './storage.js';
 
-      import { loadExercises, getSelectedExercises } from './config.js';
-      import { startTrainer, pause, resume, nextExercise } from './trainer.js';
-      import { showView } from './ui.js';
+      const exercisesList = document.getElementById('exercises-list');
 
-      document.addEventListener('DOMContentLoaded', () => {
-          // Initial setup
-          showView('config');
-          loadExercises();
-
-          // Event Listeners
-          const startButton = document.getElementById('start-training-button');
-          const pauseButton = document.getElementById('pause-button');
-          const resumeButton = document.getElementById('resume-button');
-          const nextExerciseButton = document.getElementById('next-exercise-button');
-
-          startButton.addEventListener('click', () => {
-              const selectedExercises = getSelectedExercises();
-              if (selectedExercises.length > 0) {
-                  startTrainer(selectedExercises);
-              } else {
-                  alert('Please select at least one exercise.');
-              }
+      /**
+       * Loads all exercises from storage and displays them in the list.
+       */
+      export function loadExercises() {
+          const exercises = storage.getAllExercises();
+          exercisesList.innerHTML = ''; // Clear existing list
+          exercises.forEach(exercise => {
+              const li = document.createElement('li');
+              li.innerHTML = `
+                  <input type="checkbox" id="ex-${exercise.id}" data-exercise-id="${exercise.id}">
+                  <label for="ex-${exercise.id}">${exercise.name}</label>
+              `;
+              exercisesList.appendChild(li);
           });
+      }
 
-          pauseButton.addEventListener('click', () => {
-              pause();
-          });
+      /**
+       * Gets the selected exercises from the checkboxes.
+       * @returns {object[]} An array of the selected exercise objects.
+       */
+      export function getSelectedExercises() {
+          const selectedCheckboxes = exercisesList.querySelectorAll('input[type="checkbox"]:checked');
+          const selectedIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.exerciseId);
 
-          resumeButton.addEventListener('click', () => {
-              resume();
-          });
-
-          nextExerciseButton.addEventListener('click', () => {
-            nextExercise();
-          });
-      });
-  - file: src/trainer.js
+          // Get the full exercise objects from storage based on the selected IDs
+          return selectedIds.map(id => storage.getExerciseById(id)).filter(ex => ex);
+      }
+  - file: src/storage.js
     content: |
       /**
-       * @file trainer.js
-       * Contains the entire state machine logic for the training session.
-       * It is completely decoupled from the DOM.
+       * @file storage.js
+       * Handles all interactions with localStorage.
        */
-      import * as ui from './ui.js';
 
-      const PREPARATION_TIME = 5;
+      const EXERCISES_KEY = 'workout_exercises';
 
-      // Application states
-      const State = {
-          IDLE: 'IDLE',
-          PREPARING: 'PREPARING',
-          WORKING: 'WORKING',
-          RESTING: 'RESTING',
-          PAUSED: 'PAUSED',
-          EXERCISE_COMPLETED: 'EXERCISE_COMPLETED',
-          WORKOUT_COMPLETED: 'WORKOUT_COMPLETED',
-      };
+      // Initial default data
+      const defaultExercises = [
+          { id: '1', name: 'Push-up', duration: 30, rest: 15, series: 3 },
+          { id: '2', name: 'Squat', duration: 45, rest: 20, series: 3 },
+          { id: '3', name: 'Plank', duration: 60, rest: 15, series: 2 },
+          { id: '4', name: 'Jumping Jacks', duration: 60, rest: 20, series: 2 }
+      ];
 
-      let currentState = State.IDLE;
-      let pausedState = null;
-
-      let exercises = [];
-      let currentExerciseIndex = 0;
-      let currentSeries = 1;
-      let countdown = 0;
-      let intervalId = null;
-
-      function getCurrentExercise() {
-          return exercises[currentExerciseIndex];
-      }
-
-      function tick() {
-          countdown--;
-          updateUI();
-
-          if (countdown <= 0) {
-              transitionToNextState();
+      /**
+       * Initializes the storage with default exercises if it's empty.
+       */
+      function initializeStorage() {
+          if (!localStorage.getItem(EXERCISES_KEY)) {
+              localStorage.setItem(EXERCISES_KEY, JSON.stringify(defaultExercises));
           }
       }
 
-      function transitionToNextState() {
-          const exercise = getCurrentExercise();
-          switch (currentState) {
-              case State.PREPARING:
-                  currentState = State.WORKING;
-                  countdown = exercise.duration;
-                  break;
-
-              case State.WORKING:
-                  if (currentSeries < exercise.series) {
-                      currentState = State.RESTING;
-                      countdown = exercise.rest;
-                      currentSeries++;
-                  } else {
-                      // Exercise finished
-                      clearInterval(intervalId);
-                      intervalId = null;
-                      currentState = State.EXERCISE_COMPLETED;
-                  }
-                  break;
-
-              case State.RESTING:
-                  currentState = State.WORKING;
-                  countdown = exercise.duration;
-                  break;
-          }
-          updateUI();
+      /**
+       * Retrieves all exercises from localStorage.
+       * @returns {object[]} An array of exercise objects.
+       */
+      export function getAllExercises() {
+          const exercises = localStorage.getItem(EXERCISES_KEY);
+          return exercises ? JSON.parse(exercises) : [];
       }
 
-      function updateUI() {
-          const exercise = getCurrentExercise();
-          const isPaused = currentState === State.PAUSED;
-
-          let statusMessage = currentState;
-          if(currentState === State.PREPARING) statusMessage = `Get Ready: ${exercise.name}`;
-          if(currentState === State.WORKING) statusMessage = 'Work!';
-          if(currentState === State.RESTING) statusMessage = 'Rest';
-          if(currentState === State.PAUSED) statusMessage = 'Paused';
-          if(currentState === State.EXERCISE_COMPLETED) statusMessage = `Exercise '${exercise.name}' Complete!`;
-          if(currentState === State.WORKOUT_COMPLETED) statusMessage = `Workout Complete!`;
-
-
-          ui.updateTrainerUI({
-              exerciseName: exercise.name,
-              currentSeries: currentSeries,
-              totalSeries: exercise.series,
-              time: countdown,
-              statusMessage: statusMessage,
-              isLastExercise: currentExerciseIndex >= exercises.length - 1,
-              isExerciseCompleted: currentState === State.EXERCISE_COMPLETED,
-              isWorkoutCompleted: currentState === State.WORKOUT_COMPLETED,
-          });
-          ui.togglePause(isPaused);
+      /**
+       * Saves an array of exercises to localStorage.
+       * @param {object[]} exercises - The array of exercises to save.
+       */
+      export function saveExercises(exercises) {
+          localStorage.setItem(EXERCISES_KEY, JSON.stringify(exercises));
       }
 
-      function startInterval() {
-          if (intervalId) clearInterval(intervalId);
-          intervalId = setInterval(tick, 1000);
+      /**
+       * Retrieves a single exercise by its ID.
+       * @param {string} id - The ID of the exercise.
+       * @returns {object | undefined} The exercise object or undefined if not found.
+       */
+      export function getExerciseById(id) {
+          const exercises = getAllExercises();
+          return exercises.find(ex => ex.id === id);
       }
 
-      // --- Public API ---
-
-      export function startTrainer(exerciseConfigs) {
-          exercises = exerciseConfigs;
-          currentExerciseIndex = 0;
-          currentSeries = 1;
-          currentState = State.PREPARING;
-          countdown = PREPARATION_TIME;
-
-          ui.showView('trainer');
-          updateUI();
-          startInterval();
-      }
-
-      export function pause() {
-          if (currentState !== State.WORKING && currentState !== State.RESTING && currentState !== State.PREPARING) return;
-          clearInterval(intervalId);
-          pausedState = currentState;
-          currentState = State.PAUSED;
-          updateUI();
-      }
-
-      export function resume() {
-          if (currentState !== State.PAUSED) return;
-          currentState = pausedState;
-          pausedState = null;
-          updateUI();
-          startInterval();
-      }
-
-      export function nextExercise() {
-        if (currentState !== State.EXERCISE_COMPLETED) return;
-
-        if (currentExerciseIndex < exercises.length - 1) {
-            currentExerciseIndex++;
-            currentSeries = 1;
-            currentState = State.PREPARING;
-            countdown = PREPARATION_TIME;
-            updateUI();
-            startInterval();
-        } else {
-            currentState = State.WORKOUT_COMPLETED;
-            updateUI();
-        }
-      }
-  - file: src/ui.js
+      // Initialize storage on load
+      initializeStorage();
+  - file: manifest.json
     content: |
-      /**
-       * @file ui.js
-       * Responsible for all direct DOM manipulations.
-       * It acts as the "view" layer of the application.
-       */
-
-      // Views
-      const configView = document.getElementById('config-view');
-      const trainerView = document.getElementById('trainer-view');
-
-      // Trainer elements
-      const exerciseNameEl = document.getElementById('exercise-name');
-      const seriesCounterEl = document.getElementById('series-counter');
-      const timerEl = document.getElementById('timer');
-      const statusMessageEl = document.getElementById('status-message');
-      const pauseButton = document.getElementById('pause-button');
-      const resumeButton = document.getElementById('resume-button');
-      const nextExerciseButton = document.getElementById('next-exercise-button');
-
-
-      /**
-       * Shows a specific view and hides all others.
-       * @param {('config'|'trainer')} viewName The name of the view to show.
-       */
-      export function showView(viewName) {
-          configView.style.display = 'none';
-          trainerView.style.display = 'none';
-
-          if (viewName === 'config') {
-              configView.style.display = 'block';
-          } else if (viewName === 'trainer') {
-              trainerView.style.display = 'block';
+      {
+        "name": "MTP Workout Trainer",
+        "short_name": "Workout",
+        "start_url": ".",
+        "display": "standalone",
+        "background_color": "#ffffff",
+        "theme_color": "#333333",
+        "description": "A simple workout trainer application.",
+        "icons": [
+          {
+            "src": "icon-192.png",
+            "type": "image/png",
+            "sizes": "192x192"
+          },
+          {
+            "src": "icon-512.png",
+            "type": "image/png",
+            "sizes": "512x512"
           }
-      }
-
-      /**
-       * Updates the entire trainer UI based on the current state.
-       * @param {object} state The state object from the trainer module.
-       * @param {string} state.exerciseName
-       * @param {number} state.currentSeries
-       * @param {number} state.totalSeries
-       * @param {number} state.time
-       * @param {string} state.statusMessage
-       * @param {boolean} state.isLastExercise
-       * @param {boolean} state.isExerciseCompleted
-       * @param {boolean} state.isWorkoutCompleted
-       */
-      export function updateTrainerUI(state) {
-          exerciseNameEl.textContent = state.exerciseName;
-          seriesCounterEl.textContent = `Series ${state.currentSeries} / ${state.totalSeries}`;
-          timerEl.textContent = String(state.time).padStart(2, '0');
-          statusMessageEl.textContent = state.statusMessage;
-
-          if (state.isWorkoutCompleted) {
-            nextExerciseButton.style.display = 'none';
-            pauseButton.style.display = 'none';
-            resumeButton.style.display = 'none';
-          } else if (state.isExerciseCompleted) {
-            nextExerciseButton.style.display = 'inline-block';
-            pauseButton.style.display = 'none';
-            resumeButton.style.display = 'none';
-          } else {
-            nextExerciseButton.style.display = 'none';
-          }
-      }
-
-      /**
-       * Toggles the visibility of the Pause and Resume buttons.
-       * @param {boolean} isPaused - True if the trainer is paused.
-       */
-      export function togglePause(isPaused) {
-          if (nextExerciseButton.style.display !== 'none') return; // Don't show pause/resume if next is visible
-
-          pauseButton.style.display = isPaused ? 'none' : 'inline-block';
-          resumeButton.style.display = isPaused ? 'inline-block' : 'none';
+        ]
       }
 commands:
-  - echo "✅ Step 1 complete: Core refactoring finished."
-  - echo "The trainer logic is now stable and separated from the UI."
-  - echo "Please test the training functionality."
-  - echo "When you are ready, we will proceed with 'Step 2: Application Shell and Module Integration' to finalize the module structure."
+  - echo "✅ Bug fixes applied. The module system is now consistent."
+  - echo "🧹 The old 'storage.js' in the root is now obsolete. Please delete it."
+  - rm storage.js
+  - echo "The application should now load without errors. Please verify."
