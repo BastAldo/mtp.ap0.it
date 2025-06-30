@@ -1,214 +1,134 @@
 # This is a YAML file. Copy all content from here down
 # and save it as 'patch.yaml'.
-commit_message: "fix: Correct trainer ring animation and fix state machine loop"
+commit_message: "docs: Update functionality and design specs to reflect current vision"
 rationale: |
-  Questo commit corregge due bug critici nella vista Trainer emersi durante i test.
+  Questo commit aggiorna i documenti di specifica (`.md`) per riflettere la visione finale e dettagliata dell'applicazione, in particolare per l'interfaccia del Trainer.
 
-  1.  **Animazione Anello Invertita**: L'anello di avanzamento si svuotava invece di riempirsi. Il problema era nel calcolo della percentuale di progresso in `trainer.js`, che era basato sul tempo rimanente. È stato corretto per basarsi sul tempo trascorso, producendo ora un'animazione di riempimento intuitiva.
+  Lo scopo è creare un punto di partenza pulito e completo per una nuova istanza di sviluppo, catturando tutte le decisioni di design e di esperienza utente emerse durante la fase di prototipazione e debugging.
 
-  2.  **Loop della Macchina a Stati**: Dopo la fase di preparazione, il trainer entrava in un ciclo infinito di stati di "annuncio" senza mai eseguire l'azione. Il bug era causato dalla funzione `resume` che, dopo una pausa, non ripristinava il sotto-stato corretto (es. 'action.rep.up'), ma uno stato generico.
-  
-  La soluzione è stata implementata in `trainer.js` aggiungendo una proprietà `pausedState` allo stato del trainer. Ora, prima di entrare in pausa, lo stato esatto viene salvato. La funzione `resume` utilizza questo valore per riprendere l'esecuzione precisamente da dove era stata interrotta, risolvendo il loop.
+  Modifiche a `design_and_visual.md`:
+  - È stata aggiunta una nuova sezione che descrive in dettaglio il componente "Trainer Progress Ring", specificando l'uso di SVG, l'animazione di riempimento, e il layout gerarchico interno (numero grande + etichetta fase piccola).
+  - È stata chiarita la funzione dell'effetto `.is-flashing` all'interno di questo nuovo contesto.
+
+  Modifiche a `functionality_spec.md`:
+  - È stato formalizzato il concetto di `series` per ogni esercizio.
+  - Il flusso della macchina a stati del Trainer è stato dettagliato per includere la nuova logica di transizione visuale: la fase di `announcing` ora precede ogni fase di lavoro, mostrando una scritta lampeggiante all'interno dell'anello di avanzamento vuoto.
 patches:
-  - file: src/trainer.js
+  - file: design_and_visual.md
     content: |
-      /**
-       * @file trainer.js
-       *
-       * Contiene la macchina a stati e tutta la logica di business
-       * per una sessione di allenamento. È completamente disaccoppiato dal DOM.
-       */
-      import * as ui from './ui.js';
-      import { EXERCISES } from './config.js';
-      import { playTick } from './utils.js';
+      # UI Design and Visual System
 
-      let state = {};
+      This document describes the user interface, color palette, and visual language of the "Mio Trainer Personale" application.
 
-      function resetState() {
-          if (state.intervalId) clearInterval(state.intervalId);
-          state = {
-              workoutPlan: [],
-              currentExerciseIndex: 0,
-              currentSeries: 1,
-              currentState: 'idle', // idle, ready, announcing, preparing, action, paused, rest, finished
-              pausedState: null, // Salva lo stato prima della pausa
-              countdown: 0,
-              countdownDuration: 0,
-              intervalId: null,
-              phase: '', // 'up', 'hold', 'down', 'rest', 'prepare'
-              repCount: 0,
-              progress: 1,
-          };
-      }
+      ## 1. General Philosophy
 
-      function setState(newState, data = {}) {
-          state.currentState = newState;
-          // Esegui azioni all'ingresso del nuovo stato
-          switch (newState) {
-              case 'idle':
-                  resetState();
-                  break;
-              case 'ready':
-                  state.currentExercise = state.workoutPlan[state.currentExerciseIndex];
-                  if (state.currentSeries === 1) {
-                      state.currentSeries = 1;
-                  }
-                  ui.updateTrainerUI(state);
-                  break;
-              case 'announcing':
-                  state.phase = data.phase;
-                  ui.updateTrainerUI(state);
-                  playTick();
-                  setTimeout(() => setState(data.nextState, data.nextStateData), 750);
-                  break;
-              case 'preparing':
-                  state.phase = 'prepare';
-                  runCountdown(3, 'action');
-                  break;
-              case 'action':
-                  runActionPhase();
-                  break;
-              case 'rest':
-                  state.phase = 'rest';
-                  runCountdown(state.currentExercise.rest, 'readyForNext');
-                  break;
-              case 'paused':
-                  clearInterval(state.intervalId);
-                  ui.updateTrainerUI(state);
-                  break;
-              case 'readyForNext':
-                  if (state.currentSeries < state.currentExercise.series) {
-                      state.currentSeries++;
-                      setState('announcing', { phase: 'ready', nextState: 'ready' });
-                  } else if (state.currentExerciseIndex < state.workoutPlan.length - 1) {
-                      state.currentExerciseIndex++;
-                      state.currentSeries = 1;
-                      setState('announcing', { phase: 'ready', nextState: 'ready' });
-                  } else {
-                      setState('finished');
-                  }
-                  break;
-              case 'finished':
-                  // Per ora, torna al calendario. In futuro andrà al debriefing.
-                  alert("Allenamento completato!");
-                  ui.showView('calendar-view');
-                  resetState();
-                  break;
-          }
-      }
+      The UI is designed with a **dark theme** to be easy on the eyes, especially in low-light environments. The aesthetic is minimal and functional, prioritizing clarity and readability of information during a workout.
 
-      function runCountdown(duration, nextState, nextStateData = {}) {
-          state.countdown = duration;
-          state.countdownDuration = duration;
-          // Calcolo corretto per riempire, non svuotare
-          state.progress = (state.countdownDuration - state.countdown) / state.countdownDuration;
+      ## 2. Color Palette
 
-          ui.updateTrainerUI(state);
-          if (duration > 0) playTick();
+      The entire UI is based on a set of CSS variables for consistency.
 
-          state.intervalId = setInterval(() => {
-              state.countdown--;
-              // Calcolo corretto per riempire, non svuotare
-              state.progress = (state.countdownDuration - state.countdown) / state.countdownDuration;
-              ui.updateTrainerUI(state);
-              if (state.countdown > 0) playTick();
+      * `--bg-color: #1a1a1d`: The main background color of the application.
+      * `--card-color: #2c2c34`: The background color for all interactive cards, such as day cells and list items.
+      * `--primary-color: #9575cd`: The primary accent color, used for key interactive elements and titles. A shade of purple.
+      * `--secondary-color: #4db6ac`: The secondary accent color, used for "positive" or "start" actions, like the start buttons and progress indicators. A shade of teal.
+      * `--text-color: #f4f4f9`: The primary color for all standard text.
+      * `--text-secondary: #b3b3b3`: A dimmer text color for supplementary information and labels.
+      * `--danger-color: #ef5350`: Used for "danger" or "delete" actions.
+      * `--success-color: #66bb6a`: Used for "success" or "completion" states.
 
-              if (state.countdown <= 0) {
-                  clearInterval(state.intervalId);
-                  setState(nextState, nextStateData);
-              }
-          }, 1000);
-      }
+      ## 3. Layout and Structure
+
+      * **Main Container (`#app-container`):** All content is wrapped in a centered container with a maximum width to ensure readability on large screens.
+      * **Views (`.view`):** The application's main sections (`calendar`, `trainer`, `debriefing`) are managed by a class-based system. An element with the `.view` class is hidden (`display: none`), while adding the `.view--active` class makes it visible.
+      * **Grids and Flexbox:** The layout heavily relies on CSS Grid (for the weekly calendar) and Flexbox (for component alignment) to be responsive and robust.
+
+      ## 4. Key Components and Effects
+
+      ### 4.1. Cards
+      * **Appearance:** Used for day cells (`.day-cell`) and list items in modals. They have a `background-color` of `--card-color` and `border-radius: 8px`.
+      * **Interaction:** On hover, a card lifts slightly (`transform: translateY(-3px)`) and a `--primary-color` accent appears on its left border, providing clear visual feedback.
+
+      ### 4.2. Buttons
+      * **Base Style (`.btn`):** A standardized button with rounded corners, bold font weight, and a subtle scaling effect on hover.
+      * **Variations:** Color variations (`.btn-primary`, `.btn-secondary`, `.btn-danger`, etc.) are used to signify the button's purpose.
+      * **State:** Disabled buttons have reduced opacity and a `not-allowed` cursor.
+
+      ### 4.3. Modals
+      * **Overlay (`.modal-overlay`):** A semi-transparent black overlay covers the entire viewport when a modal is active.
+      * **Content Box (`.modal-content`):** A centered card with rounded corners contains the modal's content. It has a max-height and allows for vertical scrolling if the content overflows.
       
-      function runActionPhase() {
-          const exercise = state.currentExercise;
-          if (exercise.type === 'time') {
-              state.phase = 'action';
-              runCountdown(exercise.duration, 'rest');
-          } else if (exercise.type === 'reps') {
-              state.repCount = 0;
-              runRep();
-          }
-      }
+      ### 4.4. Trainer Progress Ring
+      * **Concept:** The central element of the Trainer view is a large circular progress ring, implemented with SVG. It provides immediate, graphical feedback on time-based activities.
+      * **Structure:** The component consists of two concentric circles: a background "track" and a foreground "bar" that animates.
+      * **Animation:** The ring **fills up** (from 0% to 100%) clockwise to indicate elapsed time during a countdown.
+      * **Content Layout:** Inside the ring, information is displayed with a clear hierarchy:
+          * **Top (Large Text):** The primary countdown number (e.g., "30").
+          * **Bottom (Small Text):** The label for the current phase (e.g., "REST", "UP").
 
-      function runRep() {
-          const { reps } = state.currentExercise;
-          if (state.repCount >= reps) {
-              setState('rest');
-              return;
-          }
-          state.repCount++;
-          setState('announcing', { phase: 'up', nextState: 'action.rep.up' });
-      }
-      
-      function runRepPhase(phase) {
-          const { tempo } = state.currentExercise;
-          state.phase = phase;
-          const nextStates = { 'up': 'action.rep.hold', 'hold': 'action.rep.down', 'down': null };
-          runCountdown(tempo[phase], 'action.rep.transition', { next: nextStates[phase] });
-      }
+      ### 4.5. Visual & Auditory Feedback
+      * **Flashing Animation (`.is-flashing`):** A key visual cue used in the Trainer's "Announce Phase". It uses a CSS `@keyframes` animation to alternate an element's opacity. It is used on the large text label that temporarily replaces the countdown numbers to announce the next phase.
+      * **Audio Tick:** A high-frequency sine wave sound (`playTick()`) is generated via the Web Audio API. It plays in sync with countdown timers to provide non-visual, rhythmic feedback.
+  - file: functionality_spec.md
+    content: |
+      # App Functionality Specification
 
-      // Entry points dall'esterno
-      export function start(exerciseIds) {
-          resetState();
-          state.workoutPlan = exerciseIds.map(id => EXERCISES.find(e => e.id === id));
-          if (state.workoutPlan.length > 0) {
-              setState('ready');
-          }
-      }
+      This document outlines the core features and operational logic of the "Mio Trainer Personale" web application.
 
-      export function startSeries() {
-          if (state.currentState !== 'ready') return;
-          setState('announcing', { phase: 'prepare', nextState: 'preparing' });
-      }
+      ## 1. Core Concept
 
-      export function pause() {
-          if (!['action', 'rest', 'preparing'].includes(state.currentState) && !state.currentState.startsWith('action.rep')) return;
-          state.pausedState = state.currentState; // Salva lo stato esatto
-          setState('paused');
-      }
+      The application is a single-page app (SPA) designed for users to schedule, execute, and track workouts. All user data is persisted locally in the browser's `localStorage`.
 
-      export function resume() {
-          if (state.currentState !== 'paused') return;
-          // Ripristina lo stato esatto che era stato messo in pausa
-          const stateToResume = state.pausedState; 
-          setState(stateToResume);
-      }
+      ## 2. Main Views
 
-      export function stop() {
-          if (confirm("Sei sicuro di voler terminare l'allenamento?")) {
-              setState('finished');
-          }
-      }
+      The application operates using three primary, mutually exclusive views: `Calendar`, `Trainer`, and `Debriefing`.
 
-      // Mini-stati per la logica delle ripetizioni
-      function setRepState(newState, data) {
-           switch(newState) {
-                case 'action.rep.up':
-                case 'action.rep.down':
-                case 'action.rep.hold':
-                   runRepPhase(newState.split('.').pop());
-                   break;
-                case 'action.rep.transition':
-                    if (data.next) {
-                        setState('announcing', { phase: data.next.split('.').pop(), nextState: data.next });
-                    } else {
-                        runRep(); // Prossima ripetizione
-                    }
-                    break;
-           }
-      }
+      ### 2.1. Calendar View
+      - **Function:** The main dashboard and default view of the application.
+      - **Display:** It presents a weekly grid layout.
+      - **Navigation:** Users can navigate to the previous or next week.
+      - **Day Cells:** Each cell represents a day and displays a summary of the number of exercises scheduled for that day. A "START" button is enabled if one or more exercises are scheduled.
+      - **Interaction:** Clicking a day cell (but not the "START" button) opens the Workout Editor modal for that specific date.
 
-      // Intercetta la chiamata a setState per gestire gli stati complessi
-      const originalSetState = setState;
-      setState = (newState, data = {}) => {
-          if (newState.startsWith('action.rep')) {
-              setRepState(newState, data);
-          } else {
-              originalSetState(newState, data);
-          }
-      }
+      ### 2.2. Workout Editor (Modal System)
+      The editor is a two-stage modal system for managing a day's workout routine.
+      - **Daily Workout Modal:**
+          - Triggered by clicking a day cell.
+          - Displays a list of exercises currently scheduled for the selected date.
+          - Allows **removal** of any exercise from the list.
+          - Contains an "Add Exercise" button to open the Exercise Library modal.
+      - **Exercise Library Modal:**
+          - Triggered by the "Add Exercise" button.
+          - Displays a complete list of all available exercises defined in the app's configuration.
+          - Allows **selection** of an exercise to add to the current day's routine.
+
+      ### 2.3. Interactive Trainer View
+      - **Function:** An interactive, state-driven interface that guides the user through a scheduled workout in real-time.
+      - **Activation:** Triggered by clicking the "START" button on a day cell in the calendar.
+
+      #### Trainer State Machine & Flow
+      The trainer operates as a state machine. Each exercise consists of a number of **series**. The primary user flow is as follows:
+
+      1.  **Ready (`ready`):** The trainer displays the current exercise and series number. It shows "READY" inside the progress ring. It awaits user input to begin.
+      2.  **Announcing (`announcing`):** Before every new phase, this 0.75-second state is activated. The progress ring is shown as empty. The content inside the ring is replaced by a large, flashing text label announcing the upcoming phase (e.g., "PREPARE", "UP", "REST"). An audio tick alerts the user.
+      3.  **Preparing (`preparing`):** A 3-second countdown to prepare the user for the first series of an exercise. The progress ring fills up, and the countdown is displayed inside.
+      4.  **Action (`action`):** The core execution phase. The progress ring animates for the duration of the phase, with the countdown and phase label shown inside.
+          - For **`reps`**-based exercises, the trainer automatically cycles through timed phases as defined by the exercise's `tempo` object (e.g., `up`, `hold`, `down`), each with its own countdown and progress ring animation.
+          - For **`time`**-based exercises, a single countdown for the specified `duration` is run.
+      5.  **Paused (`paused`):** The user can pause the workout at any time during a countdown state. The timer and the progress ring animation stop. The user must click "RESUME" to continue.
+      6.  **Rest (`rest`):** After a set is completed, the trainer enters a rest period. A countdown for the specified `rest` duration is shown, and the progress ring animates accordingly.
+      7.  **Advancement:** After a rest period, the system automatically determines whether to proceed to the next series of the same exercise or to the next exercise in the routine, starting again from the `Ready` (or `Announcing`) state.
+      8.  **Finished (`finished`):** Once all exercises and series are complete, the trainer automatically transitions to the Debriefing View.
+
+      ### 2.4. Debriefing View
+      - **Activation:** Appears automatically when a workout is completed or manually terminated.
+      - **Content:**
+          - **Summary:** Displays a list of all exercises completed during the session.
+          - **Text Report:** Generates a pre-formatted, multi-line string summarizing the workout, ready for sharing.
+      - **Actions:**
+          - **Copy for Coach:** Copies the text report to the user's clipboard.
+          - **Return to Calendar:** Switches the view back to the main Calendar.
 commands:
-  - "echo 'Patch di correzione per il Trainer applicato.'"
-  - "echo 'Prova di nuovo, l''anello dovrebbe riempirsi e il ciclo di allenamento non dovrebbe più bloccarsi.'"
+  - "echo 'Patch di aggiornamento per i documenti di specifica applicato.'"
+  - "echo 'Ora puoi avviare una nuova istanza con questi file .md come base di partenza pulita e completa.'"
   - "git status"
