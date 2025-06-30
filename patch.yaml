@@ -1,239 +1,32 @@
-commit_message: "feat(ui): Implementa sistema di modali generico e interattività calendario"
+commit_message: "fix(calendar): Rimuove la dichiarazione duplicata di funzioni"
 rationale: |
-  Questo commit introduce un componente modale riutilizzabile e rende le celle del calendario interattive, come da piano d'azione approvato.
-
-  - È stato aggiunto un contenitore modale (`#modal-container`) in `index.html` e gli stili CSS corrispondenti.
-  - È stato creato un nuovo modulo `src/ui/Modal.js` che gestisce la logica di visualizzazione/chiusura della modale, sottoscrivendosi allo store.
-  - Lo store (`store.js`) ora include lo stato (`isModalOpen`, `modalContext`) e le azioni (`OPEN_MODAL`, `CLOSE_MODAL`) per un controllo centralizzato delle modali.
-  - `main.js` è stato aggiornato per inizializzare il nuovo componente modale.
-  - `CalendarView.js` ora usa la delegazione degli eventi per catturare i click sulle celle dei giorni e invia un'azione per aprire la modale, passando la data selezionata come contesto.
+  Questo commit corregge un SyntaxError nel file `src/views/CalendarView.js`.
+  L'errore era causato dalla dichiarazione duplicata delle funzioni di utilità (`getWeekStartDate`, `formatShortDate`, `toISODateString`), un problema introdotto nella patch precedente.
+  Questa correzione rimuove le dichiarazioni ridondanti, risolvendo l'errore e ripristinando la piena funzionalità dell'applicazione.
 patches:
-  - file: index.html
-    content: |
-      <!DOCTYPE html>
-      <html lang="it">
-      <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Mio Trainer Personale</title>
-          <link rel="stylesheet" href="assets/css/style.css">
-      </head>
-      <body>
-
-          <div id="app-container">
-              <div id="calendar-view" class="view view--active">
-                  </div>
-              <div id="trainer-view" class="view">
-                  <h1>Trainer View</h1>
-              </div>
-              <div id="debriefing-view" class="view">
-                  <h1>Debriefing View</h1>
-              </div>
-          </div>
-
-          <div id="modal-container">
-              </div>
-
-          <script src="src/main.js" type="module"></script>
-      </body>
-      </html>
-  - file: assets/css/style.css
-    content: |
-      /* --- GLOBAL STYLES & MOBILE FIRST --- */
-      :root {
-          --bg-color: #1a1a1d;
-          --card-color: #2c2c34;
-          --primary-color: #9575cd;
-          --secondary-color: #4db6ac;
-          --text-color: #f4f4f9;
-          --text-color-muted: #aaa;
-          --border-color: #40404a;
-      }
-      * { box-sizing: border-box; margin: 0; padding: 0; }
-      body {
-          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-          background-color: var(--bg-color);
-          color: var(--text-color);
-      }
-      #app-container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
-      .view { display: none; width: 100%; }
-      .view--active { display: block; }
-
-      /* --- CALENDAR VIEW STYLES --- */
-      .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-      .calendar-header h2 { font-size: 1.25rem; text-align: center; }
-      .calendar-header button { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: background-color 0.2s; }
-      .calendar-header button:hover { background-color: var(--primary-color); }
-      .calendar-grid { display: grid; grid-template-columns: 1fr; gap: 0.5rem; }
-      .day-cell { background-color: var(--card-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; min-height: 150px; display: flex; flex-direction: column; cursor: pointer; transition: border-color 0.2s; }
-      .day-cell:hover { border-color: var(--primary-color); }
-      .day-cell__header { display: flex; justify-content: space-between; font-weight: bold; color: var(--text-color-muted); text-transform: uppercase; font-size: 0.8rem; pointer-events: none; }
-      .day-cell__body { margin-top: 0.5rem; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; pointer-events: none; }
-      .exercise-count { font-size: 0.9rem; color: var(--secondary-color); }
-      .start-btn { background-color: var(--secondary-color); color: var(--bg-color); border: none; padding: 0.6rem; border-radius: 6px; cursor: pointer; font-weight: bold; text-transform: uppercase; width: 100%; margin-top: 1rem; transition: opacity 0.2s; pointer-events: all !important; /* Permette il click sul bottone */ }
-      .start-btn:hover { opacity: 0.85; }
-
-      /* --- MODAL STYLES --- */
-      #modal-container {
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          background-color: rgba(0, 0, 0, 0.7);
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          opacity: 0;
-          pointer-events: none;
-          transition: opacity 0.3s ease;
-      }
-      #modal-container.active {
-          opacity: 1;
-          pointer-events: all;
-      }
-      .modal-content {
-          background-color: var(--card-color);
-          padding: 2rem;
-          border-radius: 8px;
-          border: 1px solid var(--border-color);
-          min-width: 300px;
-          max-width: 90%;
-          transform: scale(0.95);
-          transition: transform 0.3s ease;
-      }
-      #modal-container.active .modal-content {
-          transform: scale(1);
-      }
-      .modal-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 1rem;
-      }
-      .modal-header h3 { color: var(--primary-color); }
-      .modal-close-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; cursor: pointer; }
-
-      /* --- TABLET/DESKTOP OVERRIDES --- */
-      @media (min-width: 768px) {
-          #app-container { padding: 2rem; }
-          .calendar-grid { grid-template-columns: repeat(7, 1fr); gap: 1rem; }
-          .calendar-header h2 { font-size: 1.5rem; }
-          .modal-content { min-width: 500px; max-width: 60%; }
-      }
-  - file: src/main.js
-    content: |
-      import store from './modules/store.js';
-      import { init as initCalendarView } from './views/CalendarView.js';
-      import { init as initModal } from './ui/Modal.js';
-      import { loadFromStorage, saveToStorage } from './modules/storage.js';
-      import { mockWorkouts } from './modules/_mockData.js';
-
-      const WORKOUTS_STORAGE_KEY = 'workouts';
-
-      const views = {
-          calendar: document.getElementById('calendar-view'),
-          trainer: document.getElementById('trainer-view'),
-          debriefing: document.getElementById('debriefing-view'),
-      };
-
-      function initializeApp() {
-        let workouts = loadFromStorage(WORKOUTS_STORAGE_KEY);
-        if (!workouts) {
-          saveToStorage(WORKOUTS_STORAGE_KEY, mockWorkouts);
-          workouts = mockWorkouts;
-        }
-        store.dispatch({ type: 'SET_WORKOUTS', payload: workouts });
-
-        initCalendarView(views.calendar);
-        initModal(document.getElementById('modal-container'));
-      }
-
-      let currentActiveView = views.calendar;
-      function handleViewChange() {
-        const { currentView } = store.getState();
-        const newActiveViewEl = views[currentView];
-
-        if (currentActiveView !== newActiveViewEl) {
-          currentActiveView.classList.remove('view--active');
-          newActiveViewEl.classList.add('view--active');
-          currentActiveView = newActiveViewEl;
-        }
-      }
-
-      store.subscribe(handleViewChange);
-      initializeApp();
-      console.log('App "Mio Trainer Personale" inizializzata.');
-  - file: src/modules/store.js
-    content: |
-      function createStore() {
-        let state = {
-          currentView: 'calendar',
-          focusedDate: new Date(),
-          workouts: {},
-          isModalOpen: false,
-          modalContext: null, // Es: { type: 'EDIT_WORKOUT', date: '2025-07-01' }
-        };
-
-        const subscribers = new Set();
-        function notify() { subscribers.forEach(callback => callback()); }
-
-        function dispatch(action) {
-          const oldState = state;
-          switch (action.type) {
-            case 'CHANGE_VIEW':
-              state = { ...state, currentView: action.payload };
-              break;
-            case 'PREV_WEEK': {
-              const newDate = new Date(state.focusedDate);
-              newDate.setDate(newDate.getDate() - 7);
-              state = { ...state, focusedDate: newDate };
-              break;
-            }
-            case 'NEXT_WEEK': {
-              const newDate = new Date(state.focusedDate);
-              newDate.setDate(newDate.getDate() + 7);
-              state = { ...state, focusedDate: newDate };
-              break;
-            }
-            case 'SET_WORKOUTS':
-              state = { ...state, workouts: action.payload };
-              break;
-            case 'OPEN_MODAL':
-              state = { ...state, isModalOpen: true, modalContext: action.payload };
-              break;
-            case 'CLOSE_MODAL':
-              state = { ...state, isModalOpen: false, modalContext: null };
-              break;
-            default:
-              console.warn(`Azione non riconosciuta: ${action.type}`);
-              return;
-          }
-          if (state !== oldState) {
-            console.log(`Action: ${action.type}`, action.payload);
-            notify();
-          }
-        }
-        return {
-          getState: () => ({ ...state }),
-          subscribe: (callback) => { subscribers.add(callback); return () => subscribers.delete(callback); },
-          dispatch,
-        };
-      }
-      const store = createStore();
-      export default store;
   - file: src/views/CalendarView.js
     content: |
       import store from '../modules/store.js';
 
-      function getWeekStartDate(date) { /* ... (unchanged) ... */ }
-      function formatShortDate(date) { /* ... (unchanged) ... */ }
-      function toISODateString(date) { /* ... (unchanged) ... */ }
-      // --- UTILITIES (omesse per brevità, sono invariate) ---
-      function getWeekStartDate(date) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(d.setDate(diff)); }
-      function formatShortDate(date) { return date.toLocaleDateString('it-IT', { day: 'numeric', month: 'long' }); }
-      function toISODateString(date) { return date.getFullYear() + '-' + ('0' + (date.getMonth() + 1)).slice(-2) + '-' + ('0' + date.getDate()).slice(-2); }
+      // --- UTILITIES ---
+      function getWeekStartDate(date) {
+          const d = new Date(date);
+          const day = d.getDay(); // Domenica = 0, Lunedì = 1, ...
+          const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adegua per la domenica
+          return new Date(d.setDate(diff));
+      }
 
+      function formatShortDate(date) {
+        return date.toLocaleDateString('it-IT', { day: 'numeric', month: 'long' });
+      }
+
+      function toISODateString(date) {
+          return date.getFullYear() + '-' +
+                 ('0' + (date.getMonth() + 1)).slice(-2) + '-' +
+                 ('0' + date.getDate()).slice(-2);
+      }
+
+      // --- MODULE ---
       export function init(element) {
         element.innerHTML = `
           <header class="calendar-header">
@@ -255,6 +48,7 @@ patches:
         // Delegazione degli eventi
         gridContainer.addEventListener('click', (event) => {
           const dayCell = event.target.closest('.day-cell');
+          // Assicurati che il click non sia sul pulsante START
           if (dayCell && event.target.tagName !== 'BUTTON') {
             const date = dayCell.dataset.date;
             store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'EDIT_WORKOUT', date } });
@@ -290,54 +84,5 @@ patches:
         }
         store.subscribe(render);
         render();
-      }
-  - file: src/ui/Modal.js
-    content: |
-      import store from '../modules/store.js';
-
-      export function init(element) {
-          // Gestione click per chiudere la modale
-          element.addEventListener('click', (event) => {
-              // Chiude se si clicca sull'overlay (l'elemento stesso)
-              if (event.target === element) {
-                  store.dispatch({ type: 'CLOSE_MODAL' });
-              }
-          });
-
-          function render() {
-              const { isModalOpen, modalContext } = store.getState();
-
-              if (isModalOpen) {
-                  element.classList.add('active');
-                  let content = '';
-                  // Renderizza il contenuto in base al contesto
-                  if (modalContext?.type === 'EDIT_WORKOUT') {
-                      content = `
-                          <div class="modal-header">
-                              <h3>Editor Workout - ${modalContext.date}</h3>
-                              <button class="modal-close-btn">&times;</button>
-                          </div>
-                          <div class="modal-body">
-                              <p>Contenuto dell'editor per il giorno ${modalContext.date} verrà qui.</p>
-                          </div>
-                      `;
-                  }
-                  element.innerHTML = `<div class="modal-content">${content}</div>`;
-
-                  // Aggiunge l'event listener al pulsante di chiusura appena creato
-                  const closeButton = element.querySelector('.modal-close-btn');
-                  if (closeButton) {
-                      closeButton.addEventListener('click', () => {
-                          store.dispatch({ type: 'CLOSE_MODAL' });
-                      });
-                  }
-              } else {
-                  element.classList.remove('active');
-                  element.innerHTML = ''; // Rimuove il contenuto quando la modale è chiusa
-              }
-          }
-
-          store.subscribe(render);
-          render();
       }
 commands: []

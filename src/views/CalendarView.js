@@ -1,13 +1,24 @@
 import store from '../modules/store.js';
 
-function getWeekStartDate(date) { /* ... (unchanged) ... */ }
-function formatShortDate(date) { /* ... (unchanged) ... */ }
-function toISODateString(date) { /* ... (unchanged) ... */ }
-// --- UTILITIES (omesse per brevità, sono invariate) ---
-function getWeekStartDate(date) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(d.setDate(diff)); }
-function formatShortDate(date) { return date.toLocaleDateString('it-IT', { day: 'numeric', month: 'long' }); }
-function toISODateString(date) { return date.getFullYear() + '-' + ('0' + (date.getMonth() + 1)).slice(-2) + '-' + ('0' + date.getDate()).slice(-2); }
+// --- UTILITIES ---
+function getWeekStartDate(date) {
+    const d = new Date(date);
+    const day = d.getDay(); // Domenica = 0, Lunedì = 1, ...
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adegua per la domenica
+    return new Date(d.setDate(diff));
+}
 
+function formatShortDate(date) {
+  return date.toLocaleDateString('it-IT', { day: 'numeric', month: 'long' });
+}
+
+function toISODateString(date) {
+    return date.getFullYear() + '-' +
+           ('0' + (date.getMonth() + 1)).slice(-2) + '-' +
+           ('0' + date.getDate()).slice(-2);
+}
+
+// --- MODULE ---
 export function init(element) {
   element.innerHTML = `
     <header class="calendar-header">
@@ -29,6 +40,7 @@ export function init(element) {
   // Delegazione degli eventi
   gridContainer.addEventListener('click', (event) => {
     const dayCell = event.target.closest('.day-cell');
+    // Assicurati che il click non sia sul pulsante START
     if (dayCell && event.target.tagName !== 'BUTTON') {
       const date = dayCell.dataset.date;
       store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'EDIT_WORKOUT', date } });
