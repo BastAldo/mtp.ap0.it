@@ -17,6 +17,7 @@ function resetState() {
         currentExerciseIndex: 0,
         currentSeries: 1,
         currentState: 'idle', // idle, ready, announcing, preparing, action, paused, rest, finished
+        pausedState: null, // Salva lo stato prima della pausa
         countdown: 0,
         countdownDuration: 0,
         intervalId: null,
@@ -35,7 +36,7 @@ function setState(newState, data = {}) {
             break;
         case 'ready':
             state.currentExercise = state.workoutPlan[state.currentExerciseIndex];
-            if (state.currentSeries === 1) { // Solo alla prima serie del primo esercizio
+            if (state.currentSeries === 1) {
                 state.currentSeries = 1;
             }
             ui.updateTrainerUI(state);
@@ -85,14 +86,16 @@ function setState(newState, data = {}) {
 function runCountdown(duration, nextState, nextStateData = {}) {
     state.countdown = duration;
     state.countdownDuration = duration;
-    state.progress = 1;
+    // Calcolo corretto per riempire, non svuotare
+    state.progress = (state.countdownDuration - state.countdown) / state.countdownDuration;
 
     ui.updateTrainerUI(state);
     if (duration > 0) playTick();
 
     state.intervalId = setInterval(() => {
         state.countdown--;
-        state.progress = state.countdown / state.countdownDuration;
+        // Calcolo corretto per riempire, non svuotare
+        state.progress = (state.countdownDuration - state.countdown) / state.countdownDuration;
         ui.updateTrainerUI(state);
         if (state.countdown > 0) playTick();
 
@@ -146,13 +149,16 @@ export function startSeries() {
 }
 
 export function pause() {
-    if (!['action', 'rest', 'preparing'].includes(state.currentState)) return;
+    if (!['action', 'rest', 'preparing'].includes(state.currentState) && !state.currentState.startsWith('action.rep')) return;
+    state.pausedState = state.currentState; // Salva lo stato esatto
     setState('paused');
 }
 
 export function resume() {
     if (state.currentState !== 'paused') return;
-    runCountdown(state.countdown, state.phase === 'rest' ? 'readyForNext' : 'action');
+    // Ripristina lo stato esatto che era stato messo in pausa
+    const stateToResume = state.pausedState; 
+    setState(stateToResume);
 }
 
 export function stop() {
@@ -181,7 +187,7 @@ function setRepState(newState, data) {
 
 // Intercetta la chiamata a setState per gestire gli stati complessi
 const originalSetState = setState;
-setState = (newState, data) => {
+setState = (newState, data = {}) => {
     if (newState.startsWith('action.rep')) {
         setRepState(newState, data);
     } else {

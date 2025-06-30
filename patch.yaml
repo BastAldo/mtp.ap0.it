@@ -1,340 +1,15 @@
 # This is a YAML file. Copy all content from here down
 # and save it as 'patch.yaml'.
-commit_message: "feat: Implement redesigned Trainer UI with SVG progress ring"
+commit_message: "fix: Correct trainer ring animation and fix state machine loop"
 rationale: |
-  Questo commit implementa una completa riprogettazione dell'interfaccia utente del Trainer, basata sul dettagliato feedback dell'utente per migliorare l'esperienza.
+  Questo commit corregge due bug critici nella vista Trainer emersi durante i test.
 
-  1.  **Anello di Avanzamento (SVG)**: È stato introdotto un anello di avanzamento circolare (`<svg>`) come elemento visivo principale. Questo fornisce un feedback immediato e grafico sulla durata dei conti alla rovescia, come richiesto. `style.css` contiene i nuovi stili per disegnare e animare l'anello tramite la proprietà `stroke-dashoffset`.
+  1.  **Animazione Anello Invertita**: L'anello di avanzamento si svuotava invece di riempirsi. Il problema era nel calcolo della percentuale di progresso in `trainer.js`, che era basato sul tempo rimanente. È stato corretto per basarsi sul tempo trascorso, producendo ora un'animazione di riempimento intuitiva.
 
-  2.  **Layout Gerarchico**: L'HTML di `#trainer-view` è stato ristrutturato per ospitare il nuovo design. Ora le informazioni all'interno dell'anello seguono una chiara gerarchia visiva: il tempo rimanente è l'informazione primaria (testo grande), mentre la fase corrente (UP, DOWN, etc.) è secondaria (testo piccolo sottostante).
-
-  3.  **Logica di Rendering (`ui.js`)**: La funzione `updateTrainerUI` è stata riscritta per gestire la nuova interfaccia. Ora si occupa di:
-      - Mostrare/nascondere alternativamente il contenuto del countdown (numeri/fase) e la scritta di annuncio lampeggiante, mantenendo sempre visibile l'anello SVG come da specifica.
-      - Aggiornare l'anello di avanzamento tramite una nuova funzione `updateProgressRing`, che calcola la porzione di cerchio da disegnare.
-
-  4.  **Logica del Trainer (`trainer.js`)**: Il modulo del trainer è stato leggermente modificato per calcolare la percentuale di progresso durante ogni intervallo del countdown e passarla allo stato, permettendo alla UI di aggiornare l'anello di conseguenza.
-
-  Il risultato è un'interfaccia molto più professionale, intuitiva e fluida, che traduce esattamente la visione dell'utente in realtà.
+  2.  **Loop della Macchina a Stati**: Dopo la fase di preparazione, il trainer entrava in un ciclo infinito di stati di "annuncio" senza mai eseguire l'azione. Il bug era causato dalla funzione `resume` che, dopo una pausa, non ripristinava il sotto-stato corretto (es. 'action.rep.up'), ma uno stato generico.
+  
+  La soluzione è stata implementata in `trainer.js` aggiungendo una proprietà `pausedState` allo stato del trainer. Ora, prima di entrare in pausa, lo stato esatto viene salvato. La funzione `resume` utilizza questo valore per riprendere l'esecuzione precisamente da dove era stata interrotta, risolvendo il loop.
 patches:
-  - file: index.html
-    content: |
-      <!DOCTYPE html>
-      <html lang="it">
-      <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Mio Trainer Personale</title>
-          <link rel="stylesheet" href="style.css">
-          <link rel="preconnect" href="https://fonts.googleapis.com">
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-          <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:ital,wght@0,300;0,400;0,700;1,400&display=swap" rel="stylesheet">
-      </head>
-      <body>
-
-          <div id="app-container">
-
-              <section id="calendar-view" class="view">
-                  </section>
-
-              <section id="trainer-view" class="view">
-                  <h2 id="trainer-exercise-name">--</h2>
-                  <p id="trainer-series-counter" class="trainer-subtitle">--</p>
-
-                  <div class="progress-ring-container">
-                      <svg id="progress-ring" class="progress-ring" width="300" height="300">
-                          <circle class="progress-ring__track" stroke-width="15" fill="transparent" r="140" cx="150" cy="150"/>
-                          <circle id="progress-ring-bar" class="progress-ring__bar" stroke-width="15" fill="transparent" r="140" cx="150" cy="150"/>
-                      </svg>
-                      <div id="trainer-display" class="trainer-display">
-                          <div id="trainer-display-countdown" style="display: none;">
-                              <div id="trainer-countdown-number">3</div>
-                              <div id="trainer-phase-label">UP</div>
-                          </div>
-                          <div id="trainer-display-announcement" class="is-flashing">READY</div>
-                      </div>
-                  </div>
-                  
-                  <p id="trainer-exercise-description" class="trainer-subtitle">--</p>
-
-                  <div id="trainer-controls" class="trainer-controls">
-                      <button class="btn btn-primary" data-action="start-series">Inizia Serie</button>
-                      <button class="btn" data-action="pause" style="display: none;">Pausa</button>
-                      <button class="btn btn-secondary" data-action="resume" style="display: none;">Riprendi</button>
-                      <button class="btn btn-danger" data-action="stop">Termina Allenamento</button>
-                  </div>
-              </section>
-
-              <section id="debriefing-view" class="view">
-                  <h1>Debriefing Sessione</h1>
-                  </section>
-
-          </div>
-
-          <div id="modal-overlay" class="modal-overlay">
-              <div id="modal-content" class="modal-content">
-                  </div>
-          </div>
-
-          <script type="module" src="src/main.js"></script>
-      </body>
-      </html>
-  - file: style.css
-    content: |
-      /**
-       * FOGLIO DI STILE PRINCIPALE
-       * Contiene le variabili globali e gli stili di base dell'applicazione.
-       */
-
-      :root {
-          --bg-color: #1a1a1d;
-          --card-color: #2c2c34;
-          --primary-color: #9575cd;
-          --secondary-color: #4db6ac;
-          --text-color: #f4f4f9;
-          --text-secondary: #b3b3b3;
-          --danger-color: #ef5350;
-          --success-color: #66bb6a;
-          --border-color: #4a4a52;
-
-          --font-main: 'Roboto Condensed', sans-serif;
-      }
-
-      *,
-      *::before,
-      *::after {
-          box-sizing: border-box;
-          margin: 0;
-          padding: 0;
-      }
-
-      html {
-          font-family: var(--font-main);
-          color: var(--text-color);
-          background-color: var(--bg-color);
-      }
-
-      body {
-          font-size: 16px;
-          line-height: 1.6;
-      }
-
-      #app-container {
-          max-width: 1200px;
-          margin: 2rem auto;
-          padding: 0 1rem;
-      }
-
-      h1, h2, h3, h4, h5, h6 {
-          color: var(--primary-color);
-          font-weight: 700;
-          margin-bottom: 1rem;
-      }
-
-      /* Sistema di gestione delle viste */
-      .view {
-          display: none;
-      }
-
-      .view--active {
-          display: block;
-      }
-
-      /* --- Stili Calendario (invariati) --- */
-      .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
-      .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1rem; }
-      .day-cell { background-color: var(--card-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; justify-content: space-between; transition: transform 0.2s ease-out, border-left 0.2s ease-out; border-left: 4px solid transparent; cursor: pointer; }
-      .day-cell:hover { transform: translateY(-4px); border-left: 4px solid var(--primary-color); }
-      .day-cell-header { display: flex; justify-content: space-between; align-items: baseline; font-weight: 700; }
-      .day-cell-header .day-name { font-size: 0.9em; color: var(--text-secondary); }
-      .day-cell-header .day-number { font-size: 1.5em; color: var(--primary-color); }
-      .day-cell-body { margin: 2rem 0; text-align: center; color: var(--text-secondary); }
-      .day-cell-footer { text-align: center; }
-
-      /* --- Stili Trainer --- */
-      #trainer-view { text-align: center; }
-      .trainer-subtitle { color: var(--text-secondary); margin-top: 1rem; margin-bottom: 1rem; }
-      
-      .progress-ring-container {
-          position: relative;
-          width: 300px;
-          height: 300px;
-          margin: 1rem auto;
-      }
-      .progress-ring { transform: rotate(-90deg); }
-      .progress-ring__track { stroke: var(--border-color); }
-      .progress-ring__bar { stroke: var(--secondary-color); transition: stroke-dashoffset 0.3s linear; }
-      
-      .trainer-display {
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          align-items: center;
-      }
-      #trainer-countdown-number {
-          font-size: 8rem;
-          font-weight: 700;
-          line-height: 1;
-      }
-      #trainer-phase-label {
-          font-size: 2rem;
-          color: var(--text-secondary);
-          text-transform: uppercase;
-      }
-      #trainer-display-announcement {
-          font-size: 5rem;
-          font-weight: 700;
-          text-transform: uppercase;
-      }
-
-      .trainer-controls { display: flex; justify-content: center; gap: 1rem; margin-top: 1rem; }
-
-      @keyframes flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
-      .is-flashing { animation: flash 0.75s infinite; }
-
-      /* --- Stili Componenti Generici (invariati) --- */
-      .btn { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.5rem 1rem; font-family: var(--font-main); font-size: 1em; font-weight: 700; border-radius: 6px; cursor: pointer; transition: background-color 0.2s, transform 0.2s; }
-      .btn:hover:not(:disabled) { transform: scale(1.05); }
-      .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-      .btn-primary { background-color: var(--primary-color); border-color: var(--primary-color); }
-      .btn-primary:hover:not(:disabled) { background-color: #a082e0; }
-      .btn-secondary { background-color: var(--secondary-color); border-color: var(--secondary-color); color: #1a1a1d; }
-      .btn-secondary:hover:not(:disabled) { background-color: #5dcbb8; }
-      .btn-danger { background-color: var(--danger-color); border-color: var(--danger-color); }
-
-      /* --- Stili Sistema Modale (invariati) --- */
-      .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); display: none; justify-content: center; align-items: center; z-index: 1000; }
-      .modal-overlay--active { display: flex; }
-      .modal-content { background-color: var(--card-color); padding: 2rem; border-radius: 8px; width: 90%; max-width: 600px; max-height: 80vh; overflow-y: auto; border-top: 4px solid var(--primary-color); }
-      .modal-list { list-style: none; margin-top: 1.5rem; }
-      .modal-list-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; border-bottom: 1px solid var(--border-color); }
-      .modal-list-item:last-child { border-bottom: none; }
-      .modal-actions { margin-top: 2rem; text-align: right; }
-  - file: src/ui.js
-    content: |
-      /**
-       * @file ui.js
-       *
-       * Responsabile di tutte le manipolazioni dirette del DOM.
-       */
-      import { getWeekStartDate, formatDate, formatDateForDisplay } from './utils.js';
-      import { EXERCISES } from './config.js';
-
-      // --- Elementi DOM ---
-      const views = document.querySelectorAll('.view');
-      export const calendarView = document.getElementById('calendar-view');
-      export const trainerView = document.getElementById('trainer-view');
-      export const debriefingView = document.getElementById('debriefing-view');
-      export const modalOverlay = document.getElementById('modal-overlay');
-      const modalContent = document.getElementById('modal-content');
-
-      // Elementi Trainer
-      const trainerExerciseName = document.getElementById('trainer-exercise-name');
-      const trainerSeriesCounter = document.getElementById('trainer-series-counter');
-      const trainerExerciseDescription = document.getElementById('trainer-exercise-description');
-      export const trainerControls = document.getElementById('trainer-controls');
-      const startSeriesBtn = trainerControls.querySelector('[data-action="start-series"]');
-      const pauseBtn = trainerControls.querySelector('[data-action="pause"]');
-      const resumeBtn = trainerControls.querySelector('[data-action="resume"]');
-      
-      // Elementi Trainer Display (nuovi)
-      const ringBar = document.getElementById('progress-ring-bar');
-      const ringRadius = ringBar.r.baseVal.value;
-      const ringCircumference = 2 * Math.PI * ringRadius;
-      ringBar.style.strokeDasharray = `${ringCircumference} ${ringCircumference}`;
-
-      const displayCountdown = document.getElementById('trainer-display-countdown');
-      const displayAnnouncement = document.getElementById('trainer-display-announcement');
-      const countdownNumber = document.getElementById('trainer-countdown-number');
-      const phaseLabel = document.getElementById('trainer-phase-label');
-
-      /** Mostra una vista specifica e nasconde tutte le altre. */
-      export function showView(viewId) {
-          views.forEach(view => {
-              view.classList.toggle('view--active', view.id === viewId);
-          });
-      }
-
-      function updateProgressRing(percent) {
-          const offset = ringCircumference - (percent / 100) * ringCircumference;
-          ringBar.style.strokeDashoffset = offset;
-      }
-      
-      /** Aggiorna la UI del trainer in base allo stato fornito dalla state machine */
-      export function updateTrainerUI(state) {
-          const { currentExercise, currentSeries, currentState, countdown, phase, progress } = state;
-
-          trainerExerciseName.textContent = currentExercise.name;
-          trainerExerciseDescription.textContent = currentExercise.description;
-          trainerSeriesCounter.textContent = `Serie ${currentSeries} di ${currentExercise.series || '...'}`;
-
-          const isCountdownState = ['action', 'preparing', 'rest'].includes(currentState);
-          const isPausedState = currentState === 'paused';
-          const isAnnouncingState = currentState === 'announcing';
-          const isReadyState = currentState === 'ready';
-
-          // Gestione visibilità sezioni display
-          displayCountdown.style.display = (isCountdownState || isPausedState) ? 'block' : 'none';
-          displayAnnouncement.style.display = (isAnnouncingState || isReadyState) ? 'block' : 'none';
-
-          // Gestione lampeggio
-          displayAnnouncement.classList.toggle('is-flashing', isAnnouncingState);
-          
-          // Aggiornamento contenuti e anello
-          if (isReadyState) {
-              displayAnnouncement.textContent = 'READY';
-              updateProgressRing(100); // Anello pieno
-          }
-
-          if (isAnnouncingState) {
-              displayAnnouncement.textContent = phase.toUpperCase();
-              updateProgressRing(0); // Anello vuoto
-          }
-
-          if (isCountdownState || isPausedState) {
-              countdownNumber.textContent = countdown;
-              phaseLabel.textContent = phase.toUpperCase();
-              updateProgressRing(progress * 100);
-          }
-          
-          // Gestione pulsanti
-          startSeriesBtn.style.display = isReadyState ? 'inline-block' : 'none';
-          pauseBtn.style.display = isCountdownState ? 'inline-block' : 'none';
-          resumeBtn.style.display = isPausedState ? 'inline-block' : 'none';
-      }
-
-      // --- Funzioni Calendario e Modale (invariate) ---
-      export function renderCalendar(weekDate, schedule) {
-          const startDate = getWeekStartDate(weekDate);
-          const weekDays = Array.from({ length: 7 }).map((_, i) => { const day = new Date(startDate); day.setDate(day.getDate() + i); return day; });
-          let headerHtml = `<div class="calendar-header"><button class="btn" id="prev-week-btn">&lt; Precedente</button><h2>Settimana del ${formatDateForDisplay(startDate)}</h2><button class="btn" id="next-week-btn">Successiva &gt;</button></div>`;
-          let gridHtml = '<div class="calendar-grid">';
-          weekDays.forEach(day => {
-              const dateKey = formatDate(day);
-              const daySchedule = schedule[dateKey] || [];
-              const exerciseCount = daySchedule.length;
-              gridHtml += `<div class="day-cell" data-date="${dateKey}"><div class="day-cell-header"><span class="day-name">${day.toLocaleDateString('it-IT', { weekday: 'long' }).toUpperCase()}</span><span class="day-number">${day.getDate()}</span></div><div class="day-cell-body"><p>${exerciseCount > 0 ? `${exerciseCount} esercizi` : 'Nessun allenamento'}</p></div><div class="day-cell-footer"><button class="btn btn-secondary" ${exerciseCount === 0 ? 'disabled' : ''}>START</button></div></div>`;
-          });
-          gridHtml += '</div>';
-          calendarView.innerHTML = headerHtml + gridHtml;
-      }
-      export function openModal() { modalOverlay.classList.add('modal-overlay--active'); }
-      export function closeModal() { modalOverlay.classList.remove('modal-overlay--active'); }
-      export function renderDailyWorkoutModal(dateKey, schedule) {
-          const scheduledIds = schedule[dateKey] || [];
-          const scheduledExercises = scheduledIds.map(id => EXERCISES.find(ex => ex.id === id));
-          let listItems = scheduledExercises.map(ex => `<li class="modal-list-item"><span>${ex.name}</span><button class="btn btn-danger" data-action="remove-exercise" data-exercise-id="${ex.id}">Rimuovi</button></li>`).join('');
-          if (scheduledExercises.length === 0) { listItems = '<p>Nessun esercizio pianificato per oggi.</p>'; }
-          modalContent.innerHTML = `<h3>Allenamento del ${dateKey}</h3><ul class="modal-list">${listItems}</ul><div class="modal-actions"><button class="btn btn-primary" data-action="show-library">Aggiungi Esercizio</button><button class="btn" data-action="close-modal">Chiudi</button></div>`;
-      }
-      export function renderExerciseLibraryModal() {
-          let listItems = EXERCISES.map(ex => `<li class="modal-list-item"><div><strong>${ex.name}</strong><p style="color: var(--text-secondary); font-size: 0.9em;">${ex.description}</p></div><button class="btn btn-secondary" data-action="add-exercise" data-exercise-id="${ex.id}">Aggiungi</button></li>`).join('');
-          modalContent.innerHTML = `<h3>Libreria Esercizi</h3><ul class="modal-list">${listItems}</ul><div class="modal-actions"><button class="btn" data-action="close-modal">Chiudi</button></div>`;
-      }
   - file: src/trainer.js
     content: |
       /**
@@ -356,6 +31,7 @@ patches:
               currentExerciseIndex: 0,
               currentSeries: 1,
               currentState: 'idle', // idle, ready, announcing, preparing, action, paused, rest, finished
+              pausedState: null, // Salva lo stato prima della pausa
               countdown: 0,
               countdownDuration: 0,
               intervalId: null,
@@ -374,7 +50,7 @@ patches:
                   break;
               case 'ready':
                   state.currentExercise = state.workoutPlan[state.currentExerciseIndex];
-                  if (state.currentSeries === 1) { // Solo alla prima serie del primo esercizio
+                  if (state.currentSeries === 1) {
                       state.currentSeries = 1;
                   }
                   ui.updateTrainerUI(state);
@@ -424,14 +100,16 @@ patches:
       function runCountdown(duration, nextState, nextStateData = {}) {
           state.countdown = duration;
           state.countdownDuration = duration;
-          state.progress = 1;
+          // Calcolo corretto per riempire, non svuotare
+          state.progress = (state.countdownDuration - state.countdown) / state.countdownDuration;
 
           ui.updateTrainerUI(state);
           if (duration > 0) playTick();
 
           state.intervalId = setInterval(() => {
               state.countdown--;
-              state.progress = state.countdown / state.countdownDuration;
+              // Calcolo corretto per riempire, non svuotare
+              state.progress = (state.countdownDuration - state.countdown) / state.countdownDuration;
               ui.updateTrainerUI(state);
               if (state.countdown > 0) playTick();
 
@@ -485,13 +163,16 @@ patches:
       }
 
       export function pause() {
-          if (!['action', 'rest', 'preparing'].includes(state.currentState)) return;
+          if (!['action', 'rest', 'preparing'].includes(state.currentState) && !state.currentState.startsWith('action.rep')) return;
+          state.pausedState = state.currentState; // Salva lo stato esatto
           setState('paused');
       }
 
       export function resume() {
           if (state.currentState !== 'paused') return;
-          runCountdown(state.countdown, state.phase === 'rest' ? 'readyForNext' : 'action');
+          // Ripristina lo stato esatto che era stato messo in pausa
+          const stateToResume = state.pausedState; 
+          setState(stateToResume);
       }
 
       export function stop() {
@@ -520,7 +201,7 @@ patches:
 
       // Intercetta la chiamata a setState per gestire gli stati complessi
       const originalSetState = setState;
-      setState = (newState, data) => {
+      setState = (newState, data = {}) => {
           if (newState.startsWith('action.rep')) {
               setRepState(newState, data);
           } else {
@@ -528,6 +209,6 @@ patches:
           }
       }
 commands:
-  - "echo 'Patch con la nuova UI del Trainer applicato.'"
-  - "echo 'Prova ad avviare un allenamento per vedere l''anello di avanzamento e la nuova interfaccia.'"
+  - "echo 'Patch di correzione per il Trainer applicato.'"
+  - "echo 'Prova di nuovo, l''anello dovrebbe riempirsi e il ciclo di allenamento non dovrebbe più bloccarsi.'"
   - "git status"
