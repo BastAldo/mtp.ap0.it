@@ -1,95 +1,63 @@
-# Specifiche Funzionali
+# App Functionality Specification
 
-## 1. Obiettivo dell'Applicazione
+This document outlines the core features and operational logic of the "Mio Trainer Personale" web application.
 
-Creare un'applicazione web per la gestione di sessioni di allenamento personalizzate. L'utente può selezionare una serie di esercizi e avviare un trainer che lo guida attraverso set, tempi di lavoro e tempi di riposo.
+## 1. Core Concept
 
-## 2. Concetti Chiave
+The application is a single-page app (SPA) designed for users to schedule, execute, and track workouts. All user data is persisted locally in the browser's `localStorage`.
 
-### Tipi di Esercizi
+## 2. Main Views
 
-L'applicazione deve supportare due tipi di esercizi:
+The application operates using three primary, mutually exclusive views: `Calendar`, `Trainer`, and `Debriefing`.
 
-1.  **A Tempo (`type: 'time'`)**:
-    - L'utente esegue l'esercizio per una durata predefinita (`defaultDuration`).
-    - Il trainer mostra un timer con un conto alla rovescia.
-    - Al termine del tempo, il trainer passa automaticamente al riposo o al set successivo.
+### 2.1. Calendar View
 
-2.  **A Ripetizioni (`type: 'reps'`)**:
-    - L'utente esegue un numero predefinito di ripetizioni (`defaultReps`).
-    - Il trainer mostra il numero di ripetizioni da completare. Non c'è un timer durante il set.
-    - L'utente deve segnalare manualmente il completamento del set cliccando su un apposito pulsante ("Set Completato").
-    - Una volta premuto il pulsante, parte il timer per il riposo (`defaultRest`).
+-   **Function:** The main dashboard and default view of the application.
+-   **Display:** It presents a weekly grid layout.
+-   **Navigation:** Users can navigate to the previous or next week.
+-   **Day Cells:** Each cell represents a day and displays a summary of the number of exercises scheduled for that day. A "START" button is enabled if one or more exercises are scheduled.
+-   **Interaction:** Clicking a day cell (but not the "START" button) opens the Workout Editor modal for that specific date.
 
-## 3. Mockup ASCII delle Viste
+### 2.2. Workout Editor (Modal System)
 
-### Vista 1: Configurazione
+The editor is a two-stage modal system for managing a day's workout routine.
 
-L'utente seleziona gli esercizi per la sessione.
+-   **Daily Workout Modal:**
+    -   Triggered by clicking a day cell.
+    -   Displays a list of exercises currently scheduled for the selected date.
+    -   Allows **removal** of any exercise from the list.
+    -   Contains an "Add Exercise" button to open the Exercise Library modal.
+-   **Exercise Library Modal:**
+    -   Triggered by the "Add Exercise" button.
+    -   Displays a complete list of all available exercises defined in `workouts.js`.
+    -   Allows **selection** of an exercise to add to the current day's routine.
 
-```
-+-----------------------------------------+
-|         Workout Configurator            |
-+-----------------------------------------+
-|                                         |
-|  [x] Push-up                            |
-|  [ ] Squat a Corpo Libero               |
-|  [x] Plank                              |
-|  [x] Calf Raises (1 Gamba)              |
-|                                         |
-|                                         |
-+-----------------------------------------+
-|         [ Start Training ]              |
-+-----------------------------------------+
-```
+### 2.3. Interactive Trainer View
 
-### Vista 2: Trainer (Esercizio a Tempo)
+-   **Function:** An interactive, state-driven interface that guides the user through a scheduled workout in real-time.
+-   **Activation:** Triggered by clicking the "START" button on a day cell in the calendar.
 
-Durante un esercizio misurato in secondi.
+#### Trainer State Machine & Flow
 
-```
-+-----------------------------------------+
-|  Plank                        Series 1/3|
-+-----------------------------------------+
-|                                         |
-|                   47                    |
-|                  Work!                  |
-|                                         |
-+-----------------------------------------+
-|              [ Pause ]                  |
-+-----------------------------------------+
-```
+The trainer operates as a state machine. The primary user flow is as follows:
 
-### Vista 3: Trainer (Esercizio a Ripetizioni)
+1.  **Ready (`ready`):** The trainer displays the current exercise and series number. Awaits user input to begin.
+2.  **Announcing (`announcing`):** Before every new phase, this 0.75-second state is activated. It displays the name of the upcoming phase (e.g., "UP", "REST") with a flashing visual effect and an audio tick to alert the user.
+3.  **Preparing (`preparing`):** A 3-second countdown to prepare the user for the first series of an exercise.
+4.  **Action (`action`):** The core execution phase.
+    -   For **`reps`**-based exercises, the trainer automatically cycles through timed phases as defined by the exercise's `tempo` object (e.g., `up`, `hold`, `down`), each with its own countdown.
+    -   For **`time`**-based exercises, a single countdown for the specified `duration` is run.
+5.  **Paused (`paused`):** The user can pause the workout at any time during the `action` state. The timer stops. The user must click "RESUME" to continue.
+6.  **Rest (`rest`):** After a set is completed, the trainer enters a rest period. A countdown for the specified `rest` duration is shown.
+7.  **Advancement:** After a rest period or set completion, the system automatically determines whether to proceed to the next series of the same exercise or to the next exercise in the routine.
+8.  **Finished (`finished`):** Once all exercises in the routine are complete, the trainer automatically transitions to the Debriefing View.
 
-Durante un esercizio misurato in ripetizioni. Notare il pulsante diverso.
+### 2.4. Debriefing View
 
-```
-+-----------------------------------------+
-|  Squat a Corpo Libero         Series 1/3|
-+-----------------------------------------+
-|                                         |
-|                15 Reps                  |
-|                  Work!                  |
-|                                         |
-+-----------------------------------------+
-|         [ Set Completato ]              |
-+-----------------------------------------+
-```
-
-### Vista 4: Trainer (Fase di Riposo)
-
-Durante il timer di riposo, tra un set e l'altro.
-
-```
-+-----------------------------------------+
-|  Squat a Corpo Libero         Series 2/3|
-+-----------------------------------------+
-|                                         |
-|                   51                    |
-|                   Rest                  |
-|                                         |
-+-----------------------------------------+
-|              [ Pause ]                  |
-+-----------------------------------------+
-```
+-   **Activation:** Appears automatically when a workout is completed or manually terminated.
+-   **Content:**
+    -   **Summary:** Displays a list of all exercises completed during the session.
+    -   **Text Report:** Generates a pre-formatted, multi-line string summarizing the workout, ready for sharing.
+-   **Actions:**
+    -   **Copy for Coach:** Copies the text report to the user's clipboard.
+    -   **Return to Calendar:** Switches the view back to the main Calendar.

@@ -1,29 +1,30 @@
-# Architecture Decision Records (ADR)
+# Application Architecture
 
-Questo documento è il nostro "diario tecnico". Registra le decisioni architetturali importanti prese durante lo sviluppo del progetto.
+This document outlines the high-level architecture for the "Mio Trainer Personale" SPA.
 
-## Cos'è un ADR?
+## 1. Core Principles
 
-Un ADR è un breve documento di testo che descrive una scelta architetturale. Ogni ADR ha un formato standard per spiegare il contesto della decisione, la decisione stessa e le sue conseguenze.
+-   **Modularity:** The application is broken down into distinct, single-responsibility modules. This simplifies development, testing, and maintenance.
+-   **State-Driven UI:** The user interface reacts to changes in the application's state, rather than being manipulated directly.
 
-Lo scopo è avere una cronologia chiara del *perché* il software è costruito in un certo modo. Questo aiuta i futuri sviluppatori (o future istanze dell'AI) a comprendere le scelte passate.
+## 2. Directory Structure
 
-Un ADR, una volta scritto, è immutabile. Se una decisione cambia, non si modifica il vecchio ADR, ma se ne scrive uno nuovo che "supera" quello precedente.
+-   `docs/`: Contains all project documentation.
+-   `index.html`: The single HTML entry point for the SPA.
+-   `src/`: Contains all application source code.
+    -   `src/main.js`: The main application entry point, responsible for initialization and view management.
+    -   `src/style.css`: The global stylesheet.
+    -   `src/views/`: Each file in this directory manages the DOM and logic for a specific application view (e.g., `calendar.js`, `trainer.js`).
+    -   `src/modules/`: Contains shared logic and helpers, such as:
+        -   `storage.js`: A wrapper for all `localStorage` interactions.
+        -   `ui.js`: Reusable UI component functions (e.g., creating modals).
 
-## Formato ADR
+## 3. View Management
 
-* **Titolo**: Un breve riassunto della decisione.
-* **Contesto**: Il problema o la situazione che richiede una decisione.
-* **Decisione**: La scelta tecnica che è stata fatta.
-* **Conseguenze**: I risultati (positivi e negativi) di questa decisione.
+The application uses a simple view manager controlled by `main.js`.
+-   Only one view is active (`.view--active`) at any given time.
+-   The `showView(viewId)` function handles switching between views by toggling CSS classes.
 
----
+## 4. Data Persistence
 
-### ADR-001: Adozione di una Struttura di Documentazione Formale
-
-* **Contesto**: Il progetto stava evolvendo rapidamente, con nuove richieste funzionali (es. esercizi a reps) e di design che non erano catturate in modo strutturato. I file di specifiche iniziali erano diventati insufficienti. C'era il rischio di disallineamento e di dover "reinventare la ruota".
-* **Decisione**: Abbiamo deciso di creare una cartella `/docs` per contenere la documentazione ufficiale del progetto, suddivisa in tre file principali: `01_FUNCTIONALITY.md` (per specifiche e mockup), `02_ARCHITECTURE.md` (per gli ADR), e `03_STYLE_GUIDE.md` (per le regole di design).
-* **Conseguenze**:
-    * **Positivo**: Abbiamo ora una singola fonte di verità per il progetto, migliorando la chiarezza e l'allineamento.
-    * **Positivo**: Sarà più facile per chiunque (umano o AI) comprendere lo stato e la storia del progetto.
-    * **Negativo/Sforzo**: Richiede uno sforzo disciplinato per mantenere la documentazione aggiornata man mano che il progetto evolve.
+All user data (scheduled workouts, progress) is persisted in the browser's `localStorage`. The `storage.js` module provides a clean API (`saveWorkout`, `getWorkoutForDate`, etc.) to abstract the direct `JSON.stringify` and `JSON.parse` calls, ensuring data consistency.

@@ -1,0 +1,52 @@
+/* --- FONT (optional, example) --- */
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+
+/* --- COLOR PALETTE & VARIABLES --- */
+:root {
+    --bg-color: #1a1a1d;
+    --card-color: #2c2c34;
+    --primary-color: #9575cd;
+    --secondary-color: #4db6ac;
+    --text-color: #f4f4f9;
+    --text-secondary: #b3b3b3;
+    --danger-color: #ef5350;
+    --success-color: #66bb6a;
+    --border-radius: 8px;
+}
+
+/* --- GENERAL RESET & BASE STYLES --- */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Roboto', sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    display: flex;
+    justify-content: center;
+    padding: 1rem;
+}
+
+/* --- APP CONTAINER --- */
+#app-container {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+h1 {
+  color: var(--primary-color);
+  margin-bottom: 1rem;
+}
+
+/* --- VIEW MANAGEMENT --- */
+.view {
+    display: none;
+}
+
+.view--active {
+    display: block;
+}

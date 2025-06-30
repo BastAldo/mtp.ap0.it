@@ -1,42 +1,31 @@
 /**
- * @file main.js
- * This is the entry point of the application.
- * It handles the orchestration between the UI and the application logic.
+ * Main application entry point.
+ * Handles view management and app initialization.
  */
 
-import { loadExercises, getSelectedExercises } from './config.js';
-import { startTrainer, pause, resume, nextExercise } from './trainer.js';
-import { showView } from './ui.js';
+/**
+ * Hides all views and shows the one with the specified ID.
+ * @param {string} viewId The ID of the view to show (e.g., 'view-calendar').
+ */
+function showView(viewId) {
+    // Hide all elements with the .view class
+    const views = document.querySelectorAll('.view');
+    views.forEach(view => {
+        view.classList.remove('view--active');
+    });
 
+    // Show the requested view
+    const activeView = document.getElementById(viewId);
+    if (activeView) {
+        activeView.classList.add('view--active');
+    } else {
+        console.error(`View with ID "${viewId}" not found.`);
+    }
+}
+
+// --- App Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
-    // Initial setup
-    showView('config');
-    loadExercises();
-
-    // Event Listeners
-    const startButton = document.getElementById('start-training-button');
-    const pauseButton = document.getElementById('pause-button');
-    const resumeButton = document.getElementById('resume-button');
-    const nextExerciseButton = document.getElementById('next-exercise-button');
-
-    startButton.addEventListener('click', () => {
-        const selectedExercises = getSelectedExercises();
-        if (selectedExercises.length > 0) {
-            startTrainer(selectedExercises);
-        } else {
-            alert('Please select at least one exercise.');
-        }
-    });
-
-    pauseButton.addEventListener('click', () => {
-        pause();
-    });
-
-    resumeButton.addEventListener('click', () => {
-        resume();
-    });
-
-    nextExerciseButton.addEventListener('click', () => {
-      nextExercise();
-    });
+    console.log('Mio Trainer Personale is initializing...');
+    // Set the default view to the calendar
+    showView('view-calendar');
 });

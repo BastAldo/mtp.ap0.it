@@ -1,198 +1,300 @@
-commit_message: "docs: Establish project documentation structure"
+commit_message: "feat: Scaffold initial project architecture and documentation"
 rationale: |
-  This foundational commit establishes a new, structured documentation system within a `docs/` directory, as agreed upon. This creates a single source of truth for the project's functional requirements, architectural decisions, and visual style, ensuring clarity and alignment before proceeding with further development.
+  This commit establishes the foundational structure for the entire application as per the approved architectural plan.
 
-  The new structure includes:
-  1.  `docs/01_FUNCTIONALITY.md`: Contains updated specifications and ASCII mockups for key application views, clearly illustrating the difference between time-based and rep-based exercises.
-  2.  `docs/02_ARCHITECTURE.md`: Introduces a lightweight Architecture Decision Record (ADR) system to document key technical choices and their rationale.
-  3.  `docs/03_STYLE_GUIDE.md`: Provides a structured template for a project style guide, covering colors, typography, and components.
-
-  This commit also removes the old, unstructured `functionality_spec.md` and `design_and_visual.md` files to avoid redundancy and confusion.
+  Key changes include:
+  1.  **Documentation:** Created the `docs/` directory with formal specifications for functionality, architecture, and UI style guide.
+  2.  **File Structure:** Introduced a `src/` directory with sub-directories for views and modules, promoting code organization and modularity.
+  3.  **Core Architecture:** Implemented a basic single-page application (SPA) view manager in `src/main.js` and updated `index.html` to serve as the main application shell.
+  4.  **Styling:** Initialized `src/style.css` with the dark theme, color palette as CSS variables, and basic layout rules defined in the style guide.
+  5.  **Placeholders:** Created empty module files for all major features (Calendar, Trainer, etc.) to guide future development.
 patches:
   - file: docs/01_FUNCTIONALITY.md
     content: |
-      # Specifiche Funzionali
+      # App Functionality Specification
 
-      ## 1. Obiettivo dell'Applicazione
+      This document outlines the core features and operational logic of the "Mio Trainer Personale" web application.
 
-      Creare un'applicazione web per la gestione di sessioni di allenamento personalizzate. L'utente può selezionare una serie di esercizi e avviare un trainer che lo guida attraverso set, tempi di lavoro e tempi di riposo.
+      ## 1. Core Concept
 
-      ## 2. Concetti Chiave
+      The application is a single-page app (SPA) designed for users to schedule, execute, and track workouts. All user data is persisted locally in the browser's `localStorage`.
 
-      ### Tipi di Esercizi
+      ## 2. Main Views
 
-      L'applicazione deve supportare due tipi di esercizi:
+      The application operates using three primary, mutually exclusive views: `Calendar`, `Trainer`, and `Debriefing`.
 
-      1.  **A Tempo (`type: 'time'`)**:
-          - L'utente esegue l'esercizio per una durata predefinita (`defaultDuration`).
-          - Il trainer mostra un timer con un conto alla rovescia.
-          - Al termine del tempo, il trainer passa automaticamente al riposo o al set successivo.
+      ### 2.1. Calendar View
 
-      2.  **A Ripetizioni (`type: 'reps'`)**:
-          - L'utente esegue un numero predefinito di ripetizioni (`defaultReps`).
-          - Il trainer mostra il numero di ripetizioni da completare. Non c'è un timer durante il set.
-          - L'utente deve segnalare manualmente il completamento del set cliccando su un apposito pulsante ("Set Completato").
-          - Una volta premuto il pulsante, parte il timer per il riposo (`defaultRest`).
+      -   **Function:** The main dashboard and default view of the application.
+      -   **Display:** It presents a weekly grid layout.
+      -   **Navigation:** Users can navigate to the previous or next week.
+      -   **Day Cells:** Each cell represents a day and displays a summary of the number of exercises scheduled for that day. A "START" button is enabled if one or more exercises are scheduled.
+      -   **Interaction:** Clicking a day cell (but not the "START" button) opens the Workout Editor modal for that specific date.
 
-      ## 3. Mockup ASCII delle Viste
+      ### 2.2. Workout Editor (Modal System)
 
-      ### Vista 1: Configurazione
+      The editor is a two-stage modal system for managing a day's workout routine.
 
-      L'utente seleziona gli esercizi per la sessione.
+      -   **Daily Workout Modal:**
+          -   Triggered by clicking a day cell.
+          -   Displays a list of exercises currently scheduled for the selected date.
+          -   Allows **removal** of any exercise from the list.
+          -   Contains an "Add Exercise" button to open the Exercise Library modal.
+      -   **Exercise Library Modal:**
+          -   Triggered by the "Add Exercise" button.
+          -   Displays a complete list of all available exercises defined in `workouts.js`.
+          -   Allows **selection** of an exercise to add to the current day's routine.
 
-      ```
-      +-----------------------------------------+
-      |         Workout Configurator            |
-      +-----------------------------------------+
-      |                                         |
-      |  [x] Push-up                            |
-      |  [ ] Squat a Corpo Libero               |
-      |  [x] Plank                              |
-      |  [x] Calf Raises (1 Gamba)              |
-      |                                         |
-      |                                         |
-      +-----------------------------------------+
-      |         [ Start Training ]              |
-      +-----------------------------------------+
-      ```
+      ### 2.3. Interactive Trainer View
 
-      ### Vista 2: Trainer (Esercizio a Tempo)
+      -   **Function:** An interactive, state-driven interface that guides the user through a scheduled workout in real-time.
+      -   **Activation:** Triggered by clicking the "START" button on a day cell in the calendar.
 
-      Durante un esercizio misurato in secondi.
+      #### Trainer State Machine & Flow
 
-      ```
-      +-----------------------------------------+
-      |  Plank                        Series 1/3|
-      +-----------------------------------------+
-      |                                         |
-      |                   47                    |
-      |                  Work!                  |
-      |                                         |
-      +-----------------------------------------+
-      |              [ Pause ]                  |
-      +-----------------------------------------+
-      ```
+      The trainer operates as a state machine. The primary user flow is as follows:
 
-      ### Vista 3: Trainer (Esercizio a Ripetizioni)
+      1.  **Ready (`ready`):** The trainer displays the current exercise and series number. Awaits user input to begin.
+      2.  **Announcing (`announcing`):** Before every new phase, this 0.75-second state is activated. It displays the name of the upcoming phase (e.g., "UP", "REST") with a flashing visual effect and an audio tick to alert the user.
+      3.  **Preparing (`preparing`):** A 3-second countdown to prepare the user for the first series of an exercise.
+      4.  **Action (`action`):** The core execution phase.
+          -   For **`reps`**-based exercises, the trainer automatically cycles through timed phases as defined by the exercise's `tempo` object (e.g., `up`, `hold`, `down`), each with its own countdown.
+          -   For **`time`**-based exercises, a single countdown for the specified `duration` is run.
+      5.  **Paused (`paused`):** The user can pause the workout at any time during the `action` state. The timer stops. The user must click "RESUME" to continue.
+      6.  **Rest (`rest`):** After a set is completed, the trainer enters a rest period. A countdown for the specified `rest` duration is shown.
+      7.  **Advancement:** After a rest period or set completion, the system automatically determines whether to proceed to the next series of the same exercise or to the next exercise in the routine.
+      8.  **Finished (`finished`):** Once all exercises in the routine are complete, the trainer automatically transitions to the Debriefing View.
 
-      Durante un esercizio misurato in ripetizioni. Notare il pulsante diverso.
+      ### 2.4. Debriefing View
 
-      ```
-      +-----------------------------------------+
-      |  Squat a Corpo Libero         Series 1/3|
-      +-----------------------------------------+
-      |                                         |
-      |                15 Reps                  |
-      |                  Work!                  |
-      |                                         |
-      +-----------------------------------------+
-      |         [ Set Completato ]              |
-      +-----------------------------------------+
-      ```
-
-      ### Vista 4: Trainer (Fase di Riposo)
-
-      Durante il timer di riposo, tra un set e l'altro.
-
-      ```
-      +-----------------------------------------+
-      |  Squat a Corpo Libero         Series 2/3|
-      +-----------------------------------------+
-      |                                         |
-      |                   51                    |
-      |                   Rest                  |
-      |                                         |
-      +-----------------------------------------+
-      |              [ Pause ]                  |
-      +-----------------------------------------+
-      ```
+      -   **Activation:** Appears automatically when a workout is completed or manually terminated.
+      -   **Content:**
+          -   **Summary:** Displays a list of all exercises completed during the session.
+          -   **Text Report:** Generates a pre-formatted, multi-line string summarizing the workout, ready for sharing.
+      -   **Actions:**
+          -   **Copy for Coach:** Copies the text report to the user's clipboard.
+          -   **Return to Calendar:** Switches the view back to the main Calendar.
   - file: docs/02_ARCHITECTURE.md
     content: |
-      # Architecture Decision Records (ADR)
+      # Application Architecture
 
-      Questo documento è il nostro "diario tecnico". Registra le decisioni architetturali importanti prese durante lo sviluppo del progetto.
+      This document outlines the high-level architecture for the "Mio Trainer Personale" SPA.
 
-      ## Cos'è un ADR?
+      ## 1. Core Principles
 
-      Un ADR è un breve documento di testo che descrive una scelta architetturale. Ogni ADR ha un formato standard per spiegare il contesto della decisione, la decisione stessa e le sue conseguenze.
+      -   **Modularity:** The application is broken down into distinct, single-responsibility modules. This simplifies development, testing, and maintenance.
+      -   **State-Driven UI:** The user interface reacts to changes in the application's state, rather than being manipulated directly.
 
-      Lo scopo è avere una cronologia chiara del *perché* il software è costruito in un certo modo. Questo aiuta i futuri sviluppatori (o future istanze dell'AI) a comprendere le scelte passate.
+      ## 2. Directory Structure
 
-      Un ADR, una volta scritto, è immutabile. Se una decisione cambia, non si modifica il vecchio ADR, ma se ne scrive uno nuovo che "supera" quello precedente.
+      -   `docs/`: Contains all project documentation.
+      -   `index.html`: The single HTML entry point for the SPA.
+      -   `src/`: Contains all application source code.
+          -   `src/main.js`: The main application entry point, responsible for initialization and view management.
+          -   `src/style.css`: The global stylesheet.
+          -   `src/views/`: Each file in this directory manages the DOM and logic for a specific application view (e.g., `calendar.js`, `trainer.js`).
+          -   `src/modules/`: Contains shared logic and helpers, such as:
+              -   `storage.js`: A wrapper for all `localStorage` interactions.
+              -   `ui.js`: Reusable UI component functions (e.g., creating modals).
 
-      ## Formato ADR
+      ## 3. View Management
 
-      * **Titolo**: Un breve riassunto della decisione.
-      * **Contesto**: Il problema o la situazione che richiede una decisione.
-      * **Decisione**: La scelta tecnica che è stata fatta.
-      * **Conseguenze**: I risultati (positivi e negativi) di questa decisione.
+      The application uses a simple view manager controlled by `main.js`.
+      -   Only one view is active (`.view--active`) at any given time.
+      -   The `showView(viewId)` function handles switching between views by toggling CSS classes.
 
-      ---
+      ## 4. Data Persistence
 
-      ### ADR-001: Adozione di una Struttura di Documentazione Formale
-
-      * **Contesto**: Il progetto stava evolvendo rapidamente, con nuove richieste funzionali (es. esercizi a reps) e di design che non erano catturate in modo strutturato. I file di specifiche iniziali erano diventati insufficienti. C'era il rischio di disallineamento e di dover "reinventare la ruota".
-      * **Decisione**: Abbiamo deciso di creare una cartella `/docs` per contenere la documentazione ufficiale del progetto, suddivisa in tre file principali: `01_FUNCTIONALITY.md` (per specifiche e mockup), `02_ARCHITECTURE.md` (per gli ADR), e `03_STYLE_GUIDE.md` (per le regole di design).
-      * **Conseguenze**:
-          * **Positivo**: Abbiamo ora una singola fonte di verità per il progetto, migliorando la chiarezza e l'allineamento.
-          * **Positivo**: Sarà più facile per chiunque (umano o AI) comprendere lo stato e la storia del progetto.
-          * **Negativo/Sforzo**: Richiede uno sforzo disciplinato per mantenere la documentazione aggiornata man mano che il progetto evolve.
+      All user data (scheduled workouts, progress) is persisted in the browser's `localStorage`. The `storage.js` module provides a clean API (`saveWorkout`, `getWorkoutForDate`, etc.) to abstract the direct `JSON.stringify` and `JSON.parse` calls, ensuring data consistency.
   - file: docs/03_STYLE_GUIDE.md
     content: |
-      # Guida di Stile
+      # UI Design and Visual System
 
-      Questo documento definisce l'identità visiva dell'applicazione. Tutte le componenti UI devono aderire a queste regole per garantire coerenza e una User Experience di qualità.
+      This document describes the user interface, color palette, and visual language of the "Mio Trainer Personale" application.
 
-      ## 1. Color Palette
+      ## 1. General Philosophy
 
-      * **Primary**: `#XXXXXX` (Usato per bottoni primari, link e accenti principali)
-      * **Secondary**: `#XXXXXX` (Usato per elementi di supporto)
-      * **Background**: `#XXXXXX` (Colore di sfondo principale dell'app)
-      * **Surface**: `#XXXXXX` (Colore per le superfici dei contenitori, come le card)
-      * **Text Primary**: `#XXXXXX` (Colore del testo principale)
-      * **Text Secondary**: `#XXXXXX` (Colore del testo secondario, meno importante)
-      * **Success**: `#XXXXXX` (Usato per messaggi di successo)
-      * **Error**: `#XXXXXX` (Usato per messaggi di errore)
+      The UI is designed with a **dark theme** to be easy on the eyes, especially in low-light environments. The aesthetic is minimal and functional, prioritizing clarity and readability of information during a workout.
 
-      ## 2. Typography
+      ## 2. Color Palette
 
-      * **Font Family**: `'Roboto', sans-serif` (Esempio)
-      * **Heading 1 (h1)**: `32px` Bold
-      * **Heading 2 (h2)**: `24px` Bold
-      * **Body Text**: `16px` Regular
-      * **Small Text / Labels**: `14px` Regular
+      The entire UI is based on a set of CSS variables for consistency.
 
-      ## 3. Spacing
+      * `--bg-color: #1a1a1d`: The main background color of the application.
+      * `--card-color: #2c2c34`: The background color for all interactive cards, such as day cells and list items.
+      * `--primary-color: #9575cd`: The primary accent color, used for key interactive elements and titles. A shade of purple.
+      * `--secondary-color: #4db6ac`: The secondary accent color, used for "positive" or "start" actions, like the start buttons. A shade of teal.
+      * `--text-color: #f4f4f9`: The primary color for all standard text.
+      * `--text-secondary: #b3b3b3`: A dimmer text color for supplementary information and labels.
+      * `--danger-color: #ef5350`: Used for "danger" or "delete" actions.
+      * `--success-color: #66bb6a`: Used for "success" or "completion" states.
 
-      Usare un sistema di spaziatura basato su un multiplo di 8px per mantenere un ritmo verticale e orizzontale consistente.
+      ## 3. Layout and Structure
 
-      * `space-xs`: `4px`
-      * `space-sm`: `8px`
-      * `space-md`: `16px`
-      * `space-lg`: `24px`
-      * `space-xl`: `32px`
+      * **Main Container (`#app-container`):** All content is wrapped in a centered container with a maximum width to ensure readability on large screens.
+      * **Views (`.view`):** The application's main sections (`calendar`, `trainer`, `debriefing`) are managed by a class-based system. An element with the `.view` class is hidden (`display: none`), while adding the `.view--active` class makes it visible.
+      * **Grids and Flexbox:** The layout heavily relies on CSS Grid (for the weekly calendar) and Flexbox (for component alignment) to be responsive and robust.
 
-      ## 4. Componenti
+      ## 4. Key Components and Effects
 
-      ### Bottone Primario
+      ### 4.1. Cards
 
-      * `background-color`: `Primary`
-      * `color`: `#FFFFFF`
-      * `padding`: `space-md space-lg`
-      * `border-radius`: `4px`
-      * `box-shadow`: `(valore ombra)`
+      * **Appearance:** Used for day cells (`.day-cell`) and list items in modals. They have a `background-color` of `--card-color` and `border-radius: 8px`.
+      * **Interaction:** On hover, a card lifts slightly (`transform: translateY(-3px)`) and a `--primary-color` accent appears on its left border, providing clear visual feedback.
 
-      ### Bottone Secondario
+      ### 4.2. Buttons
 
-      * `background-color`: `transparent`
-      * `color`: `Primary`
-      * `border`: `1px solid Primary`
-      * `padding`: `space-md space-lg`
-      * `border-radius`: `4px`
+      * **Base Style (`.btn`):** A standardized button with rounded corners, bold font weight, and a subtle scaling effect on hover.
+      * **Variations:** Color variations (`.btn-primary`, `.btn-secondary`, `.btn-danger`, etc.) are used to signify the button's purpose.
+      * **State:** Disabled buttons have reduced opacity and a `not-allowed` cursor.
+
+      ### 4.3. Modals
+
+      * **Overlay (`.modal-overlay`):** A semi-transparent black overlay covers the entire viewport when a modal is active.
+      * **Content Box (`.modal-content`):** A centered card with rounded corners contains the modal's content. It has a max-height and allows for vertical scrolling if the content overflows.
+
+      ### 4.4. Visual & Auditory Feedback
+
+      * **Flashing Animation (`.is-flashing`):** A key visual cue used in the Trainer's "Announce Phase". It uses a CSS `@keyframes` animation to alternate the element's opacity, drawing the user's attention to an imminent change of state.
+      * **Audio Tick:** A high-frequency sine wave sound (`playTick()`) is generated via the Web Audio API. It plays in sync with the flashing animation and countdown timers to provide non-visual, rhythmic feedback.
+
+      ## 5. View-Specific UI Details
+
+      * **Calendar View:** Day cells are vertically organized to display the day name, the date number, a summary of exercises, and the start button, providing a clear information hierarchy.
+      * **Trainer View:** This view is designed for at-a-glance readability.
+        * **Focal Point:** The central display (`#trainer-main-display`) is the largest element, showing the current instruction (e.g., "UP", "REST") or timer countdown.
+        * **Hierarchy:** The exercise name is the main title, followed by series/rep counters, the main display, and a smaller description at the bottom.
+        * **Controls:** Action buttons are large and centered for easy access during a workout.
+  - file: index.html
+    content: |
+      <!DOCTYPE html>
+      <html lang="it">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Mio Trainer Personale</title>
+          <link rel="stylesheet" href="src/style.css">
+          <script src="src/main.js" defer></script>
+      </head>
+      <body>
+
+          <main id="app-container">
+              <div id="view-calendar" class="view">
+                  <h1>Calendario</h1>
+                  </div>
+
+              <div id="view-trainer" class="view">
+                  <h1>Trainer</h1>
+                  </div>
+
+              <div id="view-debriefing" class="view">
+                  <h1>Debriefing</h1>
+                  </div>
+          </main>
+
+      </body>
+      </html>
+  - file: src/style.css
+    content: |
+      /* --- FONT (optional, example) --- */
+      @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+
+      /* --- COLOR PALETTE & VARIABLES --- */
+      :root {
+          --bg-color: #1a1a1d;
+          --card-color: #2c2c34;
+          --primary-color: #9575cd;
+          --secondary-color: #4db6ac;
+          --text-color: #f4f4f9;
+          --text-secondary: #b3b3b3;
+          --danger-color: #ef5350;
+          --success-color: #66bb6a;
+          --border-radius: 8px;
+      }
+
+      /* --- GENERAL RESET & BASE STYLES --- */
+      * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+      }
+
+      body {
+          font-family: 'Roboto', sans-serif;
+          background-color: var(--bg-color);
+          color: var(--text-color);
+          display: flex;
+          justify-content: center;
+          padding: 1rem;
+      }
+
+      /* --- APP CONTAINER --- */
+      #app-container {
+          width: 100%;
+          max-width: 1200px;
+          margin: 0 auto;
+      }
+
+      h1 {
+        color: var(--primary-color);
+        margin-bottom: 1rem;
+      }
+
+      /* --- VIEW MANAGEMENT --- */
+      .view {
+          display: none;
+      }
+
+      .view--active {
+          display: block;
+      }
+  - file: src/main.js
+    content: |
+      /**
+       * Main application entry point.
+       * Handles view management and app initialization.
+       */
+
+      /**
+       * Hides all views and shows the one with the specified ID.
+       * @param {string} viewId The ID of the view to show (e.g., 'view-calendar').
+       */
+      function showView(viewId) {
+          // Hide all elements with the .view class
+          const views = document.querySelectorAll('.view');
+          views.forEach(view => {
+              view.classList.remove('view--active');
+          });
+
+          // Show the requested view
+          const activeView = document.getElementById(viewId);
+          if (activeView) {
+              activeView.classList.add('view--active');
+          } else {
+              console.error(`View with ID "${viewId}" not found.`);
+          }
+      }
+
+      // --- App Initialization ---
+      document.addEventListener('DOMContentLoaded', () => {
+          console.log('Mio Trainer Personale is initializing...');
+          // Set the default view to the calendar
+          showView('view-calendar');
+      });
+  - file: src/views/calendar.js
+    content: |
+      // Module for Calendar view logic.
+  - file: src/views/trainer.js
+    content: |
+      // Module for Trainer view logic.
+  - file: src/views/debriefing.js
+    content: |
+      // Module for Debriefing view logic.
+  - file: src/modules/storage.js
+    content: |
+      // Module to handle all interactions with localStorage.
+  - file: src/modules/ui.js
+    content: |
+      // Module for reusable UI components (modals, buttons, etc.).
 commands:
-  - echo "✅ Creata la nuova struttura di documentazione in 'docs/'."
-  - mkdir -p docs
-  - echo "🧹 Rimozione dei vecchi file di specifica..."
-  - rm functionality_spec.md design_and_visual.md
-  - echo "Operazione completata. La nostra nuova 'fonte di verità' è pronta."
-  - echo "Azione richiesta: La prego di rivedere i nuovi documenti, in particolare i mockup in 'docs/01_FUNCTIONALITY.md'."
+  - "echo 'Project structure scaffolded successfully. Ready for feature implementation.'"

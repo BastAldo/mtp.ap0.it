@@ -98,22 +98,38 @@ def run_git_commit(commit_message: str):
         # This case is already handled above, but included for completeness
         print("❌ Error: 'git' command not found. Is Git installed and in your PATH?", file=sys.stderr)
 
-def display_informational_messages(commands: list[str]):
+# --- MODIFICA INIZIA QUI ---
+
+def display_informational_messages(commands: list):
     """
     Displays post-patch informational messages from the YAML.
+    Handles both simple strings and dictionaries in the commands list.
     """
     if not commands:
         return
         
     print("\n" + "="*50)
     print("Post-Patch Information")
-    for cmd in commands:
-        # Cleanly print "echo" commands without the 'echo' part
-        if cmd.strip().startswith("echo '") and cmd.strip().endswith("'"):
-            message = cmd.strip()[6:-1]
+    for item in commands:
+        command_line = ""
+        # Controlla se l'elemento è un dizionario o una stringa
+        if isinstance(item, dict):
+            # Se è un dizionario, cerca la chiave 'command' per la linea di comando
+            command_line = item.get('command', '')
+        elif isinstance(item, str):
+            # Se è una stringa, usala direttamente
+            command_line = item
+        
+        # Ora usa la variabile command_line che è sicuramente una stringa
+        if command_line.strip().startswith("echo '") and command_line.strip().endswith("'"):
+            message = command_line.strip()[6:-1]
             print(f"ℹ️  {message}")
         else:
-            print(f"   $ {cmd}") # Print other commands as they are
+            # Stampa comandi non-echo o stringhe vuote risultanti da dizionari malformati
+            if command_line:
+                print(f"   $ {command_line}")
+
+# --- MODIFICA FINISCE QUI ---
 
 def main():
     """Main function to parse arguments and orchestrate the patching process."""
