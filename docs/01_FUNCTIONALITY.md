@@ -18,6 +18,18 @@ The application operates using three primary, mutually exclusive views: `Calenda
 -   **Day Cells:** Each cell represents a day and displays a summary of the number of exercises scheduled for that day. A "START" button is enabled if one or more exercises are scheduled.
 -   **Interaction:** Clicking a day cell (but not the "START" button) opens the Workout Editor modal for that specific date.
 
+```plaintext
++-------------------------------------------------------------------------+
+|  <- PREV WEEK         WEEK OF 2025-06-30         NEXT WEEK ->            |
++-------------------------------------------------------------------------+
+| MONDAY 30      | TUESDAY 01     | WEDNESDAY 02   | THURSDAY 03    | ...  |
+|----------------|----------------|----------------|----------------|------|
+| 3 Exercises    | 0 Exercises    | 2 Exercises    | (No Workout)   |      |
+|                |                |                |                |      |
+| [   START   ]  |                | [   START   ]  |                |      |
++-------------------------------------------------------------------------+
+```
+
 ### 2.2. Workout Editor (Modal System)
 
 The editor is a two-stage modal system for managing a day's workout routine.
@@ -32,10 +44,65 @@ The editor is a two-stage modal system for managing a day's workout routine.
     -   Displays a complete list of all available exercises defined in `workouts.js`.
     -   Allows **selection** of an exercise to add to the current day's routine.
 
+```plaintext
+// Stage 1: Daily Workout Modal appears over the Calendar
++----------------------------------+
+| WORKOUT - MONDAY 30              |
+|----------------------------------|
+| - Squat (3x10)         [Remove]  |
+| - Push-ups (3x12)      [Remove]  |
+| - Plank (3x60s)        [Remove]  |
+|                                  |
+|            [Add Exercise]        |
++----------------------------------+
+
+// Stage 2: User clicks [Add Exercise], a new modal replaces the first
++----------------------------------+
+| EXERCISE LIBRARY                 |
+|----------------------------------|
+| - Bench Press          [Add]     |
+| - Deadlift             [Add]     |
+| - Lunges               [Add]     |
+| - Bicep Curls          [Add]     |
+| ... (scrollable) ...             |
+|                        [Close]   |
++----------------------------------+
+```
+
 ### 2.3. Interactive Trainer View
 
 -   **Function:** An interactive, state-driven interface that guides the user through a scheduled workout in real-time.
 -   **Activation:** Triggered by clicking the "START" button on a day cell in the calendar.
+
+```plaintext
+// State: Preparing
++-----------------------------------------+
+|  ** SQUAT ** |
+|  SERIES 1 / 3                           |
+|-----------------------------------------|
+|                                         |
+|                PREPARING                |
+|                   03                    |
+|                                         |
+|-----------------------------------------|
+|  Get ready for the first set.           |
+|  [   (Controls Disabled)   ]            |
++-----------------------------------------+
+
+// State: Action (Reps-based)
++-----------------------------------------+
+|  ** SQUAT ** |
+|  SERIES 1 / 3   |   REP 1 / 10          |
+|-----------------------------------------|
+|                                         |
+|                    UP                   |
+|                   2s                    |
+|                                         |
+|-----------------------------------------|
+|  Lower your body with control.          |
+|  [           PAUSE           ]          |
++-----------------------------------------+
+```
 
 #### Trainer State Machine & Flow
 
@@ -61,3 +128,24 @@ The trainer operates as a state machine. The primary user flow is as follows:
 -   **Actions:**
     -   **Copy for Coach:** Copies the text report to the user's clipboard.
     -   **Return to Calendar:** Switches the view back to the main Calendar.
+
+```plaintext
++-----------------------------------------+
+|  WORKOUT COMPLETED!                     |
+|-----------------------------------------|
+|  Summary:                               |
+|   - Squat: 3 series completed           |
+|   - Push-ups: 3 series completed        |
+|   - Plank: 3 series completed           |
+|                                         |
+|  +-----------------------------------+  |
+|  | Workout Report:                   |  |
+|  | Mon Jun 30 2025                   |  |
+|  | * Squat: 3 sets                   |  |
+|  | * Push-ups: 3 sets                |  |
+|  | * Plank: 3 sets                   |  |
+|  +-----------------------------------+  |
+|                                         |
+|  [ Copy for Coach ] [Return to Calendar] |
++-----------------------------------------+
+```
