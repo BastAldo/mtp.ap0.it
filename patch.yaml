@@ -1,18 +1,20 @@
 # This is a YAML file. Copy all content from here down
 # and save it as 'patch.yaml'.
-commit_message: "feat: Implement dynamic calendar view and weekly layout"
+commit_message: "feat: Enable week navigation in calendar view"
 rationale: |
-  Questo commit trasforma la vista statica del calendario in un'interfaccia dinamica e funzionale. Introduce diversi concetti architetturali chiave:
+  Questo commit introduce la funzionalità di navigazione tra le settimane nella vista Calendario, rendendo l'applicazione interattiva.
 
-  1.  **`src/state.js` (Nuovo)**: Viene creato un modulo per centralizzare lo stato volatile dell'applicazione. Per ora, contiene solo la `currentDate`, ovvero la data utilizzata come riferimento per la visualizzazione della settimana. Centralizzare lo stato è fondamentale per una gestione prevedibile dei dati.
+  1.  **Logica di Navigazione**: La logica è stata implementata in `src/main.js`, il nostro orchestratore. È stato aggiunto un gestore di eventi `click` direttamente sull'elemento `calendarView`.
 
-  2.  **`src/utils.js` (Nuovo)**: Un nuovo modulo di utilità per ospitare funzioni pure e riutilizzabili. Inizia con funzioni per la manipolazione delle date, come ottenere l'inizio della settimana e formattare le date per l'uso interno (`YYYY-MM-DD`) e per la visualizzazione. Questo mantiene gli altri moduli focalizzati sulle loro responsabilità principali.
+  2.  **Event Delegation**: Si è scelto di usare la tecnica dell'event delegation. Invece di aggiungere un listener per ogni pulsante, ne usiamo uno solo sul contenitore padre. Questo è più performante e robusto, poiché funziona anche quando i pulsanti vengono ricreati dinamicamente dalla funzione `renderCalendar`.
 
-  3.  **`src/ui.js` (Modificato)**: Il modulo UI ora contiene la logica di rendering per il calendario. La nuova funzione `renderCalendar` genera dinamicamente l'HTML per l'intera settimana (header di navigazione e griglia dei giorni) basandosi sulla data fornita e sui dati degli allenamenti. Questo incarna il principio secondo cui la UI è una "funzione dello stato".
+  3.  **Flusso di Esecuzione**:
+      - Quando un utente clicca all'interno della vista calendario, il listener si attiva.
+      - Controlla se l'elemento cliccato ha l'ID `prev-week-btn` o `next-week-btn`.
+      - Se c'è una corrispondenza, **modifica lo stato centrale** (`state.currentDate`), aggiungendo o sottraendo 7 giorni.
+      - Infine, invoca `appCycle()`.
 
-  4.  **`src/main.js` (Modificato)**: L'orchestratore ora importa lo stato e le utilità. Introduce l'`appCycle`, una funzione che si occupa di eseguire il rendering della UI. Questa funzione verrà richiamata ogni volta che lo stato cambia per mantenere la vista sincronizzata.
-
-  5.  **`style.css` (Modificato)**: Vengono aggiunti gli stili necessari per implementare il design specificato per il calendario: la griglia, le celle dei giorni (`.day-cell`), gli effetti hover, i pulsanti (`.btn`) e le loro variazioni di colore e stato (es. `disabled`).
+  4.  **Architettura Reattiva**: Questo passo dimostra la potenza del nostro approccio. Non dobbiamo manipolare manualmente la UI per aggiornare le date. Semplicemente modifichiamo lo stato, e la chiamata a `appCycle` si occupa di ridisegnare l'intera vista del calendario in base al nuovo stato. Questo rende il codice più semplice e prevedibile.
 patches:
   - file: src/main.js
     content: |
@@ -36,8 +38,29 @@ patches:
           ui.renderCalendar(state.currentDate, schedule);
       }
 
+      /**
+       * Gestisce gli eventi di click per la navigazione del calendario.
+       * @param {Event} event
+       */
+      function handleCalendarNavigation(event) {
+          const targetId = event.target.id;
+
+          if (targetId === 'prev-week-btn') {
+              state.currentDate.setDate(state.currentDate.getDate() - 7);
+              appCycle();
+          }
+
+          if (targetId === 'next-week-btn') {
+              state.currentDate.setDate(state.currentDate.getDate() + 7);
+              appCycle();
+          }
+      }
+
       function init() {
           console.log("MTP App Initialized.");
+
+          // Aggiungi i listener degli eventi principali
+          ui.calendarView.addEventListener('click', handleCalendarNavigation);
 
           // Carica i dati salvati e loggali per verifica
           const schedule = store.getSchedule();
@@ -51,301 +74,7 @@ patches:
 
       // Assicurati che il DOM sia completamente caricato prima di eseguire la logica
       document.addEventListener('DOMContentLoaded', init);
-  - file: src/ui.js
-    content: |
-      /**
-       * @file ui.js
-       *
-       * Responsabile di tutte le manipolazioni dirette del DOM.
-       * Nessun altro modulo dovrebbe accedere a document.getElementById o simili.
-       */
-      import { getWeekStartDate, formatDate, formatDateForDisplay } from './utils.js';
-
-      // Riferimenti agli elementi principali della UI
-      const views = document.querySelectorAll('.view');
-      export const calendarView = document.getElementById('calendar-view');
-      export const trainerView = document.getElementById('trainer-view');
-      export const debriefingView = document.getElementById('debriefing-view');
-
-      /**
-       * Mostra una vista specifica e nasconde tutte le altre.
-       * @param {string} viewId L'ID della vista da mostrare (es. 'calendar-view').
-       */
-      export function showView(viewId) {
-          views.forEach(view => {
-              view.classList.remove('view--active');
-              if (view.id === viewId) {
-                  view.classList.add('view--active');
-              }
-          });
-      }
-
-      /**
-       * Genera l'HTML per la vista del calendario per una data settimana.
-       * @param {Date} weekDate Una data qualsiasi all'interno della settimana da visualizzare.
-       * @param {object} schedule L'oggetto con gli allenamenti pianificati.
-       */
-      export function renderCalendar(weekDate, schedule) {
-          const startDate = getWeekStartDate(weekDate);
-          const weekDays = Array.from({ length: 7 }).map((_, i) => {
-              const day = new Date(startDate);
-              day.setDate(day.getDate() + i);
-              return day;
-          });
-
-          let headerHtml = `
-              <div class="calendar-header">
-                  <button class="btn" id="prev-week-btn">&lt; Precedente</button>
-                  <h2>Settimana del ${formatDateForDisplay(startDate)}</h2>
-                  <button class="btn" id="next-week-btn">Successiva &gt;</button>
-              </div>`;
-
-          let gridHtml = '<div class="calendar-grid">';
-          weekDays.forEach(day => {
-              const dateKey = formatDate(day);
-              const daySchedule = schedule[dateKey] || [];
-              const exerciseCount = daySchedule.length;
-
-              gridHtml += `
-                  <div class="day-cell" data-date="${dateKey}">
-                      <div class="day-cell-header">
-                          <span class="day-name">${day.toLocaleDateString('it-IT', { weekday: 'long' }).toUpperCase()}</span>
-                          <span class="day-number">${day.getDate()}</span>
-                      </div>
-                      <div class="day-cell-body">
-                          <p>${exerciseCount > 0 ? `${exerciseCount} esercizi` : 'Nessun allenamento'}</p>
-                      </div>
-                      <div class="day-cell-footer">
-                          <button class="btn btn-secondary" ${exerciseCount === 0 ? 'disabled' : ''}>START</button>
-                      </div>
-                  </div>
-              `;
-          });
-          gridHtml += '</div>';
-
-          calendarView.innerHTML = headerHtml + gridHtml;
-      }
-  - file: src/state.js
-    content: |
-      /**
-       * @file state.js
-       *
-       * Contiene lo stato volatile dell'applicazione.
-       * Questo oggetto rappresenta la "singola fonte di verità" per i dati dinamici.
-       */
-
-      export const state = {
-          /**
-           * La data usata come riferimento per la visualizzazione corrente.
-           * Per il calendario, definisce la settimana da mostrare.
-           * @type {Date}
-           */
-          currentDate: new Date(),
-      };
-  - file: src/utils.js
-    content: |
-      /**
-       * @file utils.js
-       *
-       * Contiene funzioni di utilità pure e riutilizzabili.
-       */
-
-      /**
-       * Data una data, restituisce la data del lunedì della stessa settimana.
-       * @param {Date} date La data di riferimento.
-       * @returns {Date} La data del lunedì.
-       */
-      export function getWeekStartDate(date) {
-          const d = new Date(date);
-          const day = d.getDay(); // 0 (Dom) - 6 (Sab)
-          const diff = d.getDate() - day + (day === 0 ? -6 : 1); // ajsut for Sunday
-          return new Date(d.setDate(diff));
-      }
-
-      /**
-       * Formatta un oggetto Date nel formato YYYY-MM-DD.
-       * Utile per le chiavi degli oggetti e gli attributi data.
-       * @param {Date} date La data da formattare.
-       * @returns {string} La data formattata.
-       */
-      export function formatDate(date) {
-          const d = new Date(date);
-          let month = '' + (d.getMonth() + 1);
-          let day = '' + d.getDate();
-          const year = d.getFullYear();
-
-          if (month.length < 2) month = '0' + month;
-          if (day.length < 2) day = '0' + day;
-
-          return [year, month, day].join('-');
-      }
-
-      /**
-       * Formatta un oggetto Date per la visualizzazione (es. "30 GIU").
-       * @param {Date} date La data da formattare.
-       * @returns {string} La data formattata per la UI.
-       */
-      export function formatDateForDisplay(date) {
-          const day = date.getDate();
-          const month = date.toLocaleDateString('it-IT', { month: 'short' }).toUpperCase();
-          return `${day} ${month}`;
-      }
-  - file: style.css
-    content: |
-      /**
-       * FOGLIO DI STILE PRINCIPALE
-       * Contiene le variabili globali e gli stili di base dell'applicazione.
-       */
-
-      :root {
-          --bg-color: #1a1a1d;
-          --card-color: #2c2c34;
-          --primary-color: #9575cd;
-          --secondary-color: #4db6ac;
-          --text-color: #f4f4f9;
-          --text-secondary: #b3b3b3;
-          --danger-color: #ef5350;
-          --success-color: #66bb6a;
-          --border-color: #4a4a52;
-
-          --font-main: 'Roboto Condensed', sans-serif;
-      }
-
-      *,
-      *::before,
-      *::after {
-          box-sizing: border-box;
-          margin: 0;
-          padding: 0;
-      }
-
-      html {
-          font-family: var(--font-main);
-          color: var(--text-color);
-          background-color: var(--bg-color);
-      }
-
-      body {
-          font-size: 16px;
-          line-height: 1.6;
-      }
-
-      #app-container {
-          max-width: 1200px;
-          margin: 2rem auto;
-          padding: 0 1rem;
-      }
-
-      h1, h2, h3, h4, h5, h6 {
-          color: var(--primary-color);
-          font-weight: 700;
-          margin-bottom: 1rem;
-      }
-
-      /* Sistema di gestione delle viste */
-      .view {
-          display: none;
-      }
-
-      .view--active {
-          display: block;
-      }
-
-      /* --- Stili Calendario --- */
-
-      .calendar-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 2rem;
-      }
-
-      .calendar-grid {
-          display: grid;
-          grid-template-columns: repeat(7, 1fr);
-          gap: 1rem;
-      }
-
-      .day-cell {
-          background-color: var(--card-color);
-          border: 1px solid var(--border-color);
-          border-radius: 8px;
-          padding: 1rem;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-          transition: transform 0.2s ease-out, border-left 0.2s ease-out;
-          border-left: 4px solid transparent;
-      }
-
-      .day-cell:hover {
-          transform: translateY(-4px);
-          border-left: 4px solid var(--primary-color);
-      }
-
-      .day-cell-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: baseline;
-          font-weight: 700;
-      }
-
-      .day-cell-header .day-name {
-          font-size: 0.9em;
-          color: var(--text-secondary);
-      }
-
-      .day-cell-header .day-number {
-          font-size: 1.5em;
-          color: var(--primary-color);
-      }
-
-      .day-cell-body {
-          margin: 2rem 0;
-          text-align: center;
-          color: var(--text-secondary);
-      }
-
-      .day-cell-footer {
-          text-align: center;
-      }
-
-      /* --- Stili Componenti Generici --- */
-
-      .btn {
-          background-color: var(--card-color);
-          color: var(--text-color);
-          border: 1px solid var(--border-color);
-          padding: 0.5rem 1rem;
-          font-family: var(--font-main);
-          font-size: 1em;
-          font-weight: 700;
-          border-radius: 6px;
-          cursor: pointer;
-          transition: background-color 0.2s, transform 0.2s;
-      }
-
-      .btn:hover {
-          transform: scale(1.05);
-      }
-
-      .btn:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-          transform: none;
-      }
-
-      .btn-secondary {
-          background-color: var(--secondary-color);
-          border-color: var(--secondary-color);
-          color: #1a1a1d;
-      }
-
-      .btn-secondary:hover:not(:disabled) {
-          background-color: #5dcbb8;
-      }
 commands:
-  - "echo 'Patch applicato. Controlla la nuova vista Calendario.'"
-  - "ls -R"
-  - "echo 'Verifica lo stato di git per confermare le modifiche.'"
+  - "echo 'Patch applicato. La logica di navigazione è stata aggiunta.'"
+  - "echo \"Ora prova a cliccare sui pulsanti 'Precedente' e 'Successiva'. La vista del calendario dovrebbe aggiornarsi.\""
   - "git status"

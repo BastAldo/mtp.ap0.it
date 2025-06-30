@@ -18,8 +18,29 @@ function appCycle() {
     ui.renderCalendar(state.currentDate, schedule);
 }
 
+/**
+ * Gestisce gli eventi di click per la navigazione del calendario.
+ * @param {Event} event
+ */
+function handleCalendarNavigation(event) {
+    const targetId = event.target.id;
+
+    if (targetId === 'prev-week-btn') {
+        state.currentDate.setDate(state.currentDate.getDate() - 7);
+        appCycle();
+    }
+
+    if (targetId === 'next-week-btn') {
+        state.currentDate.setDate(state.currentDate.getDate() + 7);
+        appCycle();
+    }
+}
+
 function init() {
     console.log("MTP App Initialized.");
+
+    // Aggiungi i listener degli eventi principali
+    ui.calendarView.addEventListener('click', handleCalendarNavigation);
 
     // Carica i dati salvati e loggali per verifica
     const schedule = store.getSchedule();
