@@ -18,9 +18,11 @@ function resetState() {
         currentSeries: 1,
         currentState: 'idle', // idle, ready, announcing, preparing, action, paused, rest, finished
         countdown: 0,
+        countdownDuration: 0,
         intervalId: null,
         phase: '', // 'up', 'hold', 'down', 'rest', 'prepare'
         repCount: 0,
+        progress: 1,
     };
 }
 
@@ -33,7 +35,9 @@ function setState(newState, data = {}) {
             break;
         case 'ready':
             state.currentExercise = state.workoutPlan[state.currentExerciseIndex];
-            state.currentSeries = 1;
+            if (state.currentSeries === 1) { // Solo alla prima serie del primo esercizio
+                state.currentSeries = 1;
+            }
             ui.updateTrainerUI(state);
             break;
         case 'announcing':
@@ -43,12 +47,14 @@ function setState(newState, data = {}) {
             setTimeout(() => setState(data.nextState, data.nextStateData), 750);
             break;
         case 'preparing':
+            state.phase = 'prepare';
             runCountdown(3, 'action');
             break;
         case 'action':
             runActionPhase();
             break;
         case 'rest':
+            state.phase = 'rest';
             runCountdown(state.currentExercise.rest, 'readyForNext');
             break;
         case 'paused':
@@ -58,10 +64,11 @@ function setState(newState, data = {}) {
         case 'readyForNext':
             if (state.currentSeries < state.currentExercise.series) {
                 state.currentSeries++;
-                setState('ready');
+                setState('announcing', { phase: 'ready', nextState: 'ready' });
             } else if (state.currentExerciseIndex < state.workoutPlan.length - 1) {
                 state.currentExerciseIndex++;
-                setState('ready');
+                state.currentSeries = 1;
+                setState('announcing', { phase: 'ready', nextState: 'ready' });
             } else {
                 setState('finished');
             }
@@ -77,11 +84,15 @@ function setState(newState, data = {}) {
 
 function runCountdown(duration, nextState, nextStateData = {}) {
     state.countdown = duration;
+    state.countdownDuration = duration;
+    state.progress = 1;
+
     ui.updateTrainerUI(state);
-    playTick();
+    if (duration > 0) playTick();
 
     state.intervalId = setInterval(() => {
         state.countdown--;
+        state.progress = state.countdown / state.countdownDuration;
         ui.updateTrainerUI(state);
         if (state.countdown > 0) playTick();
 
@@ -95,6 +106,7 @@ function runCountdown(duration, nextState, nextStateData = {}) {
 function runActionPhase() {
     const exercise = state.currentExercise;
     if (exercise.type === 'time') {
+        state.phase = 'action';
         runCountdown(exercise.duration, 'rest');
     } else if (exercise.type === 'reps') {
         state.repCount = 0;
@@ -103,24 +115,20 @@ function runActionPhase() {
 }
 
 function runRep() {
-    const { tempo, reps } = state.currentExercise;
+    const { reps } = state.currentExercise;
     if (state.repCount >= reps) {
         setState('rest');
         return;
     }
     state.repCount++;
-    
-    // Ciclo UP -> HOLD -> DOWN
-    setState('announcing', { phase: 'up', nextState: 'action.rep.up', nextStateData: { duration: tempo.up } });
+    setState('announcing', { phase: 'up', nextState: 'action.rep.up' });
 }
 
 function runRepPhase(phase) {
     const { tempo } = state.currentExercise;
-    const nextPhases = { 'up': 'hold', 'hold': 'down', 'down': null };
-    
-    if (phase === 'up') runCountdown(tempo.up, 'action.rep.transition', { next: 'hold' });
-    if (phase === 'hold') runCountdown(tempo.hold, 'action.rep.transition', { next: 'down' });
-    if (phase === 'down') runCountdown(tempo.down, 'action.rep.transition', { next: null });
+    state.phase = phase;
+    const nextStates = { 'up': 'action.rep.hold', 'hold': 'action.rep.down', 'down': null };
+    runCountdown(tempo[phase], 'action.rep.transition', { next: nextStates[phase] });
 }
 
 // Entry points dall'esterno
@@ -138,18 +146,16 @@ export function startSeries() {
 }
 
 export function pause() {
-    if (state.currentState !== 'action' && state.currentState !== 'rest' && state.currentState !== 'preparing') return;
+    if (!['action', 'rest', 'preparing'].includes(state.currentState)) return;
     setState('paused');
 }
 
 export function resume() {
     if (state.currentState !== 'paused') return;
-    const originalState = state.phase === 'rest' ? 'rest' : 'action';
-    runCountdown(state.countdown, originalState === 'rest' ? 'readyForNext' : 'action');
+    runCountdown(state.countdown, state.phase === 'rest' ? 'readyForNext' : 'action');
 }
 
 export function stop() {
-    // In futuro andrà al debriefing
     if (confirm("Sei sicuro di voler terminare l'allenamento?")) {
         setState('finished');
     }
@@ -158,19 +164,14 @@ export function stop() {
 // Mini-stati per la logica delle ripetizioni
 function setRepState(newState, data) {
      switch(newState) {
-         case 'action.rep.up':
-             runRepPhase('up');
-             break;
-         case 'action.rep.down':
-             runRepPhase('down');
-             break;
-         case 'action.rep.hold':
-             runRepPhase('hold');
+          case 'action.rep.up':
+          case 'action.rep.down':
+          case 'action.rep.hold':
+             runRepPhase(newState.split('.').pop());
              break;
           case 'action.rep.transition':
-              const nextPhase = data.next;
-              if(nextPhase) {
-                  setState('announcing', { phase: nextPhase, nextState: `action.rep.${nextPhase}` });
+              if (data.next) {
+                  setState('announcing', { phase: data.next.split('.').pop(), nextState: data.next });
               } else {
                   runRep(); // Prossima ripetizione
               }

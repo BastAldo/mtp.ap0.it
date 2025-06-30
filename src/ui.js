@@ -2,7 +2,6 @@
  * @file ui.js
  *
  * Responsabile di tutte le manipolazioni dirette del DOM.
- * Nessun altro modulo dovrebbe accedere a document.getElementById o simili.
  */
 import { getWeekStartDate, formatDate, formatDateForDisplay } from './utils.js';
 import { EXERCISES } from './config.js';
@@ -18,70 +17,82 @@ const modalContent = document.getElementById('modal-content');
 // Elementi Trainer
 const trainerExerciseName = document.getElementById('trainer-exercise-name');
 const trainerSeriesCounter = document.getElementById('trainer-series-counter');
-const trainerMainDisplay = document.getElementById('trainer-main-display');
 const trainerExerciseDescription = document.getElementById('trainer-exercise-description');
 export const trainerControls = document.getElementById('trainer-controls');
 const startSeriesBtn = trainerControls.querySelector('[data-action="start-series"]');
 const pauseBtn = trainerControls.querySelector('[data-action="pause"]');
 const resumeBtn = trainerControls.querySelector('[data-action="resume"]');
 
-/**
- * Mostra una vista specifica e nasconde tutte le altre.
- * @param {string} viewId
- */
+// Elementi Trainer Display (nuovi)
+const ringBar = document.getElementById('progress-ring-bar');
+const ringRadius = ringBar.r.baseVal.value;
+const ringCircumference = 2 * Math.PI * ringRadius;
+ringBar.style.strokeDasharray = `${ringCircumference} ${ringCircumference}`;
+
+const displayCountdown = document.getElementById('trainer-display-countdown');
+const displayAnnouncement = document.getElementById('trainer-display-announcement');
+const countdownNumber = document.getElementById('trainer-countdown-number');
+const phaseLabel = document.getElementById('trainer-phase-label');
+
+/** Mostra una vista specifica e nasconde tutte le altre. */
 export function showView(viewId) {
     views.forEach(view => {
         view.classList.toggle('view--active', view.id === viewId);
     });
 }
 
+function updateProgressRing(percent) {
+    const offset = ringCircumference - (percent / 100) * ringCircumference;
+    ringBar.style.strokeDashoffset = offset;
+}
+
 /** Aggiorna la UI del trainer in base allo stato fornito dalla state machine */
 export function updateTrainerUI(state) {
-    const { currentExercise, currentSeries, currentState, countdown, phase } = state;
+    const { currentExercise, currentSeries, currentState, countdown, phase, progress } = state;
 
     trainerExerciseName.textContent = currentExercise.name;
     trainerExerciseDescription.textContent = currentExercise.description;
+    trainerSeriesCounter.textContent = `Serie ${currentSeries} di ${currentExercise.series || '...'}`;
 
-    if (currentState === 'ready') {
-        trainerSeriesCounter.textContent = `Serie 1 di ${currentExercise.series || '...'}`;
-        trainerMainDisplay.textContent = 'READY';
-        trainerMainDisplay.classList.remove('is-flashing');
-        startSeriesBtn.style.display = 'inline-block';
-        pauseBtn.style.display = 'none';
-        resumeBtn.style.display = 'none';
-    } else {
-        trainerSeriesCounter.textContent = `Serie ${currentSeries} di ${currentExercise.series || '...'}`;
-        startSeriesBtn.style.display = 'none';
+    const isCountdownState = ['action', 'preparing', 'rest'].includes(currentState);
+    const isPausedState = currentState === 'paused';
+    const isAnnouncingState = currentState === 'announcing';
+    const isReadyState = currentState === 'ready';
+
+    // Gestione visibilità sezioni display
+    displayCountdown.style.display = (isCountdownState || isPausedState) ? 'block' : 'none';
+    displayAnnouncement.style.display = (isAnnouncingState || isReadyState) ? 'block' : 'none';
+
+    // Gestione lampeggio
+    displayAnnouncement.classList.toggle('is-flashing', isAnnouncingState);
+    
+    // Aggiornamento contenuti e anello
+    if (isReadyState) {
+        displayAnnouncement.textContent = 'READY';
+        updateProgressRing(100); // Anello pieno
     }
 
-    if (currentState === 'announcing') {
-        trainerMainDisplay.textContent = phase.toUpperCase();
-        trainerMainDisplay.classList.add('is-flashing');
-    } else {
-        trainerMainDisplay.classList.remove('is-flashing');
+    if (isAnnouncingState) {
+        displayAnnouncement.textContent = phase.toUpperCase();
+        updateProgressRing(0); // Anello vuoto
     }
 
-    if (currentState === 'action' || currentState === 'preparing' || currentState === 'rest') {
-        trainerMainDisplay.textContent = countdown;
-        pauseBtn.style.display = 'inline-block';
-        resumeBtn.style.display = 'none';
+    if (isCountdownState || isPausedState) {
+        countdownNumber.textContent = countdown;
+        phaseLabel.textContent = phase.toUpperCase();
+        updateProgressRing(progress * 100);
     }
-
-    if (currentState === 'paused') {
-        trainerMainDisplay.textContent = countdown;
-        pauseBtn.style.display = 'none';
-        resumeBtn.style.display = 'inline-block';
-    }
+    
+    // Gestione pulsanti
+    startSeriesBtn.style.display = isReadyState ? 'inline-block' : 'none';
+    pauseBtn.style.display = isCountdownState ? 'inline-block' : 'none';
+    resumeBtn.style.display = isPausedState ? 'inline-block' : 'none';
 }
 
-// --- Funzioni Calendario e Modale ---
+// --- Funzioni Calendario e Modale (invariate) ---
 export function renderCalendar(weekDate, schedule) {
     const startDate = getWeekStartDate(weekDate);
-    const weekDays = Array.from({ length: 7 }).map((_, i) => {
-        const day = new Date(startDate);
-        day.setDate(day.getDate() + i);
-        return day;
-    });
+    const weekDays = Array.from({ length: 7 }).map((_, i) => { const day = new Date(startDate); day.setDate(day.getDate() + i); return day; });
     let headerHtml = `<div class="calendar-header"><button class="btn" id="prev-week-btn">&lt; Precedente</button><h2>Settimana del ${formatDateForDisplay(startDate)}</h2><button class="btn" id="next-week-btn">Successiva &gt;</button></div>`;
     let gridHtml = '<div class="calendar-grid">';
     weekDays.forEach(day => {

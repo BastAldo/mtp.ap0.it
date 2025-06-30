@@ -1,12 +1,20 @@
 # This is a YAML file. Copy all content from here down
 # and save it as 'patch.yaml'.
-commit_message: "chore: Resync all files to the latest stable version (Trainer complete)"
+commit_message: "feat: Implement redesigned Trainer UI with SVG progress ring"
 rationale: |
-  Questo è un patch di manutenzione straordinaria per risincronizzare l'intero codebase allo stato più recente e stabile, che include la funzionalità completa del Trainer e la correzione della gestione degli eventi.
+  Questo commit implementa una completa riprogettazione dell'interfaccia utente del Trainer, basata sul dettagliato feedback dell'utente per migliorare l'esperienza.
 
-  A seguito del dubbio che un vecchio patch fosse stato applicato erroneamente, sovrascrivendo le nuove funzionalità, questo commit non modifica ma **sostituisce interamente** tutti i file di progetto.
+  1.  **Anello di Avanzamento (SVG)**: È stato introdotto un anello di avanzamento circolare (`<svg>`) come elemento visivo principale. Questo fornisce un feedback immediato e grafico sulla durata dei conti alla rovescia, come richiesto. `style.css` contiene i nuovi stili per disegnare e animare l'anello tramite la proprietà `stroke-dashoffset`.
 
-  Questo garantisce che ogni file (`index.html`, `style.css`, e tutti i moduli in `src/`) sia nella sua versione finale e corretta, eliminando ogni possibile inconsistenza e assicurando che l'applicazione funzioni come previsto fino a questo punto.
+  2.  **Layout Gerarchico**: L'HTML di `#trainer-view` è stato ristrutturato per ospitare il nuovo design. Ora le informazioni all'interno dell'anello seguono una chiara gerarchia visiva: il tempo rimanente è l'informazione primaria (testo grande), mentre la fase corrente (UP, DOWN, etc.) è secondaria (testo piccolo sottostante).
+
+  3.  **Logica di Rendering (`ui.js`)**: La funzione `updateTrainerUI` è stata riscritta per gestire la nuova interfaccia. Ora si occupa di:
+      - Mostrare/nascondere alternativamente il contenuto del countdown (numeri/fase) e la scritta di annuncio lampeggiante, mantenendo sempre visibile l'anello SVG come da specifica.
+      - Aggiornare l'anello di avanzamento tramite una nuova funzione `updateProgressRing`, che calcola la porzione di cerchio da disegnare.
+
+  4.  **Logica del Trainer (`trainer.js`)**: Il modulo del trainer è stato leggermente modificato per calcolare la percentuale di progresso durante ogni intervallo del countdown e passarla allo stato, permettendo alla UI di aggiornare l'anello di conseguenza.
+
+  Il risultato è un'interfaccia molto più professionale, intuitiva e fluida, che traduce esattamente la visione dell'utente in realtà.
 patches:
   - file: index.html
     content: |
@@ -32,7 +40,19 @@ patches:
                   <h2 id="trainer-exercise-name">--</h2>
                   <p id="trainer-series-counter" class="trainer-subtitle">--</p>
 
-                  <div id="trainer-main-display" class="trainer-display">READY</div>
+                  <div class="progress-ring-container">
+                      <svg id="progress-ring" class="progress-ring" width="300" height="300">
+                          <circle class="progress-ring__track" stroke-width="15" fill="transparent" r="140" cx="150" cy="150"/>
+                          <circle id="progress-ring-bar" class="progress-ring__bar" stroke-width="15" fill="transparent" r="140" cx="150" cy="150"/>
+                      </svg>
+                      <div id="trainer-display" class="trainer-display">
+                          <div id="trainer-display-countdown" style="display: none;">
+                              <div id="trainer-countdown-number">3</div>
+                              <div id="trainer-phase-label">UP</div>
+                          </div>
+                          <div id="trainer-display-announcement" class="is-flashing">READY</div>
+                      </div>
+                  </div>
                   
                   <p id="trainer-exercise-description" class="trainer-subtitle">--</p>
 
@@ -119,90 +139,65 @@ patches:
           display: block;
       }
 
-      /* --- Stili Calendario --- */
-      .calendar-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 2rem;
-      }
-      .calendar-grid {
-          display: grid;
-          grid-template-columns: repeat(7, 1fr);
-          gap: 1rem;
-      }
-      .day-cell {
-          background-color: var(--card-color);
-          border: 1px solid var(--border-color);
-          border-radius: 8px;
-          padding: 1rem;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-          transition: transform 0.2s ease-out, border-left 0.2s ease-out;
-          border-left: 4px solid transparent;
-          cursor: pointer;
-      }
-      .day-cell:hover {
-          transform: translateY(-4px);
-          border-left: 4px solid var(--primary-color);
-      }
-      .day-cell-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: baseline;
-          font-weight: 700;
-      }
+      /* --- Stili Calendario (invariati) --- */
+      .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+      .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1rem; }
+      .day-cell { background-color: var(--card-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; justify-content: space-between; transition: transform 0.2s ease-out, border-left 0.2s ease-out; border-left: 4px solid transparent; cursor: pointer; }
+      .day-cell:hover { transform: translateY(-4px); border-left: 4px solid var(--primary-color); }
+      .day-cell-header { display: flex; justify-content: space-between; align-items: baseline; font-weight: 700; }
       .day-cell-header .day-name { font-size: 0.9em; color: var(--text-secondary); }
       .day-cell-header .day-number { font-size: 1.5em; color: var(--primary-color); }
       .day-cell-body { margin: 2rem 0; text-align: center; color: var(--text-secondary); }
       .day-cell-footer { text-align: center; }
 
       /* --- Stili Trainer --- */
-      #trainer-view {
-          text-align: center;
+      #trainer-view { text-align: center; }
+      .trainer-subtitle { color: var(--text-secondary); margin-top: 1rem; margin-bottom: 1rem; }
+      
+      .progress-ring-container {
+          position: relative;
+          width: 300px;
+          height: 300px;
+          margin: 1rem auto;
       }
-      .trainer-subtitle {
-          color: var(--text-secondary);
-          margin-bottom: 2rem;
-      }
+      .progress-ring { transform: rotate(-90deg); }
+      .progress-ring__track { stroke: var(--border-color); }
+      .progress-ring__bar { stroke: var(--secondary-color); transition: stroke-dashoffset 0.3s linear; }
+      
       .trainer-display {
-          font-size: 10rem;
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+      }
+      #trainer-countdown-number {
+          font-size: 8rem;
           font-weight: 700;
-          color: var(--secondary-color);
-          margin: 2rem 0;
           line-height: 1;
       }
-      .trainer-controls {
-          display: flex;
-          justify-content: center;
-          gap: 1rem;
-          margin-top: 2rem;
+      #trainer-phase-label {
+          font-size: 2rem;
+          color: var(--text-secondary);
+          text-transform: uppercase;
       }
-
-      @keyframes flash {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.2; }
-      }
-
-      .is-flashing {
-          animation: flash 0.75s infinite;
-      }
-
-
-      /* --- Stili Componenti Generici --- */
-      .btn {
-          background-color: var(--card-color);
-          color: var(--text-color);
-          border: 1px solid var(--border-color);
-          padding: 0.5rem 1rem;
-          font-family: var(--font-main);
-          font-size: 1em;
+      #trainer-display-announcement {
+          font-size: 5rem;
           font-weight: 700;
-          border-radius: 6px;
-          cursor: pointer;
-          transition: background-color 0.2s, transform 0.2s;
+          text-transform: uppercase;
       }
+
+      .trainer-controls { display: flex; justify-content: center; gap: 1rem; margin-top: 1rem; }
+
+      @keyframes flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+      .is-flashing { animation: flash 0.75s infinite; }
+
+      /* --- Stili Componenti Generici (invariati) --- */
+      .btn { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.5rem 1rem; font-family: var(--font-main); font-size: 1em; font-weight: 700; border-radius: 6px; cursor: pointer; transition: background-color 0.2s, transform 0.2s; }
       .btn:hover:not(:disabled) { transform: scale(1.05); }
       .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
       .btn-primary { background-color: var(--primary-color); border-color: var(--primary-color); }
@@ -211,170 +206,20 @@ patches:
       .btn-secondary:hover:not(:disabled) { background-color: #5dcbb8; }
       .btn-danger { background-color: var(--danger-color); border-color: var(--danger-color); }
 
-      /* --- Stili Sistema Modale --- */
-      .modal-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          background-color: rgba(0, 0, 0, 0.7);
-          display: none; /* Cambiato in flex da JS */
-          justify-content: center;
-          align-items: center;
-          z-index: 1000;
-      }
+      /* --- Stili Sistema Modale (invariati) --- */
+      .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); display: none; justify-content: center; align-items: center; z-index: 1000; }
       .modal-overlay--active { display: flex; }
-      .modal-content {
-          background-color: var(--card-color);
-          padding: 2rem;
-          border-radius: 8px;
-          width: 90%;
-          max-width: 600px;
-          max-height: 80vh;
-          overflow-y: auto;
-          border-top: 4px solid var(--primary-color);
-      }
+      .modal-content { background-color: var(--card-color); padding: 2rem; border-radius: 8px; width: 90%; max-width: 600px; max-height: 80vh; overflow-y: auto; border-top: 4px solid var(--primary-color); }
       .modal-list { list-style: none; margin-top: 1.5rem; }
-      .modal-list-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 0.75rem;
-          border-bottom: 1px solid var(--border-color);
-      }
+      .modal-list-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; border-bottom: 1px solid var(--border-color); }
       .modal-list-item:last-child { border-bottom: none; }
       .modal-actions { margin-top: 2rem; text-align: right; }
-  - file: src/main.js
-    content: |
-      /**
-       * @file main.js
-       *
-       * Punto di ingresso principale dell'applicazione "Mio Trainer Personale".
-       * Orchestra i vari moduli (UI, stato, logica, etc.).
-       */
-      import * as ui from './ui.js';
-      import * as store from './store.js';
-      import { EXERCISES } from './config.js';
-      import { state } from './state.js';
-      import * as trainer from './trainer.js';
-
-      /**
-       * Il ciclo di rendering principale dell'applicazione.
-       * Viene chiamato ogni volta che lo stato cambia per aggiornare la UI.
-       */
-      function appCycle() {
-          const schedule = store.getSchedule();
-          ui.renderCalendar(state.currentDate, schedule);
-      }
-
-      /**
-       * Gestisce tutti i click sulla vista calendario (navigazione, start, apertura modale).
-       * @param {Event} event
-       */
-      function handleCalendarClick(event) {
-          const target = event.target;
-          
-          // Caso 1: Click sui pulsanti di navigazione della settimana
-          if (target.id === 'prev-week-btn' || target.id === 'next-week-btn') {
-              state.currentDate.setDate(state.currentDate.getDate() + (target.id === 'next-week-btn' ? 7 : -7));
-              appCycle();
-              return;
-          }
-          
-          const dayCell = target.closest('.day-cell');
-          if (!dayCell) return; // Esce se il click non è in una cella (es. nello spazio tra le celle)
-          
-          const dateKey = dayCell.dataset.date;
-          
-          // Caso 2: Click sul pulsante START
-          if (target.matches('.btn-secondary')) {
-              const schedule = store.getSchedule();
-              const exerciseIds = schedule[dateKey] || [];
-              if (exerciseIds.length > 0) {
-                  ui.showView('trainer-view');
-                  trainer.start(exerciseIds);
-              }
-              return; // Esce per non aprire la modale
-          }
-
-          // Caso 3: Click su qualsiasi altra parte della cella per aprire la modale
-          state.selectedDateKey = dateKey;
-          const schedule = store.getSchedule();
-          ui.renderDailyWorkoutModal(dateKey, schedule);
-          ui.openModal();
-      }
-
-      /**
-       * Gestisce tutti i click all'interno del sistema di modali.
-       * @param {Event} event
-       */
-      function handleModalClick(event) {
-          const target = event.target;
-          if (target.id === 'modal-overlay') {
-              ui.closeModal();
-              return;
-          }
-
-          const action = target.dataset.action;
-          if (!action) return;
-
-          switch (action) {
-              case 'close-modal': ui.closeModal(); break;
-              case 'show-library': ui.renderExerciseLibraryModal(state.selectedDateKey); break;
-              case 'add-exercise': {
-                  const exerciseId = target.dataset.exerciseId;
-                  store.addExerciseToDate(state.selectedDateKey, exerciseId);
-                  ui.renderDailyWorkoutModal(state.selectedDateKey, store.getSchedule());
-                  appCycle();
-                  break;
-              }
-              case 'remove-exercise': {
-                  const exerciseId = target.dataset.exerciseId;
-                  store.removeExerciseFromDate(state.selectedDateKey, exerciseId);
-                  ui.renderDailyWorkoutModal(state.selectedDateKey, store.getSchedule());
-                  appCycle();
-                  break;
-              }
-          }
-      }
-      
-      /**
-       * Gestisce i click sui controlli del trainer.
-       * @param {Event} event 
-       */
-      function handleTrainerControls(event) {
-          const action = event.target.dataset.action;
-          if (!action) return;
-
-          switch (action) {
-              case 'start-series': trainer.startSeries(); break;
-              case 'pause': trainer.pause(); break;
-              case 'resume': trainer.resume(); break;
-              case 'stop': trainer.stop(); break;
-          }
-      }
-
-      function init() {
-          console.log("MTP App Initialized.");
-          // Aggiungi i listener degli eventi principali
-          ui.calendarView.addEventListener('click', handleCalendarClick);
-          ui.modalOverlay.addEventListener('click', handleModalClick);
-          ui.trainerControls.addEventListener('click', handleTrainerControls);
-
-          // Esegui il primo rendering
-          appCycle();
-          ui.showView('calendar-view');
-      }
-
-      document.addEventListener('DOMContentLoaded', init);
   - file: src/ui.js
     content: |
       /**
        * @file ui.js
        *
        * Responsabile di tutte le manipolazioni dirette del DOM.
-       * Nessun altro modulo dovrebbe accedere a document.getElementById o simili.
        */
       import { getWeekStartDate, formatDate, formatDateForDisplay } from './utils.js';
       import { EXERCISES } from './config.js';
@@ -390,70 +235,82 @@ patches:
       // Elementi Trainer
       const trainerExerciseName = document.getElementById('trainer-exercise-name');
       const trainerSeriesCounter = document.getElementById('trainer-series-counter');
-      const trainerMainDisplay = document.getElementById('trainer-main-display');
       const trainerExerciseDescription = document.getElementById('trainer-exercise-description');
       export const trainerControls = document.getElementById('trainer-controls');
       const startSeriesBtn = trainerControls.querySelector('[data-action="start-series"]');
       const pauseBtn = trainerControls.querySelector('[data-action="pause"]');
       const resumeBtn = trainerControls.querySelector('[data-action="resume"]');
+      
+      // Elementi Trainer Display (nuovi)
+      const ringBar = document.getElementById('progress-ring-bar');
+      const ringRadius = ringBar.r.baseVal.value;
+      const ringCircumference = 2 * Math.PI * ringRadius;
+      ringBar.style.strokeDasharray = `${ringCircumference} ${ringCircumference}`;
 
-      /**
-       * Mostra una vista specifica e nasconde tutte le altre.
-       * @param {string} viewId
-       */
+      const displayCountdown = document.getElementById('trainer-display-countdown');
+      const displayAnnouncement = document.getElementById('trainer-display-announcement');
+      const countdownNumber = document.getElementById('trainer-countdown-number');
+      const phaseLabel = document.getElementById('trainer-phase-label');
+
+      /** Mostra una vista specifica e nasconde tutte le altre. */
       export function showView(viewId) {
           views.forEach(view => {
               view.classList.toggle('view--active', view.id === viewId);
           });
       }
+
+      function updateProgressRing(percent) {
+          const offset = ringCircumference - (percent / 100) * ringCircumference;
+          ringBar.style.strokeDashoffset = offset;
+      }
       
       /** Aggiorna la UI del trainer in base allo stato fornito dalla state machine */
       export function updateTrainerUI(state) {
-          const { currentExercise, currentSeries, currentState, countdown, phase } = state;
+          const { currentExercise, currentSeries, currentState, countdown, phase, progress } = state;
 
           trainerExerciseName.textContent = currentExercise.name;
           trainerExerciseDescription.textContent = currentExercise.description;
+          trainerSeriesCounter.textContent = `Serie ${currentSeries} di ${currentExercise.series || '...'}`;
 
-          if (currentState === 'ready') {
-              trainerSeriesCounter.textContent = `Serie 1 di ${currentExercise.series || '...'}`;
-              trainerMainDisplay.textContent = 'READY';
-              trainerMainDisplay.classList.remove('is-flashing');
-              startSeriesBtn.style.display = 'inline-block';
-              pauseBtn.style.display = 'none';
-              resumeBtn.style.display = 'none';
-          } else {
-              trainerSeriesCounter.textContent = `Serie ${currentSeries} di ${currentExercise.series || '...'}`;
-              startSeriesBtn.style.display = 'none';
+          const isCountdownState = ['action', 'preparing', 'rest'].includes(currentState);
+          const isPausedState = currentState === 'paused';
+          const isAnnouncingState = currentState === 'announcing';
+          const isReadyState = currentState === 'ready';
+
+          // Gestione visibilità sezioni display
+          displayCountdown.style.display = (isCountdownState || isPausedState) ? 'block' : 'none';
+          displayAnnouncement.style.display = (isAnnouncingState || isReadyState) ? 'block' : 'none';
+
+          // Gestione lampeggio
+          displayAnnouncement.classList.toggle('is-flashing', isAnnouncingState);
+          
+          // Aggiornamento contenuti e anello
+          if (isReadyState) {
+              displayAnnouncement.textContent = 'READY';
+              updateProgressRing(100); // Anello pieno
           }
 
-          if (currentState === 'announcing') {
-              trainerMainDisplay.textContent = phase.toUpperCase();
-              trainerMainDisplay.classList.add('is-flashing');
-          } else {
-              trainerMainDisplay.classList.remove('is-flashing');
+          if (isAnnouncingState) {
+              displayAnnouncement.textContent = phase.toUpperCase();
+              updateProgressRing(0); // Anello vuoto
           }
 
-          if (currentState === 'action' || currentState === 'preparing' || currentState === 'rest') {
-              trainerMainDisplay.textContent = countdown;
-              pauseBtn.style.display = 'inline-block';
-              resumeBtn.style.display = 'none';
+          if (isCountdownState || isPausedState) {
+              countdownNumber.textContent = countdown;
+              phaseLabel.textContent = phase.toUpperCase();
+              updateProgressRing(progress * 100);
           }
-
-          if (currentState === 'paused') {
-              trainerMainDisplay.textContent = countdown;
-              pauseBtn.style.display = 'none';
-              resumeBtn.style.display = 'inline-block';
-          }
+          
+          // Gestione pulsanti
+          startSeriesBtn.style.display = isReadyState ? 'inline-block' : 'none';
+          pauseBtn.style.display = isCountdownState ? 'inline-block' : 'none';
+          resumeBtn.style.display = isPausedState ? 'inline-block' : 'none';
       }
 
-      // --- Funzioni Calendario e Modale ---
+      // --- Funzioni Calendario e Modale (invariate) ---
       export function renderCalendar(weekDate, schedule) {
           const startDate = getWeekStartDate(weekDate);
-          const weekDays = Array.from({ length: 7 }).map((_, i) => {
-              const day = new Date(startDate);
-              day.setDate(day.getDate() + i);
-              return day;
-          });
+          const weekDays = Array.from({ length: 7 }).map((_, i) => { const day = new Date(startDate); day.setDate(day.getDate() + i); return day; });
           let headerHtml = `<div class="calendar-header"><button class="btn" id="prev-week-btn">&lt; Precedente</button><h2>Settimana del ${formatDateForDisplay(startDate)}</h2><button class="btn" id="next-week-btn">Successiva &gt;</button></div>`;
           let gridHtml = '<div class="calendar-grid">';
           weekDays.forEach(day => {
@@ -500,9 +357,11 @@ patches:
               currentSeries: 1,
               currentState: 'idle', // idle, ready, announcing, preparing, action, paused, rest, finished
               countdown: 0,
+              countdownDuration: 0,
               intervalId: null,
               phase: '', // 'up', 'hold', 'down', 'rest', 'prepare'
               repCount: 0,
+              progress: 1,
           };
       }
 
@@ -515,7 +374,9 @@ patches:
                   break;
               case 'ready':
                   state.currentExercise = state.workoutPlan[state.currentExerciseIndex];
-                  state.currentSeries = 1;
+                  if (state.currentSeries === 1) { // Solo alla prima serie del primo esercizio
+                      state.currentSeries = 1;
+                  }
                   ui.updateTrainerUI(state);
                   break;
               case 'announcing':
@@ -525,12 +386,14 @@ patches:
                   setTimeout(() => setState(data.nextState, data.nextStateData), 750);
                   break;
               case 'preparing':
+                  state.phase = 'prepare';
                   runCountdown(3, 'action');
                   break;
               case 'action':
                   runActionPhase();
                   break;
               case 'rest':
+                  state.phase = 'rest';
                   runCountdown(state.currentExercise.rest, 'readyForNext');
                   break;
               case 'paused':
@@ -540,10 +403,11 @@ patches:
               case 'readyForNext':
                   if (state.currentSeries < state.currentExercise.series) {
                       state.currentSeries++;
-                      setState('ready');
+                      setState('announcing', { phase: 'ready', nextState: 'ready' });
                   } else if (state.currentExerciseIndex < state.workoutPlan.length - 1) {
                       state.currentExerciseIndex++;
-                      setState('ready');
+                      state.currentSeries = 1;
+                      setState('announcing', { phase: 'ready', nextState: 'ready' });
                   } else {
                       setState('finished');
                   }
@@ -559,11 +423,15 @@ patches:
 
       function runCountdown(duration, nextState, nextStateData = {}) {
           state.countdown = duration;
+          state.countdownDuration = duration;
+          state.progress = 1;
+
           ui.updateTrainerUI(state);
-          playTick();
+          if (duration > 0) playTick();
 
           state.intervalId = setInterval(() => {
               state.countdown--;
+              state.progress = state.countdown / state.countdownDuration;
               ui.updateTrainerUI(state);
               if (state.countdown > 0) playTick();
 
@@ -577,6 +445,7 @@ patches:
       function runActionPhase() {
           const exercise = state.currentExercise;
           if (exercise.type === 'time') {
+              state.phase = 'action';
               runCountdown(exercise.duration, 'rest');
           } else if (exercise.type === 'reps') {
               state.repCount = 0;
@@ -585,24 +454,20 @@ patches:
       }
 
       function runRep() {
-          const { tempo, reps } = state.currentExercise;
+          const { reps } = state.currentExercise;
           if (state.repCount >= reps) {
               setState('rest');
               return;
           }
           state.repCount++;
-          
-          // Ciclo UP -> HOLD -> DOWN
-          setState('announcing', { phase: 'up', nextState: 'action.rep.up', nextStateData: { duration: tempo.up } });
+          setState('announcing', { phase: 'up', nextState: 'action.rep.up' });
       }
-
+      
       function runRepPhase(phase) {
           const { tempo } = state.currentExercise;
-          const nextPhases = { 'up': 'hold', 'hold': 'down', 'down': null };
-          
-          if (phase === 'up') runCountdown(tempo.up, 'action.rep.transition', { next: 'hold' });
-          if (phase === 'hold') runCountdown(tempo.hold, 'action.rep.transition', { next: 'down' });
-          if (phase === 'down') runCountdown(tempo.down, 'action.rep.transition', { next: null });
+          state.phase = phase;
+          const nextStates = { 'up': 'action.rep.hold', 'hold': 'action.rep.down', 'down': null };
+          runCountdown(tempo[phase], 'action.rep.transition', { next: nextStates[phase] });
       }
 
       // Entry points dall'esterno
@@ -620,18 +485,16 @@ patches:
       }
 
       export function pause() {
-          if (state.currentState !== 'action' && state.currentState !== 'rest' && state.currentState !== 'preparing') return;
+          if (!['action', 'rest', 'preparing'].includes(state.currentState)) return;
           setState('paused');
       }
 
       export function resume() {
           if (state.currentState !== 'paused') return;
-          const originalState = state.phase === 'rest' ? 'rest' : 'action';
-          runCountdown(state.countdown, originalState === 'rest' ? 'readyForNext' : 'action');
+          runCountdown(state.countdown, state.phase === 'rest' ? 'readyForNext' : 'action');
       }
 
       export function stop() {
-          // In futuro andrà al debriefing
           if (confirm("Sei sicuro di voler terminare l'allenamento?")) {
               setState('finished');
           }
@@ -640,19 +503,14 @@ patches:
       // Mini-stati per la logica delle ripetizioni
       function setRepState(newState, data) {
            switch(newState) {
-               case 'action.rep.up':
-                   runRepPhase('up');
-                   break;
-               case 'action.rep.down':
-                   runRepPhase('down');
-                   break;
-               case 'action.rep.hold':
-                   runRepPhase('hold');
+                case 'action.rep.up':
+                case 'action.rep.down':
+                case 'action.rep.hold':
+                   runRepPhase(newState.split('.').pop());
                    break;
                 case 'action.rep.transition':
-                    const nextPhase = data.next;
-                    if(nextPhase) {
-                        setState('announcing', { phase: nextPhase, nextState: `action.rep.${nextPhase}` });
+                    if (data.next) {
+                        setState('announcing', { phase: data.next.split('.').pop(), nextState: data.next });
                     } else {
                         runRep(); // Prossima ripetizione
                     }
@@ -669,224 +527,7 @@ patches:
               originalSetState(newState, data);
           }
       }
-  - file: src/store.js
-    content: |
-      /**
-       * @file store.js
-       *
-       * Gestisce la persistenza dei dati dell'applicazione su localStorage.
-       * È l'unico modulo autorizzato a interagire con lo storage del browser.
-       */
-
-      const SCHEDULE_STORAGE_KEY = 'mtp.schedule';
-
-      /**
-       * Recupera il programma degli allenamenti da localStorage.
-       * @returns {object} L'oggetto del programma, o un oggetto vuoto se non esiste.
-       */
-      export function getSchedule() {
-          try {
-              const rawData = localStorage.getItem(SCHEDULE_STORAGE_KEY);
-              return rawData ? JSON.parse(rawData) : {};
-          } catch (error) {
-              console.error("Failed to read schedule from localStorage", error);
-              return {};
-          }
-      }
-
-      /**
-       * Salva il programma degli allenamenti in localStorage.
-       * @param {object} schedule L'oggetto del programma da salvare.
-       */
-      export function saveSchedule(schedule) {
-          try {
-              const data = JSON.stringify(schedule);
-              localStorage.setItem(SCHEDULE_STORAGE_KEY, data);
-          } catch (error) {
-              console.error("Failed to save schedule to localStorage", error);
-          }
-      }
-
-      /**
-       * Aggiunge un ID esercizio a una data specifica nel programma.
-       * @param {string} dateKey La data in formato angoloRad-MM-DD.
-       * @param {string} exerciseId L'ID dell'esercizio da aggiungere.
-       */
-      export function addExerciseToDate(dateKey, exerciseId) {
-          const schedule = getSchedule();
-          if (!schedule[dateKey]) {
-              schedule[dateKey] = [];
-          }
-          // Evita duplicati
-          if (!schedule[dateKey].includes(exerciseId)) {
-              schedule[dateKey].push(exerciseId);
-          }
-          saveSchedule(schedule);
-      }
-
-      /**
-       * Rimuove un ID esercizio da una data specifica nel programma.
-       * @param {string} dateKey La data in formatocameraContinuous-MM-DD.
-       * @param {string} exerciseId L'ID dell'esercizio da rimuovere.
-       */
-      export function removeExerciseFromDate(dateKey, exerciseId) {
-          const schedule = getSchedule();
-          if (schedule[dateKey]) {
-              schedule[dateKey] = schedule[dateKey].filter(id => id !== exerciseId);
-              // Se l'array diventa vuoto, rimuovi la chiave della data
-              if (schedule[dateKey].length === 0) {
-                  delete schedule[dateKey];
-              }
-          }
-          saveSchedule(schedule);
-      }
-  - file: src/state.js
-    content: |
-      /**
-       * @file state.js
-       *
-       * Contiene lo stato volatile dell'applicazione.
-       * Questo oggetto rappresenta la "singola fonte di verità" per i dati dinamici.
-       */
-
-      export const state = {
-          /**
-           * La data usata come riferimento per la visualizzazione corrente.
-           * Per il calendario, definisce la settimana da mostrare.
-           * @type {Date}
-           */
-          currentDate: new Date(),
-
-          /**
-           * La chiave della data (YYYY-MM-DD) attualmente selezionata per la modifica.
-           * @type {string | null}
-           */
-          selectedDateKey: null,
-      };
-  - file: src/utils.js
-    content: |
-      /**
-       * @file utils.js
-       *
-       * Contiene funzioni di utilità pure e riutilizzabili.
-       */
-
-      let audioCtx;
-      /**
-       * Riproduce un breve suono di "tick" usando la Web Audio API.
-       * Utile per dare feedback ritmico durante i countdown.
-       */
-      export function playTick() {
-          if (!audioCtx) {
-              try {
-                  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-              } catch (e) {
-                  console.error("Web Audio API is not supported in this browser");
-                  return;
-              }
-          }
-          const oscillator = audioCtx.createOscillator();
-          const gainNode = audioCtx.createGain();
-          oscillator.connect(gainNode);
-          gainNode.connect(audioCtx.destination);
-          
-          oscillator.type = 'sine';
-          oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // Frequenza (A5)
-          gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); // Volume
-          
-          oscillator.start(audioCtx.currentTime);
-          oscillator.stop(audioCtx.currentTime + 0.05);
-      }
-
-      /**
-       * Data una data, restituisce la data del lunedì della stessa settimana.
-       * @param {Date} date La data di riferimento.
-       * @returns {Date} La data del lunedì.
-       */
-      export function getWeekStartDate(date) {
-          const d = new Date(date);
-          const day = d.getDay(); // 0 (Dom) - 6 (Sab)
-          const diff = d.getDate() - day + (day === 0 ? -6 : 1); // ajsut for Sunday
-          return new Date(d.setDate(diff));
-      }
-
-      /**
-       * Formatta un oggetto Date nel formato<x_bin_534>-MM-DD.
-       * @param {Date} date La data da formattare.
-       * @returns {string} La data formattata.
-       */
-      export function formatDate(date) {
-          const d = new Date(date);
-          let month = '' + (d.getMonth() + 1);
-          let day = '' + d.getDate();
-          const year = d.getFullYear();
-
-          if (month.length < 2) month = '0' + month;
-          if (day.length < 2) day = '0' + day;
-
-          return [year, month, day].join('-');
-      }
-
-      /**
-       * Formatta un oggetto Date per la visualizzazione (es. "30 GIU").
-       * @param {Date} date La data da formattare.
-       * @returns {string} La data formattata per la UI.
-       */
-      export function formatDateForDisplay(date) {
-          const day = date.getDate();
-          const month = date.toLocaleDateString('it-IT', { month: 'short' }).toUpperCase();
-          return `${day} ${month}`;
-      }
-  - file: src/config.js
-    content: |
-      /**
-       * @file config.js
-       *
-       * Contiene dati di configurazione statici per l'applicazione,
-       * come la lista degli esercizi disponibili.
-       */
-
-      export const EXERCISES = [
-          {
-              id: 'ex01',
-              name: 'Push Up',
-              description: 'Classico piegamento sulle braccia.',
-              type: 'reps', // 'reps' o 'time'
-              series: 3,
-              reps: 10,
-              tempo: { up: 1, hold: 0, down: 2 }, // Durata in secondi per ogni fase
-              rest: 60, // Secondi di riposo tra le serie
-          },
-          {
-              id: 'ex02',
-              name: 'Plank',
-              description: 'Mantenere la posizione isometrica.',
-              type: 'time',
-              series: 3,
-              duration: 45, // Durata in secondi
-              rest: 60,
-          },
-          {
-              id: 'ex03',
-              name: 'Squat',
-              description: 'Piegamento sulle gambe a corpo libero.',
-              type: 'reps',
-              series: 4,
-              reps: 15,
-              tempo: { up: 1, hold: 1, down: 2 },
-              rest: 60,
-          },
-          {
-              id: 'ex04',
-              name: 'Jumping Jacks',
-              description: 'Esercizio cardio.',
-              type: 'time',
-              series: 2,
-              duration: 60,
-              rest: 75,
-          }
-      ];
 commands:
-  - "echo 'Patch di risincronizzazione completo applicato. Ora la base di codice è sicuramente allineata.'"
-  - "echo 'Puoi procedere con i test del trainer come descritto in precedenza.'"
+  - "echo 'Patch con la nuova UI del Trainer applicato.'"
+  - "echo 'Prova ad avviare un allenamento per vedere l''anello di avanzamento e la nuova interfaccia.'"
   - "git status"
