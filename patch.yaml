@@ -1,152 +1,10 @@
-commit_message: "fix(core): Resolve module loading errors and missing manifest"
+commit_message: "fix(pwa): Add SVG icon to resolve manifest 404 errors"
 rationale: |
-  This patch fixes critical loading errors introduced in the previous refactoring step.
+  This commit fixes the 404 errors for `icon-192.png` and `icon-512.png` that were reported by the browser.
+  The previous commit introduced a `manifest.json` file that referenced these non-existent placeholder icons.
 
-  1.  **Module Inconsistency:** The primary error, `does not provide an export`, was caused because `main.js` was updated to use ES modules (`import`), but its dependency `config.js` had not yet been converted from a legacy script to a module. This patch refactors `config.js` to use `export`, resolving the crash.
-
-  2.  **Storage Logic:** The `storage.js` file was located in the root, leading to a 404 error and architectural inconsistency. It has now been moved to `src/`, converted into a proper ES module, and is imported by `config.js`. The direct script tag in `index.html` has been removed.
-
-  3.  **Missing Manifest:** The browser was requesting a `manifest.json` file referenced in the HTML, which did not exist. A basic manifest file has been created to resolve this 404 error and provide a foundation for PWA capabilities.
-
-  These fixes make the application stable and load correctly, completing the transition to a modular architecture initiated in the previous step.
+  To resolve this cleanly, this patch introduces a single, self-contained, scalable vector graphic (`icon.svg`) and updates `manifest.json` to point to it. Using a single SVG file is a modern and efficient approach for basic PWA icons, as it's lightweight and scales to any required size without quality loss.
 patches:
-  - file: index.html
-    content: |
-      <!DOCTYPE html>
-      <html lang="it">
-      <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>MTP Advanced Programming</title>
-          <link rel="stylesheet" href="style.css">
-          <link rel="manifest" href="manifest.json">
-      </head>
-      <body>
-          <div id="app">
-              <div id="config-view">
-                  <h1>Workout Configurator</h1>
-                  <div class="exercise-list-container">
-                      <ul id="exercises-list">
-                          </ul>
-                  </div>
-                  <div class="config-actions">
-                    <button id="start-training-button">Start Training</button>
-                    <p>Seleziona gli esercizi da includere nell'allenamento.</p>
-                  </div>
-              </div>
-
-              <div id="trainer-view" style="display: none;">
-                  <div class="trainer-header">
-                    <h2 id="exercise-name">Exercise Name</h2>
-                    <p id="series-counter">Series 1 / 3</p>
-                  </div>
-                  <div class="timer-container">
-                      <p id="timer">00</p>
-                      <p id="status-message">Prepare</p>
-                  </div>
-                  <div class="trainer-controls">
-                      <button id="pause-button">Pause</button>
-                      <button id="resume-button" style="display: none;">Resume</button>
-                      <button id="next-exercise-button" style="display: none;">Next Exercise</button>
-                  </div>
-              </div>
-          </div>
-
-          <script type="module" src="src/main.js"></script>
-      </body>
-      </html>
-  - file: src/config.js
-    content: |
-      /**
-       * @file config.js
-       * Manages the workout configuration screen.
-       */
-      import * as storage from './storage.js';
-
-      const exercisesList = document.getElementById('exercises-list');
-
-      /**
-       * Loads all exercises from storage and displays them in the list.
-       */
-      export function loadExercises() {
-          const exercises = storage.getAllExercises();
-          exercisesList.innerHTML = ''; // Clear existing list
-          exercises.forEach(exercise => {
-              const li = document.createElement('li');
-              li.innerHTML = `
-                  <input type="checkbox" id="ex-${exercise.id}" data-exercise-id="${exercise.id}">
-                  <label for="ex-${exercise.id}">${exercise.name}</label>
-              `;
-              exercisesList.appendChild(li);
-          });
-      }
-
-      /**
-       * Gets the selected exercises from the checkboxes.
-       * @returns {object[]} An array of the selected exercise objects.
-       */
-      export function getSelectedExercises() {
-          const selectedCheckboxes = exercisesList.querySelectorAll('input[type="checkbox"]:checked');
-          const selectedIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.exerciseId);
-
-          // Get the full exercise objects from storage based on the selected IDs
-          return selectedIds.map(id => storage.getExerciseById(id)).filter(ex => ex);
-      }
-  - file: src/storage.js
-    content: |
-      /**
-       * @file storage.js
-       * Handles all interactions with localStorage.
-       */
-
-      const EXERCISES_KEY = 'workout_exercises';
-
-      // Initial default data
-      const defaultExercises = [
-          { id: '1', name: 'Push-up', duration: 30, rest: 15, series: 3 },
-          { id: '2', name: 'Squat', duration: 45, rest: 20, series: 3 },
-          { id: '3', name: 'Plank', duration: 60, rest: 15, series: 2 },
-          { id: '4', name: 'Jumping Jacks', duration: 60, rest: 20, series: 2 }
-      ];
-
-      /**
-       * Initializes the storage with default exercises if it's empty.
-       */
-      function initializeStorage() {
-          if (!localStorage.getItem(EXERCISES_KEY)) {
-              localStorage.setItem(EXERCISES_KEY, JSON.stringify(defaultExercises));
-          }
-      }
-
-      /**
-       * Retrieves all exercises from localStorage.
-       * @returns {object[]} An array of exercise objects.
-       */
-      export function getAllExercises() {
-          const exercises = localStorage.getItem(EXERCISES_KEY);
-          return exercises ? JSON.parse(exercises) : [];
-      }
-
-      /**
-       * Saves an array of exercises to localStorage.
-       * @param {object[]} exercises - The array of exercises to save.
-       */
-      export function saveExercises(exercises) {
-          localStorage.setItem(EXERCISES_KEY, JSON.stringify(exercises));
-      }
-
-      /**
-       * Retrieves a single exercise by its ID.
-       * @param {string} id - The ID of the exercise.
-       * @returns {object | undefined} The exercise object or undefined if not found.
-       */
-      export function getExerciseById(id) {
-          const exercises = getAllExercises();
-          return exercises.find(ex => ex.id === id);
-      }
-
-      // Initialize storage on load
-      initializeStorage();
   - file: manifest.json
     content: |
       {
@@ -159,19 +17,21 @@ patches:
         "description": "A simple workout trainer application.",
         "icons": [
           {
-            "src": "icon-192.png",
-            "type": "image/png",
-            "sizes": "192x192"
-          },
-          {
-            "src": "icon-512.png",
-            "type": "image/png",
-            "sizes": "512x512"
+            "src": "icon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml"
           }
         ]
       }
+  - file: icon.svg
+    content: |
+      <svg width="512" height="512" viewBox="0 0 512 512" version="1.1" xmlns="http://www.w3.org/2000/svg">
+        <rect width="512" height="512" fill="#333333"/>
+        <text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="280px" fill="#FFFFFF">W</text>
+      </svg>
 commands:
-  - echo "✅ Bug fixes applied. The module system is now consistent."
-  - echo "🧹 The old 'storage.js' in the root is now obsolete. Please delete it."
-  - rm storage.js
-  - echo "The application should now load without errors. Please verify."
+  - echo "✅ PWA icon fix applied."
+  - echo "‼️  AZIONE RICHIESTA: Per risolvere l'errore 'getSelectedExercises', esegua un HARD REFRESH."
+  - echo "   - Windows/Linux: Ctrl + Shift + R"
+  - echo "   - macOS:         Cmd + Shift + R"
+  - echo "Dopo l'hard refresh, entrambi gli errori dovrebbero essere scomparsi. Mi faccia sapere."
