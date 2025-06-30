@@ -3,14 +3,24 @@ import { render as renderWorkoutEditor } from '../views/WorkoutEditorView.js';
 
 export function init(element) {
     element.addEventListener('click', (event) => {
+        // Chiude se si clicca sull'overlay
         if (event.target === element) {
             store.dispatch({ type: 'CLOSE_MODAL' });
+            return;
+        }
+        // Gestisce il click sul pulsante Rimuovi item
+        const removeButton = event.target.closest('.remove-item-btn');
+        if (removeButton) {
+            const { itemId } = removeButton.dataset;
+            const { date } = store.getState().modalContext;
+            if (itemId && date) {
+                store.dispatch({ type: 'REMOVE_WORKOUT_ITEM', payload: { date, itemId } });
+            }
         }
     });
 
     function render() {
         const { isModalOpen, modalContext } = store.getState();
-
         if (isModalOpen) {
             element.classList.add('active');
             let headerContent = '';
@@ -49,7 +59,6 @@ export function init(element) {
             element.innerHTML = '';
         }
     }
-
     store.subscribe(render);
     render();
 }

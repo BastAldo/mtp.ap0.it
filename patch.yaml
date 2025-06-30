@@ -1,11 +1,90 @@
-commit_message: "feat(editor): Popola la modale con la vista dei dati del workout"
+commit_message: "feat(editor): Implementa la rimozione di item dal workout"
 rationale: |
-  Questo commit implementa il passo successivo nella creazione del "Workout Editor", sostituendo il contenuto placeholder della modale con una vista in sola lettura degli esercizi e dei riposi programmati.
+  Questo commit aggiunge la funzionalità di rimozione degli elementi (esercizi o riposi) dal Workout Editor, come da piano d'azione approvato.
 
-  - È stato creato un nuovo modulo di vista `src/views/WorkoutEditorView.js`, la cui unica responsabilità è renderizzare la lista degli item di un workout.
-  - Il modulo generico `src/ui/Modal.js` è stato refattorizzato per agire da controller, delegando la creazione del contenuto al modulo di vista appropriato in base al contesto. Questo migliora la separazione delle responsabilità e la scalabilità.
-  - Sono stati aggiunti gli stili CSS per formattare la lista degli item all'interno della modale, migliorando la leggibilità.
+  - È stata introdotta una nuova azione `REMOVE_WORKOUT_ITEM` nello store per gestire la logica di rimozione in modo immutabile.
+  - È stato implementato un meccanismo di "autosave": dopo ogni azione che modifica i `workouts`, lo stato aggiornato viene automaticamente salvato in `localStorage`. Questo centralizza la logica di persistenza e garantisce la coerenza dei dati.
+  - La vista dell'editor (`WorkoutEditorView`) ora renderizza un pulsante di rimozione per ogni item.
+  - Il componente `Modal` è stato aggiornato per gestire i click su questi nuovi pulsanti, inviando l'azione corretta allo store.
 patches:
+  - file: src/modules/store.js
+    content: |
+      import { saveToStorage } from './storage.js';
+
+      const WORKOUTS_STORAGE_KEY = 'workouts';
+
+      function createStore() {
+        let state = {
+          currentView: 'calendar',
+          focusedDate: new Date(),
+          workouts: {},
+          isModalOpen: false,
+          modalContext: null,
+        };
+
+        const subscribers = new Set();
+        function notify() { subscribers.forEach(callback => callback()); }
+
+        function dispatch(action) {
+          const oldState = state;
+          switch (action.type) {
+            case 'CHANGE_VIEW':
+              state = { ...state, currentView: action.payload };
+              break;
+            case 'PREV_WEEK': {
+              const newDate = new Date(state.focusedDate);
+              newDate.setDate(newDate.getDate() - 7);
+              state = { ...state, focusedDate: newDate };
+              break;
+            }
+            case 'NEXT_WEEK': {
+              const newDate = new Date(state.focusedDate);
+              newDate.setDate(newDate.getDate() + 7);
+              state = { ...state, focusedDate: newDate };
+              break;
+            }
+            case 'SET_WORKOUTS':
+              state = { ...state, workouts: action.payload };
+              break;
+            case 'OPEN_MODAL':
+              state = { ...state, isModalOpen: true, modalContext: action.payload };
+              break;
+            case 'CLOSE_MODAL':
+              state = { ...state, isModalOpen: false, modalContext: null };
+              break;
+            case 'REMOVE_WORKOUT_ITEM': {
+              const { date, itemId } = action.payload;
+              const dateKey = `workout-${date}`;
+              const workoutDay = state.workouts[dateKey];
+              if (!workoutDay) break;
+
+              const newWorkoutDay = workoutDay.filter(item => item.id !== itemId);
+              const newWorkouts = { ...state.workouts, [dateKey]: newWorkoutDay };
+              state = { ...state, workouts: newWorkouts };
+              break;
+            }
+            default:
+              console.warn(`Azione non riconosciuta: ${action.type}`);
+              return;
+          }
+          if (state !== oldState) {
+            console.log(`Action: ${action.type}`, action.payload);
+            // Autosave: se i workout sono cambiati, salvali.
+            if (state.workouts !== oldState.workouts) {
+              saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
+              console.log('Workouts salvati in localStorage.');
+            }
+            notify();
+          }
+        }
+        return {
+          getState: () => ({ ...state }),
+          subscribe: (callback) => { subscribers.add(callback); return () => subscribers.delete(callback); },
+          dispatch,
+        };
+      }
+      const store = createStore();
+      export default store;
   - file: src/ui/Modal.js
     content: |
       import store from '../modules/store.js';
@@ -13,14 +92,24 @@ patches:
 
       export function init(element) {
           element.addEventListener('click', (event) => {
+              // Chiude se si clicca sull'overlay
               if (event.target === element) {
                   store.dispatch({ type: 'CLOSE_MODAL' });
+                  return;
+              }
+              // Gestisce il click sul pulsante Rimuovi item
+              const removeButton = event.target.closest('.remove-item-btn');
+              if (removeButton) {
+                  const { itemId } = removeButton.dataset;
+                  const { date } = store.getState().modalContext;
+                  if (itemId && date) {
+                      store.dispatch({ type: 'REMOVE_WORKOUT_ITEM', payload: { date, itemId } });
+                  }
               }
           });
 
           function render() {
               const { isModalOpen, modalContext } = store.getState();
-
               if (isModalOpen) {
                   element.classList.add('active');
                   let headerContent = '';
@@ -59,7 +148,6 @@ patches:
                   element.innerHTML = '';
               }
           }
-
           store.subscribe(render);
           render();
       }
@@ -67,11 +155,6 @@ patches:
     content: |
       import store from '../modules/store.js';
 
-      /**
-       * Renderizza il contenuto per la modale dell'editor di workout.
-       * @param {object} context - Il contesto della modale, es. { type: 'EDIT_WORKOUT', date: 'YYYY-MM-DD' }
-       * @returns {string} La stringa HTML per il corpo della modale.
-       */
       export function render(context) {
           const { workouts } = store.getState();
           const dateKey = `workout-${context.date}`;
@@ -82,23 +165,24 @@ patches:
           }
 
           const itemsHtml = workoutItems.map(item => {
+              let content = '';
               if (item.type === 'exercise') {
-                  return `
-                      <li class="workout-item workout-item--exercise">
-                          <span class="item-name">${item.name}</span>
-                          <span class="item-details">${item.series}x${item.reps}</span>
-                      </li>
+                  content = `
+                      <span class="item-name">${item.name}</span>
+                      <span class="item-details">${item.series}x${item.reps}</span>
+                  `;
+              } else if (item.type === 'rest') {
+                  content = `
+                      <span class="item-name">Riposo</span>
+                      <span class="item-details">${item.duration}s</span>
                   `;
               }
-              if (item.type === 'rest') {
-                  return `
-                      <li class="workout-item workout-item--rest">
-                          <span class="item-name">Riposo</span>
-                          <span class="item-details">${item.duration}s</span>
-                      </li>
-                  `;
-              }
-              return '';
+              return `
+                  <li class="workout-item workout-item--${item.type}">
+                      <div class="item-info">${content}</div>
+                      <button class="remove-item-btn" data-item-id="${item.id}" title="Rimuovi item">&times;</button>
+                  </li>
+              `;
           }).join('');
 
           return `<ul class="workout-item-list">${itemsHtml}</ul>`;
@@ -114,13 +198,10 @@ patches:
           --text-color: #f4f4f9;
           --text-color-muted: #aaa;
           --border-color: #40404a;
+          --danger-color: #ef5350;
       }
       * { box-sizing: border-box; margin: 0; padding: 0; }
-      body {
-          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-          background-color: var(--bg-color);
-          color: var(--text-color);
-      }
+      body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; background-color: var(--bg-color); color: var(--text-color); }
       #app-container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
       .view { display: none; width: 100%; }
       .view--active { display: block; }
@@ -149,32 +230,15 @@ patches:
       .modal-close-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; cursor: pointer; }
 
       /* --- WORKOUT EDITOR STYLES --- */
-      .workout-item-list {
-          list-style: none;
-          padding: 0;
-          margin: 0;
-      }
-      .workout-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 1rem 0.5rem;
-          border-bottom: 1px solid var(--border-color);
-      }
-      .workout-item:last-child {
-          border-bottom: none;
-      }
-      .workout-item .item-name {
-          font-weight: bold;
-      }
-      .workout-item--rest .item-name {
-          color: var(--text-color-muted);
-          font-style: italic;
-      }
-      .workout-item .item-details {
-          color: var(--secondary-color);
-      }
-
+      .workout-item-list { list-style: none; padding: 0; margin: 0; }
+      .workout-item { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0.5rem; border-bottom: 1px solid var(--border-color); }
+      .workout-item:last-child { border-bottom: none; }
+      .item-info { display: flex; flex-direction: column; }
+      .item-info .item-name { font-weight: bold; }
+      .item-info .item-details { color: var(--secondary-color); font-size: 0.9em; }
+      .workout-item--rest .item-info .item-name { color: var(--text-color-muted); font-style: italic; }
+      .remove-item-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; font-weight: bold; cursor: pointer; padding: 0 0.5rem; border-radius: 50%; }
+      .remove-item-btn:hover { color: var(--danger-color); background-color: rgba(239, 83, 80, 0.1); }
 
       /* --- TABLET/DESKTOP OVERRIDES --- */
       @media (min-width: 768px) {

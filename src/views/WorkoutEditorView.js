@@ -1,10 +1,5 @@
 import store from '../modules/store.js';
 
-/**
- * Renderizza il contenuto per la modale dell'editor di workout.
- * @param {object} context - Il contesto della modale, es. { type: 'EDIT_WORKOUT', date: 'YYYY-MM-DD' }
- * @returns {string} La stringa HTML per il corpo della modale.
- */
 export function render(context) {
     const { workouts } = store.getState();
     const dateKey = `workout-${context.date}`;
@@ -15,23 +10,24 @@ export function render(context) {
     }
 
     const itemsHtml = workoutItems.map(item => {
+        let content = '';
         if (item.type === 'exercise') {
-            return `
-                <li class="workout-item workout-item--exercise">
-                    <span class="item-name">${item.name}</span>
-                    <span class="item-details">${item.series}x${item.reps}</span>
-                </li>
+            content = `
+                <span class="item-name">${item.name}</span>
+                <span class="item-details">${item.series}x${item.reps}</span>
+            `;
+        } else if (item.type === 'rest') {
+            content = `
+                <span class="item-name">Riposo</span>
+                <span class="item-details">${item.duration}s</span>
             `;
         }
-        if (item.type === 'rest') {
-            return `
-                <li class="workout-item workout-item--rest">
-                    <span class="item-name">Riposo</span>
-                    <span class="item-details">${item.duration}s</span>
-                </li>
-            `;
-        }
-        return '';
+        return `
+            <li class="workout-item workout-item--${item.type}">
+                <div class="item-info">${content}</div>
+                <button class="remove-item-btn" data-item-id="${item.id}" title="Rimuovi item">&times;</button>
+            </li>
+        `;
     }).join('');
 
     return `<ul class="workout-item-list">${itemsHtml}</ul>`;

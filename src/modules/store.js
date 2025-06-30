@@ -1,10 +1,14 @@
+import { saveToStorage } from './storage.js';
+
+const WORKOUTS_STORAGE_KEY = 'workouts';
+
 function createStore() {
   let state = {
     currentView: 'calendar',
     focusedDate: new Date(),
     workouts: {},
     isModalOpen: false,
-    modalContext: null, // Es: { type: 'EDIT_WORKOUT', date: '2025-07-01' }
+    modalContext: null,
   };
 
   const subscribers = new Set();
@@ -37,12 +41,28 @@ function createStore() {
       case 'CLOSE_MODAL':
         state = { ...state, isModalOpen: false, modalContext: null };
         break;
+      case 'REMOVE_WORKOUT_ITEM': {
+        const { date, itemId } = action.payload;
+        const dateKey = `workout-${date}`;
+        const workoutDay = state.workouts[dateKey];
+        if (!workoutDay) break;
+
+        const newWorkoutDay = workoutDay.filter(item => item.id !== itemId);
+        const newWorkouts = { ...state.workouts, [dateKey]: newWorkoutDay };
+        state = { ...state, workouts: newWorkouts };
+        break;
+      }
       default:
         console.warn(`Azione non riconosciuta: ${action.type}`);
         return;
     }
     if (state !== oldState) {
       console.log(`Action: ${action.type}`, action.payload);
+      // Autosave: se i workout sono cambiati, salvali.
+      if (state.workouts !== oldState.workouts) {
+        saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
+        console.log('Workouts salvati in localStorage.');
+      }
       notify();
     }
   }
