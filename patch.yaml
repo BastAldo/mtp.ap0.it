@@ -1,18 +1,20 @@
 # This is a YAML file. Copy all content from here down
 # and save it as 'patch.yaml'.
-commit_message: "feat: Initialise project structure with HTML, CSS, and JS entrypoint"
+commit_message: "refactor: Create core modules for UI, store, and config"
 rationale: |
-  Questo è il primo passo per la ricostruzione dell'applicazione da zero. Stabiliamo una base solida e pulita, in linea con le specifiche di design e funzionalità.
+  Questo è il refactoring architettonico più critico del progetto. Introduce una chiara separazione delle responsabilità attraverso moduli JavaScript dedicati, ponendo le basi per un'applicazione scalabile e manutenibile.
 
-  1.  **`index.html`**: Crea la struttura semantica fondamentale dell'applicazione. Contiene i tre contenitori principali per le viste (`#calendar-view`, `#trainer-view`, `#debriefing-view`) come specificato nel documento di design. Il sistema di visibilità è già predisposto tramite le classi `.view` e `.view--active`.
+  1.  **`src/ui.js` (Nuovo)**: Questo modulo ha la **sola ed esclusiva responsabilità di manipolare il DOM**. Contiene funzioni per interagire con gli elementi HTML, come `showView`, che gestisce la visualizzazione delle sezioni principali. Qualsiasi altra parte dell'applicazione che necessita di aggiornare la UI non toccherà il DOM direttamente, ma invocherà una funzione da questo modulo. Questo disaccoppia la logica di business dalla sua rappresentazione.
 
-  2.  **`style.css`**: Implementa le fondamenta del sistema di design.
-      -   **Color Palette**: Le variabili di colore definite nel file `design_and_visual.md` sono state inserite in `:root` per un accesso globale e una facile manutenibilità.
-      -   **Layout Base**: Imposta gli stili di base per il `body`, il contenitore principale `#app-container`, e la logica di visualizzazione per le classi `.view` e `.view--active`.
+  2.  **`src/store.js` (Nuovo)**: Questo modulo incapsula tutta la logica di persistenza dei dati. È l'unico punto dell'applicazione che può leggere e scrivere su `localStorage`. Centralizzare l'accesso ai dati in questo modo rende il codice più pulito e in futuro permetterebbe di cambiare il sistema di storage (es. passare a un database online) modificando solo questo file.
 
-  3.  **`main.js`**: Funge da punto di ingresso principale per tutta la logica JavaScript. Al momento è intenzionalmente minimo, ma è configurato come modulo (`type="module"` in HTML) per consentire un'architettura modulare e scalabile nei prossimi step.
+  3.  **`src/config.js` (Nuovo)**: Contiene i dati statici e di configurazione dell'applicazione. Per ora, definisce la lista di tutti gli esercizi disponibili (`EXERCISES`). Separare la configurazione dal codice esecutivo è una best practice che migliora la leggibilità e facilita gli aggiornamenti.
 
-  Questo commit iniziale pone le fondamenta per una chiara separazione delle responsabilità: Struttura (HTML), Presentazione (CSS) e Comportamento (JS).
+  4.  **`src/main.js` (Modificato)**: Diventa l'orchestratore dell'applicazione. Ora importa i moduli e li utilizza per eseguire la sequenza di avvio. La logica viene eseguita all'interno di un listener `DOMContentLoaded` per garantire che il DOM sia completamente caricato.
+
+  5.  **`index.html` (Modificato)**: Aggiornato per puntare al nuovo entry point `src/main.js`.
+
+  Questa nuova struttura modulare è la vera fondamenta per prevenire i problemi di complessità riscontrati in precedenza.
 patches:
   - file: index.html
     content: |
@@ -31,7 +33,7 @@ patches:
 
           <div id="app-container">
 
-              <section id="calendar-view" class="view view--active">
+              <section id="calendar-view" class="view">
                   <h1>Calendario Allenamenti</h1>
                   </section>
 
@@ -45,83 +47,146 @@ patches:
 
           </div>
 
-          <script type="module" src="main.js"></script>
+          <script type="module" src="src/main.js"></script>
       </body>
       </html>
-  - file: style.css
-    content: |
-      /**
-       * FOGLIO DI STILE PRINCIPALE
-       * Contiene le variabili globali e gli stili di base dell'applicazione.
-       */
-
-      :root {
-          --bg-color: #1a1a1d;
-          --card-color: #2c2c34;
-          --primary-color: #9575cd;
-          --secondary-color: #4db6ac;
-          --text-color: #f4f4f9;
-          --text-secondary: #b3b3b3;
-          --danger-color: #ef5350;
-          --success-color: #66bb6a;
-
-          --font-main: 'Roboto Condensed', sans-serif;
-      }
-
-      *,
-      *::before,
-      *::after {
-          box-sizing: border-box;
-          margin: 0;
-          padding: 0;
-      }
-
-      html {
-          font-family: var(--font-main);
-          color: var(--text-color);
-          background-color: var(--bg-color);
-      }
-
-      body {
-          font-size: 16px;
-          line-height: 1.6;
-      }
-
-      #app-container {
-          max-width: 900px;
-          margin: 2rem auto;
-          padding: 0 1rem;
-      }
-
-      h1, h2, h3, h4, h5, h6 {
-          color: var(--primary-color);
-          font-weight: 700;
-          margin-bottom: 1rem;
-      }
-
-      /* Sistema di gestione delle viste */
-      .view {
-          display: none;
-      }
-
-      .view--active {
-          display: block;
-      }
-  - file: main.js
+  - file: src/main.js
     content: |
       /**
        * @file main.js
        *
        * Punto di ingresso principale dell'applicazione "Mio Trainer Personale".
-       * Da qui verranno orchestrati i vari moduli (UI, stato, logica, etc.).
+       * Orchestra i vari moduli (UI, stato, logica, etc.).
+       */
+      import * as ui from './ui.js';
+      import * as store from './store.js';
+      import { EXERCISES } from './config.js';
+
+      function init() {
+          console.log("MTP App Initialized.");
+
+          // Carica i dati salvati e loggali per verifica
+          const schedule = store.getSchedule();
+          console.log("Loaded schedule from store:", schedule);
+          console.log("Available exercises from config:", EXERCISES);
+
+          // Mostra la vista iniziale
+          ui.showView('calendar-view');
+      }
+
+      // Assicurati che il DOM sia completamente caricato prima di eseguire la logica
+      document.addEventListener('DOMContentLoaded', init);
+  - file: src/ui.js
+    content: |
+      /**
+       * @file ui.js
+       *
+       * Responsabile di tutte le manipolazioni dirette del DOM.
+       * Nessun altro modulo dovrebbe accedere a document.getElementById o simili.
        */
 
-      console.log("MTP App Initialized.");
+      // Riferimenti agli elementi principali della UI
+      const views = document.querySelectorAll('.view');
+      export const calendarView = document.getElementById('calendar-view');
+      export const trainerView = document.getElementById('trainer-view');
+      export const debriefingView = document.getElementById('debriefing-view');
 
-      // Le prossime fasi popoleranno questo file per inizializzare
-      // i gestori di eventi e i moduli dell'applicazione.
+      /**
+       * Mostra una vista specifica e nasconde tutte le altre.
+       * @param {string} viewId L'ID della vista da mostrare (es. 'calendar-view').
+       */
+      export function showView(viewId) {
+          views.forEach(view => {
+              view.classList.remove('view--active');
+              if (view.id === viewId) {
+                  view.classList.add('view--active');
+              }
+          });
+      }
+  - file: src/store.js
+    content: |
+      /**
+       * @file store.js
+       *
+       * Gestisce la persistenza dei dati dell'applicazione su localStorage.
+       * È l'unico modulo autorizzato a interagire con lo storage del browser.
+       */
+
+      const SCHEDULE_STORAGE_KEY = 'mtp.schedule';
+
+      /**
+       * Recupera il programma degli allenamenti da localStorage.
+       * @returns {object} L'oggetto del programma, o un oggetto vuoto se non esiste.
+       */
+      export function getSchedule() {
+          try {
+              const rawData = localStorage.getItem(SCHEDULE_STORAGE_KEY);
+              return rawData ? JSON.parse(rawData) : {};
+          } catch (error) {
+              console.error("Failed to read schedule from localStorage", error);
+              return {};
+          }
+      }
+
+      /**
+       * Salva il programma degli allenamenti in localStorage.
+       * @param {object} schedule L'oggetto del programma da salvare.
+       */
+      export function saveSchedule(schedule) {
+          try {
+              const data = JSON.stringify(schedule);
+              localStorage.setItem(SCHEDULE_STORAGE_KEY, data);
+          } catch (error) {
+              console.error("Failed to save schedule to localStorage", error);
+          }
+      }
+  - file: src/config.js
+    content: |
+      /**
+       * @file config.js
+       *
+       * Contiene dati di configurazione statici per l'applicazione,
+       * come la lista degli esercizi disponibili.
+       */
+
+      export const EXERCISES = [
+          {
+              id: 'ex01',
+              name: 'Push Up',
+              description: 'Classico piegamento sulle braccia.',
+              type: 'reps', // 'reps' o 'time'
+              reps: 10,
+              tempo: { up: 1, hold: 0, down: 2 }, // Durata in secondi per ogni fase
+              rest: 60, // Secondi di riposo tra le serie
+          },
+          {
+              id: 'ex02',
+              name: 'Plank',
+              description: 'Mantenere la posizione isometrica.',
+              type: 'time',
+              duration: 45, // Durata in secondi
+              rest: 60,
+          },
+          {
+              id: 'ex03',
+              name: 'Squat',
+              description: 'Piegamento sulle gambe a corpo libero.',
+              type: 'reps',
+              reps: 15,
+              tempo: { up: 1, hold: 1, down: 2 },
+              rest: 60,
+          },
+          {
+              id: 'ex04',
+              name: 'Jumping Jacks',
+              description: 'Esercizio cardio.',
+              type: 'time',
+              duration: 60,
+              rest: 75,
+          }
+      ];
 commands:
-  - "echo 'Patch applicato. Controlla i nuovi file:'"
+  - "echo 'Patch applicato. Creata directory src/ e nuovi moduli.'"
   - "ls -R"
   - "echo 'Verifica lo stato di git per confermare le modifiche.'"
   - "git status"
