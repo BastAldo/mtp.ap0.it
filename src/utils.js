@@ -4,6 +4,33 @@
  * Contiene funzioni di utilità pure e riutilizzabili.
  */
 
+let audioCtx;
+/**
+ * Riproduce un breve suono di "tick" usando la Web Audio API.
+ * Utile per dare feedback ritmico durante i countdown.
+ */
+export function playTick() {
+    if (!audioCtx) {
+        try {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+            console.error("Web Audio API is not supported in this browser");
+            return;
+        }
+    }
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // Frequenza (A5)
+    gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); // Volume
+    
+    oscillator.start(audioCtx.currentTime);
+    oscillator.stop(audioCtx.currentTime + 0.05);
+}
+
 /**
  * Data una data, restituisce la data del lunedì della stessa settimana.
  * @param {Date} date La data di riferimento.
@@ -17,8 +44,7 @@ export function getWeekStartDate(date) {
 }
 
 /**
- * Formatta un oggetto Date nel formato YYYY-MM-DD.
- * Utile per le chiavi degli oggetti e gli attributi data.
+ * Formatta un oggetto Date nel formato<x_bin_534>-MM-DD.
  * @param {Date} date La data da formattare.
  * @returns {string} La data formattata.
  */

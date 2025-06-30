@@ -17,8 +17,20 @@
             </section>
 
         <section id="trainer-view" class="view">
-            <h1>Trainer Attivo</h1>
-            </section>
+            <h2 id="trainer-exercise-name">--</h2>
+            <p id="trainer-series-counter" class="trainer-subtitle">--</p>
+
+            <div id="trainer-main-display" class="trainer-display">READY</div>
+            
+            <p id="trainer-exercise-description" class="trainer-subtitle">--</p>
+
+            <div id="trainer-controls" class="trainer-controls">
+                <button class="btn btn-primary" data-action="start-series">Inizia Serie</button>
+                <button class="btn" data-action="pause" style="display: none;">Pausa</button>
+                <button class="btn btn-secondary" data-action="resume" style="display: none;">Riprendi</button>
+                <button class="btn btn-danger" data-action="stop">Termina Allenamento</button>
+            </div>
+        </section>
 
         <section id="debriefing-view" class="view">
             <h1>Debriefing Sessione</h1>

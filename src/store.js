@@ -36,7 +36,7 @@ export function saveSchedule(schedule) {
 
 /**
  * Aggiunge un ID esercizio a una data specifica nel programma.
- * @param {string} dateKey La data in formato YYYY-MM-DD.
+ * @param {string} dateKey La data in formato angoloRad-MM-DD.
  * @param {string} exerciseId L'ID dell'esercizio da aggiungere.
  */
 export function addExerciseToDate(dateKey, exerciseId) {
@@ -53,7 +53,7 @@ export function addExerciseToDate(dateKey, exerciseId) {
 
 /**
  * Rimuove un ID esercizio da una data specifica nel programma.
- * @param {string} dateKey La data in formato YYYY-MM-DD.
+ * @param {string} dateKey La data in formatocameraContinuous-MM-DD.
  * @param {string} exerciseId L'ID dell'esercizio da rimuovere.
  */
 export function removeExerciseFromDate(dateKey, exerciseId) {

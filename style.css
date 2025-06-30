@@ -58,20 +58,17 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* --- Stili Calendario --- */
-
 .calendar-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 2rem;
 }
-
 .calendar-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     gap: 1rem;
 }
-
 .day-cell {
     background-color: var(--card-color);
     border: 1px solid var(--border-color);
@@ -84,41 +81,54 @@ h1, h2, h3, h4, h5, h6 {
     border-left: 4px solid transparent;
     cursor: pointer;
 }
-
 .day-cell:hover {
     transform: translateY(-4px);
     border-left: 4px solid var(--primary-color);
 }
-
 .day-cell-header {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
     font-weight: 700;
 }
+.day-cell-header .day-name { font-size: 0.9em; color: var(--text-secondary); }
+.day-cell-header .day-number { font-size: 1.5em; color: var(--primary-color); }
+.day-cell-body { margin: 2rem 0; text-align: center; color: var(--text-secondary); }
+.day-cell-footer { text-align: center; }
 
-.day-cell-header .day-name {
-    font-size: 0.9em;
+/* --- Stili Trainer --- */
+#trainer-view {
+    text-align: center;
+}
+.trainer-subtitle {
     color: var(--text-secondary);
+    margin-bottom: 2rem;
 }
-
-.day-cell-header .day-number {
-    font-size: 1.5em;
-    color: var(--primary-color);
-}
-
-.day-cell-body {
+.trainer-display {
+    font-size: 10rem;
+    font-weight: 700;
+    color: var(--secondary-color);
     margin: 2rem 0;
-    text-align: center;
-    color: var(--text-secondary);
+    line-height: 1;
+}
+.trainer-controls {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 2rem;
 }
 
-.day-cell-footer {
-    text-align: center;
+@keyframes flash {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
 }
+
+.is-flashing {
+    animation: flash 0.75s infinite;
+}
+
 
 /* --- Stili Componenti Generici --- */
-
 .btn {
     background-color: var(--card-color);
     color: var(--text-color);
@@ -131,40 +141,13 @@ h1, h2, h3, h4, h5, h6 {
     cursor: pointer;
     transition: background-color 0.2s, transform 0.2s;
 }
-
-.btn:hover:not(:disabled) {
-    transform: scale(1.05);
-}
-
-.btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    transform: none;
-}
-
-.btn-primary {
-    background-color: var(--primary-color);
-    border-color: var(--primary-color);
-}
-
-.btn-primary:hover:not(:disabled) {
-    background-color: #a082e0;
-}
-
-.btn-secondary {
-    background-color: var(--secondary-color);
-    border-color: var(--secondary-color);
-    color: #1a1a1d;
-}
-
-.btn-secondary:hover:not(:disabled) {
-    background-color: #5dcbb8;
-}
-
-.btn-danger {
-    background-color: var(--danger-color);
-    border-color: var(--danger-color);
-}
+.btn:hover:not(:disabled) { transform: scale(1.05); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-primary { background-color: var(--primary-color); border-color: var(--primary-color); }
+.btn-primary:hover:not(:disabled) { background-color: #a082e0; }
+.btn-secondary { background-color: var(--secondary-color); border-color: var(--secondary-color); color: #1a1a1d; }
+.btn-secondary:hover:not(:disabled) { background-color: #5dcbb8; }
+.btn-danger { background-color: var(--danger-color); border-color: var(--danger-color); }
 
 /* --- Stili Sistema Modale --- */
 .modal-overlay {
@@ -179,11 +162,7 @@ h1, h2, h3, h4, h5, h6 {
     align-items: center;
     z-index: 1000;
 }
-
-.modal-overlay--active {
-    display: flex;
-}
-
+.modal-overlay--active { display: flex; }
 .modal-content {
     background-color: var(--card-color);
     padding: 2rem;
@@ -194,12 +173,7 @@ h1, h2, h3, h4, h5, h6 {
     overflow-y: auto;
     border-top: 4px solid var(--primary-color);
 }
-
-.modal-list {
-    list-style: none;
-    margin-top: 1.5rem;
-}
-
+.modal-list { list-style: none; margin-top: 1.5rem; }
 .modal-list-item {
     display: flex;
     justify-content: space-between;
@@ -207,12 +181,5 @@ h1, h2, h3, h4, h5, h6 {
     padding: 0.75rem;
     border-bottom: 1px solid var(--border-color);
 }
-
-.modal-list-item:last-child {
-    border-bottom: none;
-}
-
-.modal-actions {
-    margin-top: 2rem;
-    text-align: right;
-}
+.modal-list-item:last-child { border-bottom: none; }
+.modal-actions { margin-top: 2rem; text-align: right; }
