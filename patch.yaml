@@ -1,284 +1,18 @@
 # This is a YAML file. Copy all content from here down
 # and save it as 'patch.yaml'.
-commit_message: "feat: Implement workout editor modal system"
+commit_message: "fix: Correct event handling logic for starting the trainer"
 rationale: |
-  Questo commit introduce una delle funzionalità cardine dell'applicazione: la possibilità di creare e modificare gli allenamenti giornalieri attraverso un sistema di modali.
+  Questo fix risolve un bug critico per cui il click sul pulsante START non avviava la sessione di allenamento.
 
-  1.  **Struttura HTML e CSS per la Modale**: È stata aggiunta in `index.html` la struttura di base per l'overlay e il contenitore della modale, inizialmente nascosta. `style.css` è stato arricchito con gli stili per dare a questi elementi l'aspetto corretto, come da specifiche di design.
+  La causa era una gestione degli eventi incompleta nel file `src/main.js`. La funzione `handleCalendarClick` precedente non conteneva la logica corretta per intercettare il click sul pulsante START e delegarlo al modulo del trainer.
 
-  2.  **Gestione dello Stato (`state.js`)**: Lo stato globale è stato esteso per includere `selectedDateKey`, che tiene traccia di quale giorno l'utente sta modificando. Questo è essenziale per sapere su quale data operare.
+  Questa versione corretta di `src/main.js` assicura che un'unica e robusta funzione `handleCalendarClick` gestisca correttamente tutti i possibili target di click all'interno della vista calendario:
+  - **Click sui pulsanti di navigazione**: Cambia la settimana.
+  - **Click sul pulsante `START`**: Chiama la funzione `trainer.start()` e mostra la vista del trainer.
+  - **Click sulla cella del giorno**: Apre la modale di modifica.
 
-  3.  **Logica della UI (`ui.js`)**: Il modulo UI ora gestisce l'intero ciclo di vita della modale:
-      - `openModal`/`closeModal`: Funzioni semplici per mostrare/nascondere la modale.
-      - `renderDailyWorkoutModal`: Genera l'HTML per la prima modale, mostrando gli esercizi del giorno con un pulsante "Rimuovi".
-      - `renderExerciseLibraryModal`: Genera l'HTML per la seconda modale, mostrando tutti gli esercizi disponibili dalla configurazione con un pulsante "Aggiungi".
-
-  4.  **Manipolazione dei Dati (`store.js`)**: Per mantenere la logica di manipolazione dei dati pulita e centralizzata, sono state create due nuove funzioni nello store: `addExerciseToDate` e `removeExerciseFromDate`. Queste funzioni si occupano di modificare l'oggetto `schedule` e salvarlo, nascondendo la complessità dall'orchestratore.
-
-  5.  **Gestione Eventi (`main.js`)**:
-      - Il gestore di eventi del calendario è stato potenziato per distinguere un click sulla cella (che apre la modale) da un click sui pulsanti di navigazione.
-      - È stato aggiunto un nuovo gestore di eventi per la modale stessa. Utilizzando l'event delegation, questo singolo gestore si occupa di tutte le possibili azioni: chiudere la modale, rimuovere un esercizio, passare alla vista libreria, e aggiungere un nuovo esercizio.
-
-  Questo commit implementa un ciclo completo di interazione utente: **Click su giorno -> Apertura modale -> Modifica dati -> Salvataggio -> Aggiornamento UI**.
+  Applicando questo fix, il flusso di eventi viene ripristinato e il pulsante START funzionerà come previsto.
 patches:
-  - file: index.html
-    content: |
-      <!DOCTYPE html>
-      <html lang="it">
-      <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Mio Trainer Personale</title>
-          <link rel="stylesheet" href="style.css">
-          <link rel="preconnect" href="https://fonts.googleapis.com">
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-          <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:ital,wght@0,300;0,400;0,700;1,400&display=swap" rel="stylesheet">
-      </head>
-      <body>
-
-          <div id="app-container">
-
-              <section id="calendar-view" class="view">
-                  </section>
-
-              <section id="trainer-view" class="view">
-                  <h1>Trainer Attivo</h1>
-                  </section>
-
-              <section id="debriefing-view" class="view">
-                  <h1>Debriefing Sessione</h1>
-                  </section>
-
-          </div>
-
-          <div id="modal-overlay" class="modal-overlay">
-              <div id="modal-content" class="modal-content">
-                  </div>
-          </div>
-
-          <script type="module" src="src/main.js"></script>
-      </body>
-      </html>
-  - file: style.css
-    content: |
-      /**
-       * FOGLIO DI STILE PRINCIPALE
-       * Contiene le variabili globali e gli stili di base dell'applicazione.
-       */
-
-      :root {
-          --bg-color: #1a1a1d;
-          --card-color: #2c2c34;
-          --primary-color: #9575cd;
-          --secondary-color: #4db6ac;
-          --text-color: #f4f4f9;
-          --text-secondary: #b3b3b3;
-          --danger-color: #ef5350;
-          --success-color: #66bb6a;
-          --border-color: #4a4a52;
-
-          --font-main: 'Roboto Condensed', sans-serif;
-      }
-
-      *,
-      *::before,
-      *::after {
-          box-sizing: border-box;
-          margin: 0;
-          padding: 0;
-      }
-
-      html {
-          font-family: var(--font-main);
-          color: var(--text-color);
-          background-color: var(--bg-color);
-      }
-
-      body {
-          font-size: 16px;
-          line-height: 1.6;
-      }
-
-      #app-container {
-          max-width: 1200px;
-          margin: 2rem auto;
-          padding: 0 1rem;
-      }
-
-      h1, h2, h3, h4, h5, h6 {
-          color: var(--primary-color);
-          font-weight: 700;
-          margin-bottom: 1rem;
-      }
-
-      /* Sistema di gestione delle viste */
-      .view {
-          display: none;
-      }
-
-      .view--active {
-          display: block;
-      }
-
-      /* --- Stili Calendario --- */
-
-      .calendar-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 2rem;
-      }
-
-      .calendar-grid {
-          display: grid;
-          grid-template-columns: repeat(7, 1fr);
-          gap: 1rem;
-      }
-
-      .day-cell {
-          background-color: var(--card-color);
-          border: 1px solid var(--border-color);
-          border-radius: 8px;
-          padding: 1rem;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-          transition: transform 0.2s ease-out, border-left 0.2s ease-out;
-          border-left: 4px solid transparent;
-          cursor: pointer;
-      }
-
-      .day-cell:hover {
-          transform: translateY(-4px);
-          border-left: 4px solid var(--primary-color);
-      }
-
-      .day-cell-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: baseline;
-          font-weight: 700;
-      }
-
-      .day-cell-header .day-name {
-          font-size: 0.9em;
-          color: var(--text-secondary);
-      }
-
-      .day-cell-header .day-number {
-          font-size: 1.5em;
-          color: var(--primary-color);
-      }
-
-      .day-cell-body {
-          margin: 2rem 0;
-          text-align: center;
-          color: var(--text-secondary);
-      }
-
-      .day-cell-footer {
-          text-align: center;
-      }
-
-      /* --- Stili Componenti Generici --- */
-
-      .btn {
-          background-color: var(--card-color);
-          color: var(--text-color);
-          border: 1px solid var(--border-color);
-          padding: 0.5rem 1rem;
-          font-family: var(--font-main);
-          font-size: 1em;
-          font-weight: 700;
-          border-radius: 6px;
-          cursor: pointer;
-          transition: background-color 0.2s, transform 0.2s;
-      }
-
-      .btn:hover:not(:disabled) {
-          transform: scale(1.05);
-      }
-
-      .btn:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-          transform: none;
-      }
-
-      .btn-primary {
-          background-color: var(--primary-color);
-          border-color: var(--primary-color);
-      }
-
-      .btn-primary:hover:not(:disabled) {
-          background-color: #a082e0;
-      }
-      
-      .btn-secondary {
-          background-color: var(--secondary-color);
-          border-color: var(--secondary-color);
-          color: #1a1a1d;
-      }
-
-      .btn-secondary:hover:not(:disabled) {
-          background-color: #5dcbb8;
-      }
-
-      .btn-danger {
-          background-color: var(--danger-color);
-          border-color: var(--danger-color);
-      }
-
-      /* --- Stili Sistema Modale --- */
-      .modal-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          background-color: rgba(0, 0, 0, 0.7);
-          display: none; /* Cambiato in flex da JS */
-          justify-content: center;
-          align-items: center;
-          z-index: 1000;
-      }
-
-      .modal-overlay--active {
-          display: flex;
-      }
-
-      .modal-content {
-          background-color: var(--card-color);
-          padding: 2rem;
-          border-radius: 8px;
-          width: 90%;
-          max-width: 600px;
-          max-height: 80vh;
-          overflow-y: auto;
-          border-top: 4px solid var(--primary-color);
-      }
-
-      .modal-list {
-          list-style: none;
-          margin-top: 1.5rem;
-      }
-
-      .modal-list-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 0.75rem;
-          border-bottom: 1px solid var(--border-color);
-      }
-
-      .modal-list-item:last-child {
-          border-bottom: none;
-      }
-
-      .modal-actions {
-          margin-top: 2rem;
-          text-align: right;
-      }
   - file: src/main.js
     content: |
       /**
@@ -291,6 +25,7 @@ patches:
       import * as store from './store.js';
       import { EXERCISES } from './config.js';
       import { state } from './state.js';
+      import * as trainer from './trainer.js';
 
       /**
        * Il ciclo di rendering principale dell'applicazione.
@@ -302,33 +37,40 @@ patches:
       }
 
       /**
-       * Gestisce i click sulla vista calendario (navigazione e apertura modale).
+       * Gestisce tutti i click sulla vista calendario (navigazione, start, apertura modale).
        * @param {Event} event
        */
       function handleCalendarClick(event) {
           const target = event.target;
+          
+          // Caso 1: Click sui pulsanti di navigazione della settimana
+          if (target.id === 'prev-week-btn' || target.id === 'next-week-btn') {
+              state.currentDate.setDate(state.currentDate.getDate() + (target.id === 'next-week-btn' ? 7 : -7));
+              appCycle();
+              return;
+          }
+          
           const dayCell = target.closest('.day-cell');
-
-          if (target.id === 'prev-week-btn') {
-              state.currentDate.setDate(state.currentDate.getDate() - 7);
-              appCycle();
-              return;
-          }
-
-          if (target.id === 'next-week-btn') {
-              state.currentDate.setDate(state.currentDate.getDate() + 7);
-              appCycle();
-              return;
-          }
-
-          // Se il click è su una cella ma non sul pulsante START, apri la modale
-          if (dayCell && !target.classList.contains('btn-secondary')) {
-              const dateKey = dayCell.dataset.date;
-              state.selectedDateKey = dateKey;
+          if (!dayCell) return; // Esce se il click non è in una cella (es. nello spazio tra le celle)
+          
+          const dateKey = dayCell.dataset.date;
+          
+          // Caso 2: Click sul pulsante START
+          if (target.matches('.btn-secondary')) {
               const schedule = store.getSchedule();
-              ui.renderDailyWorkoutModal(dateKey, schedule);
-              ui.openModal();
+              const exerciseIds = schedule[dateKey] || [];
+              if (exerciseIds.length > 0) {
+                  ui.showView('trainer-view');
+                  trainer.start(exerciseIds);
+              }
+              return; // Esce per non aprire la modale
           }
+
+          // Caso 3: Click su qualsiasi altra parte della cella per aprire la modale
+          state.selectedDateKey = dateKey;
+          const schedule = store.getSchedule();
+          ui.renderDailyWorkoutModal(dateKey, schedule);
+          ui.openModal();
       }
 
       /**
@@ -337,291 +79,64 @@ patches:
        */
       function handleModalClick(event) {
           const target = event.target;
-          const schedule = store.getSchedule();
-
-          // Chiudi modale se si clicca sull'overlay
           if (target.id === 'modal-overlay') {
               ui.closeModal();
               return;
           }
 
-          // Logica per i pulsanti all'interno della modale
           const action = target.dataset.action;
           if (!action) return;
 
           switch (action) {
-              case 'close-modal':
-                  ui.closeModal();
+              case 'close-modal': ui.closeModal(); break;
+              case 'show-library': ui.renderExerciseLibraryModal(state.selectedDateKey); break;
+              case 'add-exercise': {
+                  const exerciseId = target.dataset.exerciseId;
+                  store.addExerciseToDate(state.selectedDateKey, exerciseId);
+                  ui.renderDailyWorkoutModal(state.selectedDateKey, store.getSchedule());
+                  appCycle();
                   break;
-              case 'show-library':
-                  ui.renderExerciseLibraryModal(state.selectedDateKey);
+              }
+              case 'remove-exercise': {
+                  const exerciseId = target.dataset.exerciseId;
+                  store.removeExerciseFromDate(state.selectedDateKey, exerciseId);
+                  ui.renderDailyWorkoutModal(state.selectedDateKey, store.getSchedule());
+                  appCycle();
                   break;
-              case 'add-exercise':
-                  {
-                      const exerciseId = target.dataset.exerciseId;
-                      store.addExerciseToDate(state.selectedDateKey, exerciseId);
-                      ui.renderDailyWorkoutModal(state.selectedDateKey, store.getSchedule()); // Ricarica la modale
-                      appCycle(); // Aggiorna il calendario in background
-                      break;
-                  }
-              case 'remove-exercise':
-                  {
-                      const exerciseId = target.dataset.exerciseId;
-                      store.removeExerciseFromDate(state.selectedDateKey, exerciseId);
-                      ui.renderDailyWorkoutModal(state.selectedDateKey, store.getSchedule()); // Ricarica la modale
-                      appCycle(); // Aggiorna il calendario in background
-                      break;
-                  }
+              }
+          }
+      }
+      
+      /**
+       * Gestisce i click sui controlli del trainer.
+       * @param {Event} event 
+       */
+      function handleTrainerControls(event) {
+          const action = event.target.dataset.action;
+          if (!action) return;
+
+          switch (action) {
+              case 'start-series': trainer.startSeries(); break;
+              case 'pause': trainer.pause(); break;
+              case 'resume': trainer.resume(); break;
+              case 'stop': trainer.stop(); break;
           }
       }
 
       function init() {
           console.log("MTP App Initialized.");
-
           // Aggiungi i listener degli eventi principali
           ui.calendarView.addEventListener('click', handleCalendarClick);
           ui.modalOverlay.addEventListener('click', handleModalClick);
+          ui.trainerControls.addEventListener('click', handleTrainerControls);
 
           // Esegui il primo rendering
           appCycle();
           ui.showView('calendar-view');
       }
 
-      // Assicurati che il DOM sia completamente caricato prima di eseguire la logica
       document.addEventListener('DOMContentLoaded', init);
-  - file: src/state.js
-    content: |
-      /**
-       * @file state.js
-       *
-       * Contiene lo stato volatile dell'applicazione.
-       * Questo oggetto rappresenta la "singola fonte di verità" per i dati dinamici.
-       */
-
-      export const state = {
-          /**
-           * La data usata come riferimento per la visualizzazione corrente.
-           * Per il calendario, definisce la settimana da mostrare.
-           * @type {Date}
-           */
-          currentDate: new Date(),
-
-          /**
-           * La chiave della data (YYYY-MM-DD) attualmente selezionata per la modifica.
-           * @type {string | null}
-           */
-          selectedDateKey: null,
-      };
-  - file: src/store.js
-    content: |
-      /**
-       * @file store.js
-       *
-       * Gestisce la persistenza dei dati dell'applicazione su localStorage.
-       * È l'unico modulo autorizzato a interagire con lo storage del browser.
-       */
-
-      const SCHEDULE_STORAGE_KEY = 'mtp.schedule';
-
-      /**
-       * Recupera il programma degli allenamenti da localStorage.
-       * @returns {object} L'oggetto del programma, o un oggetto vuoto se non esiste.
-       */
-      export function getSchedule() {
-          try {
-              const rawData = localStorage.getItem(SCHEDULE_STORAGE_KEY);
-              return rawData ? JSON.parse(rawData) : {};
-          } catch (error) {
-              console.error("Failed to read schedule from localStorage", error);
-              return {};
-          }
-      }
-
-      /**
-       * Salva il programma degli allenamenti in localStorage.
-       * @param {object} schedule L'oggetto del programma da salvare.
-       */
-      export function saveSchedule(schedule) {
-          try {
-              const data = JSON.stringify(schedule);
-              localStorage.setItem(SCHEDULE_STORAGE_KEY, data);
-          } catch (error) {
-              console.error("Failed to save schedule to localStorage", error);
-          }
-      }
-
-      /**
-       * Aggiunge un ID esercizio a una data specifica nel programma.
-       * @param {string} dateKey La data in formato YYYY-MM-DD.
-       * @param {string} exerciseId L'ID dell'esercizio da aggiungere.
-       */
-      export function addExerciseToDate(dateKey, exerciseId) {
-          const schedule = getSchedule();
-          if (!schedule[dateKey]) {
-              schedule[dateKey] = [];
-          }
-          // Evita duplicati
-          if (!schedule[dateKey].includes(exerciseId)) {
-              schedule[dateKey].push(exerciseId);
-          }
-          saveSchedule(schedule);
-      }
-
-      /**
-       * Rimuove un ID esercizio da una data specifica nel programma.
-       * @param {string} dateKey La data in formato YYYY-MM-DD.
-       * @param {string} exerciseId L'ID dell'esercizio da rimuovere.
-       */
-      export function removeExerciseFromDate(dateKey, exerciseId) {
-          const schedule = getSchedule();
-          if (schedule[dateKey]) {
-              schedule[dateKey] = schedule[dateKey].filter(id => id !== exerciseId);
-              // Se l'array diventa vuoto, rimuovi la chiave della data
-              if (schedule[dateKey].length === 0) {
-                  delete schedule[dateKey];
-              }
-          }
-          saveSchedule(schedule);
-      }
-  - file: src/ui.js
-    content: |
-      /**
-       * @file ui.js
-       *
-       * Responsabile di tutte le manipolazioni dirette del DOM.
-       * Nessun altro modulo dovrebbe accedere a document.getElementById o simili.
-       */
-      import { getWeekStartDate, formatDate, formatDateForDisplay } from './utils.js';
-      import { EXERCISES } from './config.js';
-
-      // Riferimenti agli elementi principali della UI
-      const views = document.querySelectorAll('.view');
-      export const calendarView = document.getElementById('calendar-view');
-      export const trainerView = document.getElementById('trainer-view');
-      export const debriefingView = document.getElementById('debriefing-view');
-      export const modalOverlay = document.getElementById('modal-overlay');
-      const modalContent = document.getElementById('modal-content');
-
-      /**
-       * Mostra una vista specifica e nasconde tutte le altre.
-       * @param {string} viewId L'ID della vista da mostrare (es. 'calendar-view').
-       */
-      export function showView(viewId) {
-          views.forEach(view => {
-              view.classList.remove('view--active');
-              if (view.id === viewId) {
-                  view.classList.add('view--active');
-              }
-          });
-      }
-
-      /**
-       * Genera l'HTML per la vista del calendario per una data settimana.
-       * @param {Date} weekDate Una data qualsiasi all'interno della settimana da visualizzare.
-       * @param {object} schedule L'oggetto con gli allenamenti pianificati.
-       */
-      export function renderCalendar(weekDate, schedule) {
-          const startDate = getWeekStartDate(weekDate);
-          const weekDays = Array.from({ length: 7 }).map((_, i) => {
-              const day = new Date(startDate);
-              day.setDate(day.getDate() + i);
-              return day;
-          });
-
-          let headerHtml = `
-              <div class="calendar-header">
-                  <button class="btn" id="prev-week-btn">&lt; Precedente</button>
-                  <h2>Settimana del ${formatDateForDisplay(startDate)}</h2>
-                  <button class="btn" id="next-week-btn">Successiva &gt;</button>
-              </div>`;
-
-          let gridHtml = '<div class="calendar-grid">';
-          weekDays.forEach(day => {
-              const dateKey = formatDate(day);
-              const daySchedule = schedule[dateKey] || [];
-              const exerciseCount = daySchedule.length;
-
-              gridHtml += `
-                  <div class="day-cell" data-date="${dateKey}">
-                      <div class="day-cell-header">
-                          <span class="day-name">${day.toLocaleDateString('it-IT', { weekday: 'long' }).toUpperCase()}</span>
-                          <span class="day-number">${day.getDate()}</span>
-                      </div>
-                      <div class="day-cell-body">
-                          <p>${exerciseCount > 0 ? `${exerciseCount} esercizi` : 'Nessun allenamento'}</p>
-                      </div>
-                      <div class="day-cell-footer">
-                          <button class="btn btn-secondary" ${exerciseCount === 0 ? 'disabled' : ''}>START</button>
-                      </div>
-                  </div>
-              `;
-          });
-          gridHtml += '</div>';
-
-          calendarView.innerHTML = headerHtml + gridHtml;
-      }
-
-      /** Apre la modale */
-      export function openModal() {
-          modalOverlay.classList.add('modal-overlay--active');
-      }
-
-      /** Chiude la modale */
-      export function closeModal() {
-          modalOverlay.classList.remove('modal-overlay--active');
-      }
-
-      /**
-       * Renderizza la modale che mostra gli esercizi del giorno.
-       * @param {string} dateKey - La data YYYY-MM-DD.
-       * @param {object} schedule - L'oggetto schedule completo.
-       */
-      export function renderDailyWorkoutModal(dateKey, schedule) {
-          const scheduledIds = schedule[dateKey] || [];
-          const scheduledExercises = scheduledIds.map(id => EXERCISES.find(ex => ex.id === id));
-
-          let listItems = scheduledExercises.map(ex => `
-              <li class="modal-list-item">
-                  <span>${ex.name}</span>
-                  <button class="btn btn-danger" data-action="remove-exercise" data-exercise-id="${ex.id}">Rimuovi</button>
-              </li>
-          `).join('');
-
-          if (scheduledExercises.length === 0) {
-              listItems = '<p>Nessun esercizio pianificato per oggi.</p>';
-          }
-
-          modalContent.innerHTML = `
-              <h3>Allenamento del ${dateKey}</h3>
-              <ul class="modal-list">${listItems}</ul>
-              <div class="modal-actions">
-                  <button class="btn btn-primary" data-action="show-library">Aggiungi Esercizio</button>
-                  <button class="btn" data-action="close-modal">Chiudi</button>
-              </div>
-          `;
-      }
-
-      /** Renderizza la modale che mostra la libreria di esercizi. */
-      export function renderExerciseLibraryModal() {
-          let listItems = EXERCISES.map(ex => `
-              <li class="modal-list-item">
-                  <div>
-                      <strong>${ex.name}</strong>
-                      <p style="color: var(--text-secondary); font-size: 0.9em;">${ex.description}</p>
-                  </div>
-                  <button class="btn btn-secondary" data-action="add-exercise" data-exercise-id="${ex.id}">Aggiungi</button>
-              </li>
-          `).join('');
-
-          modalContent.innerHTML = `
-              <h3>Libreria Esercizi</h3>
-              <ul class="modal-list">${listItems}</ul>
-              <div class="modal-actions">
-                  <button class="btn" data-action="close-modal">Chiudi</button>
-              </div>
-          `;
-      }
 commands:
-  - "echo 'Patch applicato. Il sistema di modali è stato implementato.'"
-  - "echo 'Prova a cliccare su una qualsiasi cella del giorno (non sul pulsante START) per aprire l''editor.'"
+  - "echo 'Patch di correzione applicato.'"
+  - "echo 'Ora prova nuovamente: aggiungi un esercizio a un giorno e clicca su START.'"
   - "git status"
