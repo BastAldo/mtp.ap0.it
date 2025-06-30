@@ -1,31 +1,43 @@
-/**
- * Main application entry point.
- * Handles view management and app initialization.
- */
+import store from './modules/store.js';
 
-/**
- * Hides all views and shows the one with the specified ID.
- * @param {string} viewId The ID of the view to show (e.g., 'view-calendar').
- */
-function showView(viewId) {
-    // Hide all elements with the .view class
-    const views = document.querySelectorAll('.view');
-    views.forEach(view => {
-        view.classList.remove('view--active');
-    });
+// Cache delle viste per performance
+const views = {
+    calendar: document.getElementById('calendar-view'),
+    trainer: document.getElementById('trainer-view'),
+    debriefing: document.getElementById('debriefing-view'),
+};
 
-    // Show the requested view
-    const activeView = document.getElementById(viewId);
-    if (activeView) {
-        activeView.classList.add('view--active');
+let currentActiveView = null;
+
+function render() {
+    const state = store.getState();
+    const activeViewId = state.currentView;
+
+    // Se la vista attiva è già quella giusta, non fare nulla
+    if (currentActiveView === views[activeViewId]) {
+        return;
+    }
+
+    // Nascondi la vista precedentemente attiva
+    if (currentActiveView) {
+        currentActiveView.classList.remove('view--active');
+    }
+
+    // Mostra la nuova vista attiva
+    const newActiveView = views[activeViewId];
+    if (newActiveView) {
+        newActiveView.classList.add('view--active');
+        currentActiveView = newActiveView;
     } else {
-        console.error(`View with ID "${viewId}" not found.`);
+        console.error(`View "${activeViewId}" non trovata.`);
+        currentActiveView = null;
     }
 }
 
-// --- App Initialization ---
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('Mio Trainer Personale is initializing...');
-    // Set the default view to the calendar
-    showView('view-calendar');
-});
+// Sottoscrivi la funzione di rendering ai cambiamenti dello store
+store.subscribe(render);
+
+// Renderizza lo stato iniziale all'avvio
+render();
+
+console.log('App "Mio Trainer Personale" inizializzata.');

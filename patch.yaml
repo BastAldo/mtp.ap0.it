@@ -1,128 +1,211 @@
-commit_message: "docs: Evolve architecture with state management and roadmap"
+commit_message: "feat: Inizializza la struttura del progetto SPA e i moduli core"
 rationale: |
-  This commit introduces a significant evolution of the project's architecture based on a strategic review.
+  Questo commit crea lo scheletro fondamentale della Single-Page Application come definito e approvato nel piano d'azione.
+  L'implementazione è strettamente allineata ai documenti di architettura, funzionalità e stile.
 
-  1.  **State Management:** A new "State Management" section has been added to the architecture document (`02_ARCHITECTURE.md`), formalizing the use of a centralized store. This is the most critical enhancement to ensure the application remains robust and maintainable as it grows.
-  2.  **Data Integrity:** The concept of Data Schemas and Validation has been added to the persistence strategy to protect the app from corrupted data in `localStorage`.
-  3.  **Responsive Design:** The style guide (`03_STYLE_GUIDE.md`) now includes a formal requirement for responsive design, outlining a mobile-first approach and a primary breakpoint.
-  4.  **Project Roadmap:** A new `04_ROADMAP.md` file has been created to track future feature ideas, providing a clear vision for the project's evolution without cluttering the core architectural documents.
+  - Viene creata la struttura dei file (HTML, CSS, JS).
+  - Viene implementata una prima versione funzionante dello store centralizzato (`store.js`), che è il cuore dell'architettura.
+  - Viene impostato il foglio di stile con le variabili di colore e l'approccio mobile-first.
+  - Vengono rimossi i file Python (`main.py`, `requirements.txt`) non pertinenti all'architettura SPA.
 patches:
-  - file: docs/02_ARCHITECTURE.md
+  - file: index.html
     content: |
-      # Application Architecture
+      <!DOCTYPE html>
+      <html lang="it">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Mio Trainer Personale</title>
+          <link rel="stylesheet" href="assets/css/style.css">
+      </head>
+      <body>
 
-      This document outlines the high-level architecture for the "Mio Trainer Personale" SPA.
+          <div id="app-container">
+              <div id="calendar-view" class="view view--active">
+                  <h1>Calendar View</h1>
+              </div>
+              <div id="trainer-view" class="view">
+                  <h1>Trainer View</h1>
+              </div>
+              <div id="debriefing-view" class="view">
+                  <h1>Debriefing View</h1>
+              </div>
+          </div>
 
-      ## 1. Core Principles
-
-      -   **Modularity:** The application is broken down into distinct, single-responsibility modules.
-      -   **State-Driven UI:** The user interface reacts to changes in the application's state.
-
-      ## 2. Directory Structure
-
-      -   `docs/`: Contains all project documentation.
-      -   `index.html`: The single HTML entry point.
-      -   `src/`: Contains all application source code.
-          -   `src/modules/store.js`: The centralized application state store.
-          -   ... and other modules.
-
-      ## 3. View Management
-
-      The application uses a simple view manager controlled by `main.js`. Only one view is active (`.view--active`) at any given time. This is driven by the state in the central store.
-
-      ## 4. Data Persistence
-
-      All user data is persisted in `localStorage`. The `storage.js` module provides a clean API for this.
-
-      ### 4.1. Data Schemas and Validation
-      To ensure data integrity, all data read from `localStorage` MUST be validated against a defined schema before being used by the application. This prevents errors from corrupted or outdated data structures.
-
-      - **Daily Workout Schema:** An array of "workout item" objects.
-        - `item`: `{ id: string, type: 'exercise' | 'rest', ...rest }`
-      - **Exercise Schema:** An object defining an exercise's properties.
-        - `exercise`: `{ id: string, name: string, tempo: object, ...rest }`
-
-      ### 4.2. Workout Item Structure
-      The data structure for a daily workout is an array of "workout items". Each item is an object with a `type` key:
-      -   `{ type: 'exercise', id: 'squat', ... }`
-      -   `{ type: 'rest', duration: 60, ... }`
-
-      ## 5. State Management
-
-      The application MUST use a centralized state store (`src/modules/store.js`) as the Single Source of Truth (SSoT) for all application state.
-      -   **State:** A single, read-only JavaScript object containing all shared application data (e.g., `currentView`, `workouts`, `trainerState`).
-      -   **Actions:** State can only be modified by dispatching predefined, synchronous "actions" (functions within the store). These actions are the only place where state mutations can occur.
-      -   **Subscriptions:** UI modules can "subscribe" to the store. Whenever the state is updated via an action, all subscribers are notified so they can re-render themselves with the new data. This creates a predictable, one-way data flow.
-
-      ## 6. Architectural Decision Records (ADRs)
-
-      ### ADR 001: No Native Pop-ups
-      -   **Status**: Accepted
-      -   **Decision**: All forms of pop-up dialogs MUST be implemented as "pop-ins" or modals rendered within the application's own DOM.
-  - file: docs/03_STYLE_GUIDE.md
+          <script src="src/main.js" type="module"></script>
+      </body>
+      </html>
+  - file: assets/css/style.css
     content: |
-      # UI Design and Visual System
+      /* --- GLOBAL STYLES & MOBILE FIRST --- */
 
-      This document describes the UI, color palette, and visual language of the "Mio Trainer Personale" application.
+      :root {
+          --bg-color: #1a1a1d;
+          --card-color: #2c2c34;
+          --primary-color: #9575cd;
+          --secondary-color: #4db6ac;
+          --text-color: #f4f4f9;
+          /* Aggiungere altri colori dalla guida di stile se necessario */
+      }
 
-      ## 1. General Philosophy
+      * {
+          box-sizing: border-box;
+          margin: 0;
+          padding: 0;
+      }
 
-      The UI has a **dark theme**, is minimal and functional, prioritizing clarity.
+      body {
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+          background-color: var(--bg-color);
+          color: var(--text-color);
+      }
 
-      ## 2. Color Palette
+      #app-container {
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 1rem;
+      }
 
-      * `--bg-color: #1a1a1d`
-      * `--card-color: #2c2c34`
-      * `--primary-color: #9575cd`
-      * `--secondary-color: #4db6ac`
-      * `--text-color: #f4f4f9`
-      * ...and others
+      .view {
+          display: none;
+          width: 100%;
+      }
 
-      ## 3. Layout and Structure
+      .view--active {
+          display: block;
+      }
 
-      * **Main Container (`#app-container`):** Centered container with a max-width.
-      * **Views (`.view`):** Class-based system for showing/hiding main sections.
-      * **Grids and Flexbox:** Used for robust and responsive layouts.
 
-      ## 4. Key Components and Effects
+      /* --- TABLET/DESKTOP OVERRIDES --- */
+      @media (min-width: 768px) {
+          #app-container {
+              padding: 2rem;
+          }
+      }
+  - file: src/main.js
+    content: |
+      import store from './modules/store.js';
 
-      (Sections for Cards, Buttons, Modals, etc.)
+      // Cache delle viste per performance
+      const views = {
+          calendar: document.getElementById('calendar-view'),
+          trainer: document.getElementById('trainer-view'),
+          debriefing: document.getElementById('debriefing-view'),
+      };
 
-      ## 5. Responsive Design
+      let currentActiveView = null;
 
-      -   **Principle:** The application MUST follow a **mobile-first** design approach. Styles should be written for mobile screens by default, and then expanded for larger screens using media queries.
-      -   **Primary Breakpoint:** A primary breakpoint at `768px` should be used to distinguish between "mobile" and "desktop" layouts.
-          ```css
-          /* Mobile styles first */
-          .container {
-              padding: 1rem;
+      function render() {
+          const state = store.getState();
+          const activeViewId = state.currentView;
+
+          // Se la vista attiva è già quella giusta, non fare nulla
+          if (currentActiveView === views[activeViewId]) {
+              return;
           }
 
-          /* Tablet/Desktop overrides */
-          @media (min-width: 768px) {
-              .container {
-                  padding: 2rem;
+          // Nascondi la vista precedentemente attiva
+          if (currentActiveView) {
+              currentActiveView.classList.remove('view--active');
+          }
+
+          // Mostra la nuova vista attiva
+          const newActiveView = views[activeViewId];
+          if (newActiveView) {
+              newActiveView.classList.add('view--active');
+              currentActiveView = newActiveView;
+          } else {
+              console.error(`View "${activeViewId}" non trovata.`);
+              currentActiveView = null;
+          }
+      }
+
+      // Sottoscrivi la funzione di rendering ai cambiamenti dello store
+      store.subscribe(render);
+
+      // Renderizza lo stato iniziale all'avvio
+      render();
+
+      console.log('App "Mio Trainer Personale" inizializzata.');
+  - file: src/modules/store.js
+    content: |
+      // --- Centralized State Store (Single Source of Truth) ---
+
+      function createStore() {
+          let state = {
+              currentView: 'calendar', // 'calendar', 'trainer', 'debriefing'
+              workouts: {},
+              // Altri stati verranno aggiunti qui
+          };
+
+          const subscribers = new Set();
+
+          function notify() {
+              subscribers.forEach(callback => callback());
+          }
+
+          function dispatch(action) {
+              // Le azioni sono oggetti con { type, payload }
+              switch (action.type) {
+                  case 'CHANGE_VIEW':
+                      if (state.currentView !== action.payload) {
+                          state = { ...state, currentView: action.payload };
+                          console.log(`State changed: view is now "${action.payload}"`);
+                          notify();
+                      }
+                      break;
+                  // Altri tipi di azione verranno gestiti qui
+                  default:
+                      console.warn(`Azione non riconosciuta: ${action.type}`);
               }
           }
-          ```
-      -   **Flexibility:** Layouts should be fluid and adapt to screen sizes rather than targeting specific device widths.
-  - file: docs/04_ROADMAP.md
+
+          return {
+              // Ritorna una copia dello stato per impedire modifiche dirette
+              getState: () => ({ ...state }),
+              // Aggiunge un listener
+              subscribe: (callback) => {
+                  subscribers.add(callback);
+                  // Ritorna una funzione per annullare l'iscrizione
+                  return () => subscribers.delete(callback);
+              },
+              // Invia un'azione per modificare lo stato
+              dispatch,
+          };
+      }
+
+      const store = createStore();
+      export default store;
+  - file: src/modules/storage.js
     content: |
-      # Project Roadmap
+      // --- Modulo di Persistenza Dati per localStorage ---
 
-      This document lists potential future features and major improvements for "Mio Trainer Personale". It serves as a high-level guide for the project's evolution. Items are not strictly prioritized unless specified.
+      /**
+       * Carica i dati dal localStorage e li valida contro uno schema.
+       * @param {string} key La chiave da cui caricare.
+       * @returns {object | null} I dati validati o null se non validi/presenti.
+       */
+      export function loadFromStorage(key) {
+          // Logica futura:
+          // 1. Leggere da localStorage.
+          // 2. Parsare il JSON.
+          // 3. Validare lo schema.
+          // 4. Ritornare i dati o null.
+          console.log(`Placeholder: caricamento da storage per la chiave "${key}"`);
+          return null;
+      }
 
-      ## Proposed Features
-
-      ### 1. Workout Templates
-      - **Concept:** Allow users to save a complete daily workout routine (exercises and rests) as a named template.
-      - **Benefit:** Users can quickly apply these templates to any day in the calendar, significantly speeding up the scheduling of recurring workouts.
-
-      ### 2. Statistics & History Page
-      - **Concept:** A new dedicated view that provides insights into the user's workout history.
-      - **Benefit:** Allows users to track their progress over time. Could include metrics like:
-        - Total workouts completed.
-        - Frequency of specific exercises.
-        - Personal records (e.g., heaviest lift - future feature).
+      /**
+       * Salva i dati nel localStorage.
+       * @param {string} key La chiave con cui salvare.
+       * @param {object} data I dati da salvare.
+       */
+      export function saveToStorage(key, data) {
+          // Logica futura:
+          // 1. Stringify dei dati.
+          // 2. Salvare in localStorage.
+          console.log(`Placeholder: salvataggio su storage per la chiave "${key}"`);
+      }
 commands:
-  - "echo 'Architecture and documentation evolved successfully.'"
+  - "rm -f main.py"
+  - "echo 'Struttura del progetto inizializzata. File obsoleti rimossi con successo.'"

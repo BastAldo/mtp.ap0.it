@@ -4,24 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mio Trainer Personale</title>
-    <link rel="stylesheet" href="src/style.css">
-    <script src="src/main.js" defer></script>
+    <link rel="stylesheet" href="assets/css/style.css">
 </head>
 <body>
 
-    <main id="app-container">
-        <div id="view-calendar" class="view">
-            <h1>Calendario</h1>
-            </div>
+    <div id="app-container">
+        <div id="calendar-view" class="view view--active">
+            <h1>Calendar View</h1>
+        </div>
+        <div id="trainer-view" class="view">
+            <h1>Trainer View</h1>
+        </div>
+        <div id="debriefing-view" class="view">
+            <h1>Debriefing View</h1>
+        </div>
+    </div>
 
-        <div id="view-trainer" class="view">
-            <h1>Trainer</h1>
-            </div>
-
-        <div id="view-debriefing" class="view">
-            <h1>Debriefing</h1>
-            </div>
-    </main>
-
+    <script src="src/main.js" type="module"></script>
 </body>
 </html>
