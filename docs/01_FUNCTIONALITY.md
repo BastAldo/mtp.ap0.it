@@ -32,38 +32,37 @@ The application operates using three primary, mutually exclusive views: `Calenda
 
 ### 2.2. Workout Editor (Modal System)
 
-The editor is a two-stage modal system for managing a day's workout routine.
+The editor is a modal system for managing a day's workout routine. It allows for the composition of exercises and configurable rest periods.
 
 -   **Daily Workout Modal:**
     -   Triggered by clicking a day cell.
-    -   Displays a list of exercises currently scheduled for the selected date.
-    -   Allows **removal** of any exercise from the list.
-    -   Contains an "Add Exercise" button to open the Exercise Library modal.
+    -   Displays a list of items (exercises or rests) currently scheduled for the selected date.
+    -   Allows **removal** of any item from the list.
+    -   For "Rest" items, the duration is **editable inline**.
+    -   Contains an "Add Exercise" button to open the Exercise Library modal and an "Add Rest" button to insert a new rest period.
 -   **Exercise Library Modal:**
     -   Triggered by the "Add Exercise" button.
-    -   Displays a complete list of all available exercises defined in `workouts.js`.
-    -   Allows **selection** of an exercise to add to the current day's routine.
+    -   Displays a complete list of all available exercises.
 
 ```plaintext
-// Stage 1: Daily Workout Modal appears over the Calendar
-+----------------------------------+
-| WORKOUT - MONDAY 30              |
-|----------------------------------|
-| - Squat (3x10)         [Remove]  |
-| - Push-ups (3x12)      [Remove]  |
-| - Plank (3x60s)        [Remove]  |
-|                                  |
-|            [Add Exercise]        |
-+----------------------------------+
+// Stage 1: Daily Workout Modal with an editable Rest item.
++------------------------------------------+
+| WORKOUT - MONDAY 30                      |
+|------------------------------------------|
+| - Squat (3x10)                 [Remove]  |
+| - Rest: [ 60 ] seconds         [Remove]  |
+| - Push-ups (3x12)              [Remove]  |
+|                                          |
+|           [Add Exercise] [Add Rest]      |
++------------------------------------------+
 
-// Stage 2: User clicks [Add Exercise], a new modal replaces the first
+// Stage 2: User clicks [Add Exercise] to open the library.
+// Clicking [Add Rest] directly adds a new rest item to the list above.
 +----------------------------------+
 | EXERCISE LIBRARY                 |
 |----------------------------------|
 | - Bench Press          [Add]     |
 | - Deadlift             [Add]     |
-| - Lunges               [Add]     |
-| - Bicep Curls          [Add]     |
 | ... (scrollable) ...             |
 |                        [Close]   |
 +----------------------------------+
@@ -71,32 +70,19 @@ The editor is a two-stage modal system for managing a day's workout routine.
 
 ### 2.3. Interactive Trainer View
 
--   **Function:** An interactive, state-driven interface that guides the user through a scheduled workout in real-time.
+-   **Function:** An interactive, state-driven interface that guides the user through a scheduled workout in real-time. It features a large SVG Progress Ring for at-a-glance timer feedback. The phase name (e.g., UP, HOLD) and timer are displayed inside the ring. The exercise description is shown below it.
 -   **Activation:** Triggered by clicking the "START" button on a day cell in the calendar.
 
 ```plaintext
-// State: Preparing
-+-----------------------------------------+
-|  ** SQUAT ** |
-|  SERIES 1 / 3                           |
-|-----------------------------------------|
-|                                         |
-|                PREPARING                |
-|                   03                    |
-|                                         |
-|-----------------------------------------|
-|  Get ready for the first set.           |
-|  [   (Controls Disabled)   ]            |
-+-----------------------------------------+
-
-// State: Action (Reps-based)
+// State: Action (Reps-based, 50% through "DOWN" phase)
 +-----------------------------------------+
 |  ** SQUAT ** |
 |  SERIES 1 / 3   |   REP 1 / 10          |
 |-----------------------------------------|
 |                                         |
-|                    UP                   |
-|                   2s                    |
+|      /```\       DOWN                   |
+|     | 50% |      1s                     |
+|      \___/                              |
 |                                         |
 |-----------------------------------------|
 |  Lower your body with control.          |
@@ -105,29 +91,24 @@ The editor is a two-stage modal system for managing a day's workout routine.
 ```
 
 #### Trainer State Machine & Flow
-
 The trainer operates as a state machine. The primary user flow is as follows:
 
 1.  **Ready (`ready`):** The trainer displays the current exercise and series number. Awaits user input to begin.
-2.  **Announcing (`announcing`):** Before every new phase, this 0.75-second state is activated. It displays the name of the upcoming phase (e.g., "UP", "REST") with a flashing visual effect and an audio tick to alert the user.
+2.  **Announcing (`announcing`):** Before every new action phase, this 0.75-second state is activated. It displays the name of the upcoming phase (e.g., "UP", "REST") with a flashing visual effect and an audio tick to alert the user. It then automatically transitions to the announced phase.
 3.  **Preparing (`preparing`):** A 3-second countdown to prepare the user for the first series of an exercise.
 4.  **Action (`action`):** The core execution phase.
-    -   For **`reps`**-based exercises, the trainer automatically cycles through timed phases as defined by the exercise's `tempo` object (e.g., `up`, `hold`, `down`), each with its own countdown.
+    -   For **`reps`**-based exercises, the trainer automatically cycles through timed phases (e.g., `up`, `hold`, `down`). Each phase is preceded by the `announcing` state.
     -   For **`time`**-based exercises, a single countdown for the specified `duration` is run.
-5.  **Paused (`paused`):** The user can pause the workout at any time during the `action` state. The timer stops. The user must click "RESUME" to continue.
-6.  **Rest (`rest`):** After a set is completed, the trainer enters a rest period. A countdown for the specified `rest` duration is shown.
-7.  **Advancement:** After a rest period or set completion, the system automatically determines whether to proceed to the next series of the same exercise or to the next exercise in the routine.
-8.  **Finished (`finished`):** Once all exercises in the routine are complete, the trainer automatically transitions to the Debriefing View.
+5.  **Paused (`paused`):** The user can pause the workout at any time.
+6.  **Rest (`rest`):** This state is triggered when a "Rest" item is encountered in the workout list. It runs a countdown for the user-defined duration.
+7.  **Advancement:** After any state completes, the system proceeds to the next item in the workout list.
+8.  **Finished (`finished`):** Once all items in the routine are complete, the trainer automatically transitions to the Debriefing View.
 
 ### 2.4. Debriefing View
 
 -   **Activation:** Appears automatically when a workout is completed or manually terminated.
--   **Content:**
-    -   **Summary:** Displays a list of all exercises completed during the session.
-    -   **Text Report:** Generates a pre-formatted, multi-line string summarizing the workout, ready for sharing.
--   **Actions:**
-    -   **Copy for Coach:** Copies the text report to the user's clipboard.
-    -   **Return to Calendar:** Switches the view back to the main Calendar.
+-   **Content:** Displays a summary of all exercises completed.
+-   **Actions:** "Copy for Coach" and "Return to Calendar".
 
 ```plaintext
 +-----------------------------------------+
@@ -136,15 +117,6 @@ The trainer operates as a state machine. The primary user flow is as follows:
 |  Summary:                               |
 |   - Squat: 3 series completed           |
 |   - Push-ups: 3 series completed        |
-|   - Plank: 3 series completed           |
-|                                         |
-|  +-----------------------------------+  |
-|  | Workout Report:                   |  |
-|  | Mon Jun 30 2025                   |  |
-|  | * Squat: 3 sets                   |  |
-|  | * Push-ups: 3 sets                |  |
-|  | * Plank: 3 sets                   |  |
-|  +-----------------------------------+  |
 |                                         |
 |  [ Copy for Coach ] [Return to Calendar] |
 +-----------------------------------------+
