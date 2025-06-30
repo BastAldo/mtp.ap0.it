@@ -1,819 +1,127 @@
-commit_message: "fix(build): Final complete codebase restore and consolidation"
+# This is a YAML file. Copy all content from here down
+# and save it as 'patch.yaml'.
+commit_message: "feat: Initialise project structure with HTML, CSS, and JS entrypoint"
 rationale: |
-  Questo patch è una correzione completa e definitiva che ripristina l'intera base di codice allo stato finale e funzionante, risolvendo una grave regressione causata da una generazione errata dei patch precedenti.
+  Questo è il primo passo per la ricostruzione dell'applicazione da zero. Stabiliamo una base solida e pulita, in linea con le specifiche di design e funzionalità.
 
-  1.  **Causa Radice Identificata:** I precedenti aggiornamenti contenevano file `.js` incompleti ("stub"), che sovrascrivevano e rompevano il codice esistente. Questo ha causato la scomparsa di intere funzionalità e l'introduzione di bug critici.
+  1.  **`index.html`**: Crea la struttura semantica fondamentale dell'applicazione. Contiene i tre contenitori principali per le viste (`#calendar-view`, `#trainer-view`, `#debriefing-view`) come specificato nel documento di design. Il sistema di visibilità è già predisposto tramite le classi `.view` e `.view--active`.
 
-  2.  **Soluzione Completa:** Questo patch contiene il **contenuto completo e finale** di ogni singolo file sorgente dell'applicazione (`.js`, `.html`, `.css`). È uno snapshot totale che integra tutte le feature e i bug fix discussi e approvati, tra cui:
-      - La logica del trainer corretta per evitare terminazioni immediate.
-      - La funzionalità di Pausa/Ripresa robusta.
-      - L'aggiunta di esercizi duplicati.
-      - Il sistema di recupero personalizzato con modifica inline.
-      - Il pulsante "Inizia Allenamento" nel modale.
-      - Il riordinamento Drag-and-Drop.
-      - Tutti i fix di UI e CSS.
-      - Lo storico degli allenamenti con indicatore sul calendario.
+  2.  **`style.css`**: Implementa le fondamenta del sistema di design.
+      -   **Color Palette**: Le variabili di colore definite nel file `design_and_visual.md` sono state inserite in `:root` per un accesso globale e una facile manutenibilità.
+      -   **Layout Base**: Imposta gli stili di base per il `body`, il contenitore principale `#app-container`, e la logica di visualizzazione per le classi `.view` e `.view--active`.
 
-  Questo aggiornamento porta l'applicazione allo stato finale desiderato, stabile e completo.
+  3.  **`main.js`**: Funge da punto di ingresso principale per tutta la logica JavaScript. Al momento è intenzionalmente minimo, ma è configurato come modulo (`type="module"` in HTML) per consentire un'architettura modulare e scalabile nei prossimi step.
+
+  Questo commit iniziale pone le fondamenta per una chiara separazione delle responsabilità: Struttura (HTML), Presentazione (CSS) e Comportamento (JS).
 patches:
   - file: index.html
     content: |
       <!DOCTYPE html>
       <html lang="it">
-        <head>
-          <meta charset="UTF-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>Mio Trainer Personale</title>
-          <link rel="stylesheet" href="style.css" />
-          <link rel="preconnect" href="https://fonts.googleapis.com" />
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-          <link
-            href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:ital,wght@0,400;0,700;1,400&family=Teko:wght@400;600;700&display=swap"
-            rel="stylesheet"
-          />
-        </head>
-        <body>
+          <link rel="stylesheet" href="style.css">
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:ital,wght@0,300;0,400;0,700;1,400&display=swap" rel="stylesheet">
+      </head>
+      <body>
+
           <div id="app-container">
-            <header id="app-header">
-              <h1>Mio Trainer Personale</h1>
-            </header>
 
-            <div id="calendar-view" class="view view--active">
-              <header id="calendar-header">
-                <button id="prev-week-btn" class="btn">&lt;</button>
-                <h2 id="current-week-range"></h2>
-                <button id="next-week-btn" class="btn">&gt;</button>
-              </header>
-              <div id="calendar-grid"></div>
-            </div>
+              <section id="calendar-view" class="view view--active">
+                  <h1>Calendario Allenamenti</h1>
+                  </section>
 
-            <div id="trainer-view" class="view">
-              <h1 id="trainer-exercise-title"></h1>
-              <div id="trainer-series-counter"></div>
-              <div id="trainer-main-display">
-                <svg id="trainer-progress-ring-svg" viewBox="0 0 100 100">
-                  <circle class="progress-ring-bg" cx="50" cy="50" r="45"></circle>
-                  <circle id="progress-ring-foreground" class="progress-ring-fg" cx="50" cy="50" r="45" pathLength="100"></circle>
-                </svg>
-                <span id="trainer-main-text"></span>
-              </div>
-              <div id="trainer-description"></div>
-              <div id="trainer-controls">
-                <button id="start-session-btn" class="btn btn-success">Inizia</button>
-                <button id="pause-resume-btn" class="btn">Pausa</button>
-                <button id="terminate-btn" class="btn btn-danger">Termina</button>
-              </div>
-              <div id="trainer-full-description"></div>
-            </div>
+              <section id="trainer-view" class="view">
+                  <h1>Trainer Attivo</h1>
+                  </section>
 
-            <div id="debriefing-view" class="view">
-              <h1>Workout Concluso</h1>
-              <ul id="debriefing-summary"></ul>
-              <div id="debriefing-report-container">
-                <h2>Report da Condividere:</h2>
-                <textarea id="debriefing-text-report" readonly></textarea>
-                <button id="copy-report-btn" class="btn btn-primary">
-                  Copia Report
-                </button>
-              </div>
-              <div class="debriefing-actions">
-                <a href="https://gemini.google.com/gem/3ddd32ed1a1a/644b02d78c11a9ed" target="_blank" id="gemini-btn" class="btn btn-primary">Incolla su Gemini</a>
-                <button id="return-to-calendar-btn" class="btn btn-secondary">
-                  Torna al Calendario
-                </button>
-              </div>
-            </div>
+              <section id="debriefing-view" class="view">
+                  <h1>Debriefing Sessione</h1>
+                  </section>
+
           </div>
 
-          <div id="day-modal" class="modal-overlay" style="display: none">
-            <div class="modal-content">
-              <h2 id="modal-date-title"></h2>
-              <ul id="modal-exercise-list"></ul>
-              <div class="modal-actions">
-                <button id="start-from-modal-btn" class="btn btn-success">Inizia Allenamento</button>
-                <button id="add-exercise-btn" class="btn btn-secondary">Aggiungi Esercizio</button>
-                <button id="add-rest-btn" class="btn btn-primary">Aggiungi Recupero</button>
-                <button id="close-day-modal-btn" class="btn">Chiudi</button>
-              </div>
-            </div>
-          </div>
-
-          <div id="library-modal" class="modal-overlay" style="display: none">
-            <div class="modal-content">
-              <h2>Libreria Esercizi</h2>
-              <ul id="library-exercise-list"></ul>
-              <div class="modal-actions">
-                <button id="close-library-modal-btn" class="btn">Chiudi</button>
-              </div>
-            </div>
-          </div>
-
-          <script type="module" src="src/main.js"></script>
-        </body>
+          <script type="module" src="main.js"></script>
+      </body>
       </html>
   - file: style.css
     content: |
+      /**
+       * FOGLIO DI STILE PRINCIPALE
+       * Contiene le variabili globali e gli stili di base dell'applicazione.
+       */
+
       :root {
-        --bg-color: #1a1a1d;
-        --card-color: #2c2c34;
-        --primary-color: #9575cd;
-        --secondary-color: #4db6ac;
-        --text-color: #f4f4f9;
-        --text-secondary: #b3b3b3;
-        --danger-color: #ef5350;
-        --success-color: #66bb6a;
-        --border-color: #4a4a52;
+          --bg-color: #1a1a1d;
+          --card-color: #2c2c34;
+          --primary-color: #9575cd;
+          --secondary-color: #4db6ac;
+          --text-color: #f4f4f9;
+          --text-secondary: #b3b3b3;
+          --danger-color: #ef5350;
+          --success-color: #66bb6a;
+
+          --font-main: 'Roboto Condensed', sans-serif;
       }
-      * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { font-family: "Roboto Condensed", sans-serif; background-color: var(--bg-color); color: var(--text-color); display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding: 1rem; }
-      #app-container { width: 100%; max-width: 1200px; position: relative; }
-      #app-header {
-        text-align: center;
-        padding-bottom: 1rem;
-        margin-bottom: 2rem;
-        border-bottom: 1px solid var(--border-color);
+
+      *,
+      *::before,
+      *::after {
+          box-sizing: border-box;
+          margin: 0;
+          padding: 0;
       }
-      #app-header h1 {
-        font-size: 2rem;
-        margin: 0;
-        color: var(--text-color);
+
+      html {
+          font-family: var(--font-main);
+          color: var(--text-color);
+          background-color: var(--bg-color);
       }
-      h1, h2 { font-family: "Teko", sans-serif; font-weight: 600; color: var(--primary-color); text-align: center; margin-bottom: 1.5rem; }
-      .view { display: none; }
-      .view--active { display: flex; flex-direction: column; align-items: center; }
-      #calendar-view { display: none; }
-      #calendar-view.view--active { display: block; }
-      #calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
-      #calendar-header h2 { margin: 0; font-size: 2rem; padding: 0 1rem; text-align: center; }
-      #calendar-header .btn {
-        width: auto;
-        flex-shrink: 0;
-        margin-top: 0;
+
+      body {
+          font-size: 16px;
+          line-height: 1.6;
       }
-      #calendar-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 1rem;
+
+      #app-container {
+          max-width: 900px;
+          margin: 2rem auto;
+          padding: 0 1rem;
       }
-      .day-cell { background-color: var(--card-color); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; justify-content: space-between; border-left: 4px solid transparent; transition: transform 0.2s ease-out, border-color 0.2s ease-out; cursor: pointer; }
-      .day-cell:hover { transform: translateY(-4px); border-left-color: var(--primary-color); }
-      .day-name { font-weight: bold; text-transform: capitalize; font-size: 1.1rem; color: var(--text-secondary); }
-      .day-number { font-family: "Teko", sans-serif; font-size: 3rem; font-weight: 700; text-align: center; margin: 0.5rem 0; display: flex; align-items: center; justify-content: center; }
-      .day-history-indicator { display: inline-block; color: var(--success-color); font-size: 1.5rem; margin-left: 0.5rem; line-height: 1; }
-      .day-summary { font-size: 0.9rem; color: var(--text-secondary); min-height: 2.5em; text-align: center; }
-      .btn { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.75rem 1.5rem; border-radius: 6px; font-family: "Roboto Condensed", sans-serif; font-weight: bold; text-transform: uppercase; cursor: pointer; transition: background-color 0.2s, transform 0.2s; display: block; width: 100%; text-align: center; margin-top: 1rem; text-decoration: none; }
-      .btn:hover:not(:disabled) { transform: scale(1.02); }
-      .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-      .btn.btn-primary { background-color: var(--primary-color); border-color: var(--primary-color); }
-      .btn.btn-secondary { background-color: var(--secondary-color); border-color: var(--secondary-color); color: var(--bg-color); }
-      .btn.btn-danger { background-color: var(--danger-color); border-color: var(--danger-color); }
-      .btn.btn-success { background-color: var(--success-color); border-color: var(--success-color); }
-      .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); display: none; justify-content: center; align-items: center; z-index: 1000; }
-      .modal-content { background-color: var(--card-color); padding: 2rem; border-radius: 8px; width: 90%; max-width: 500px; max-height: 80vh; display: flex; flex-direction: column; }
-      .modal-content h2 { margin-top: 0; }
-      .modal-content ul { list-style: none; padding: 0; overflow-y: auto; flex-grow: 1; margin: 1rem 0; }
-      .modal-list-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; border-bottom: 1px solid var(--border-color); gap: 1rem; }
-      .modal-list-item.dragging { opacity: 0.5; background-color: var(--primary-color); }
-      .drag-handle { cursor: move; color: var(--text-secondary); display: flex; align-items: center; padding-right: 0.5rem; }
-      .modal-list-item .item-name { flex-grow: 1; display: flex; justify-content: space-between; align-items: center; }
-      .modal-list-item:last-child { border-bottom: none; }
-      .modal-list-item .btn { width: auto; max-width: 120px; margin-top: 0; flex-shrink: 0; }
-      .inline-input-group { display: flex; align-items: center; gap: 0.5rem; }
-      .inline-duration-input { width: 60px; background-color: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px; padding: 0.25rem; text-align: center; }
-      .empty-list-item { color: var(--text-secondary); text-align: center; padding: 2rem; }
-      .modal-actions { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; margin-top: 1.5rem; }
-      .modal-actions .btn { width: auto; margin-top: 0; flex-shrink: 0; }
-      #trainer-view, #debriefing-view { gap: 1rem; }
-      #trainer-exercise-title { font-size: 2.5rem; text-align: center; }
-      #trainer-series-counter { font-size: 1.5rem; color: var(--text-secondary); min-height: 1.5rem; }
-      #trainer-description { color: var(--text-secondary); text-align: center; padding: 0 1rem; }
-      #trainer-full-description { font-size: 0.9rem; max-width: 400px; text-align: center; color: var(--text-secondary); margin-top: 1rem; }
-      #trainer-main-display { width: 300px; height: 300px; margin: 1rem 0; position: relative; display: flex; justify-content: center; align-items: center; }
-      #trainer-main-text {
-        font-family: 'Teko', sans-serif;
-        font-size: 5rem;
-        line-height: 1;
-        text-align: center;
+
+      h1, h2, h3, h4, h5, h6 {
+          color: var(--primary-color);
+          font-weight: 700;
+          margin-bottom: 1rem;
       }
-      #trainer-main-text.trainer-main-text--small { font-size: 4.5rem; }
-      #trainer-main-text small { font-size: 2.5rem; color: var(--text-secondary); }
-      #trainer-progress-ring-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-      .progress-ring-bg { fill: transparent; stroke: var(--card-color); stroke-width: 8; }
-      .progress-ring-fg { fill: transparent; stroke: var(--primary-color); stroke-width: 8; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; stroke-dasharray: 100; stroke-dashoffset: 100; }
-      #trainer-controls { display: flex; gap: 1rem; }
-      #trainer-controls .btn { width: 150px; }
-      #debriefing-summary { list-style: none; padding: 0; width: 100%; max-width: 500px; background-color: var(--card-color); border-radius: 8px; }
-      .debrief-exercise-name small { color: var(--text-secondary); display: block; font-size: 0.8rem; }
-      #debriefing-report-container { width: 100%; max-width: 500px; }
-      #debriefing-report-container textarea { width: 100%; min-height: 150px; background-color: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.5rem; font-family: monospace; }
-      .debriefing-actions { display: flex; gap: 1rem; width: 100%; max-width: 500px; }
-      .debriefing-actions .btn { flex-grow: 1; margin-top: 0; }
-      @keyframes flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-      .is-flashing { animation: flash 0.75s infinite; }
-      @media (max-width: 768px) {
-        body { padding: 1rem; }
-        #calendar-grid {
-            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-            gap: 0.5rem;
-        }
-        #trainer-main-display { width: 250px; height: 250px; }
-        #trainer-main-text { font-size: 4rem; }
+
+      /* Sistema di gestione delle viste */
+      .view {
+          display: none;
       }
-  - file: src/main.js
+
+      .view--active {
+          display: block;
+      }
+  - file: main.js
     content: |
       /**
        * @file main.js
-       * The main entry point for the application.
-       * Orchestrates all other modules.
-       */
-      import { initCalendar } from './calendar.js';
-      import { initModals } from './modal.js';
-      import { initTrainerControls } from './ui.js';
-      import { confirmStart, pauseOrResumeTrainer, terminateTrainer } from './trainer.js';
-      import { initDebriefing } from './debriefing.js';
-
-      /**
-       * The main function to initialize the application.
-       */
-      function main() {
-        // Initialize all primary components
-        initCalendar();
-        initModals();
-        initDebriefing();
-        initTrainerControls({
-          onConfirmStart: confirmStart,
-          onPauseResume: pauseOrResumeTrainer,
-          onTerminate: terminateTrainer
-        });
-      }
-
-      // Initialize the app once the DOM is fully loaded.
-      document.addEventListener('DOMContentLoaded', main);
-  - file: src/trainer.js
-    content: |
-      /**
-       * @file trainer.js
-       * Contains the entire state machine logic for the training session.
-       */
-      import * as ui from './ui.js';
-      import { showDebriefing } from './debriefing.js';
-      import * as storage from './storage.js';
-
-      const STATES = {
-        IDLE: 'idle',
-        READY: 'ready',
-        ANNOUNCING: 'announcing',
-        ACTION: 'action',
-        PAUSED: 'paused',
-        FINISHED: 'finished',
-      };
-
-      let state = {
-        currentState: STATES.IDLE,
-        dateKey: null,
-        workout: [],
-        exercise: null,
-        currentExerciseIndex: 0,
-        currentSeries: 0,
-        currentRep: 0,
-        phase: '',
-        totalDuration: 0,
-        animationFrameId: null,
-        timerStartTime: 0,
-        timeOffsetMs: 0,
-        onTimerComplete: null,
-        pausedState: null,
-      };
-
-      function clearTimers() {
-        cancelAnimationFrame(state.animationFrameId);
-        state.animationFrameId = null;
-      }
-
-      function setState(newState, payload = {}) {
-        clearTimers();
-        state = { ...state, ...payload, currentState: newState };
-        if (newState !== STATES.PAUSED) {
-            ui.updateTrainerUI(state);
-        }
-      }
-
-      function transitionTo(phaseText, duration, onCompleteAction) {
-        setState(STATES.ANNOUNCING, { phase: phaseText, totalDuration: duration, onTimerComplete: onCompleteAction });
-        setTimeout(() => {
-          if (state.currentState === STATES.ANNOUNCING) {
-             if (state.onTimerComplete) state.onTimerComplete();
-          }
-        }, 750);
-      }
-
-      function runCountdown(duration, phaseText, onComplete, timeOffsetMs = 0) {
-          setState(STATES.ACTION, { phase: phaseText, totalDuration: duration, onTimerComplete: onComplete });
-          state.timeOffsetMs = timeOffsetMs;
-          state.timerStartTime = Date.now();
-          const tick = () => {
-              const elapsedMs = (Date.now() - state.timerStartTime) + state.timeOffsetMs;
-              const progress = Math.min(100, (elapsedMs / (duration * 1000)) * 100);
-              ui.updateProgressOnly(progress);
-              if (elapsedMs >= duration * 1000) {
-                  clearTimers();
-                  if (state.onTimerComplete) state.onTimerComplete();
-              } else {
-                  state.animationFrameId = requestAnimationFrame(tick);
-              }
-          };
-          tick();
-      }
-      
-      function runTempoCycle() {
-          const tempo = state.exercise.tempo;
-          const executePhase = (phaseName, duration, nextPhase) => {
-              if (duration > 0) transitionTo(phaseName.toUpperCase(), duration, () => runCountdown(duration, phaseName.toUpperCase(), nextPhase));
-              else nextPhase();
-          };
-          const doDown = () => executePhase('down', tempo.down, doUp);
-          const doHold = () => executePhase('hold', tempo.hold, doDown);
-          const doUp = () => {
-              if (state.currentRep < state.exercise.reps) {
-                  state.currentRep++;
-                  ui.updateTrainerUI(state);
-                  executePhase('up', tempo.up, doHold);
-              } else {
-                  handleRestBetweenSeries();
-              }
-          };
-          doUp();
-      }
-
-      function handleRestBetweenSeries() {
-        const isLastSeries = state.currentSeries >= state.exercise.series;
-        if (isLastSeries) {
-            advanceToNextWorkoutItem();
-            return;
-        }
-        
-        const onRestComplete = () => {
-            state.currentSeries++;
-            startExercisePhase();
-        };
-        
-        transitionTo('Riposo', state.exercise.rest, () => runCountdown(state.exercise.rest, 'Riposo', onRestComplete));
-      }
-
-      function advanceToNextWorkoutItem() {
-        const isLastExercise = state.currentExerciseIndex >= state.workout.length - 1;
-        if(isLastExercise) {
-            setState(STATES.FINISHED);
-            const result = { ...state, wasTerminated: false };
-            storage.addWorkoutToHistory(state.dateKey, result);
-            showDebriefing(result);
-        } else {
-            state.currentExerciseIndex++;
-            startExercisePhase();
-        }
-      }
-
-      function startExercisePhase() {
-        state.exercise = state.workout[state.currentExerciseIndex];
-        state.currentRep = 0;
-        
-        if(state.exercise.type === 'rest') {
-            transitionTo('Recupero', state.exercise.duration, () => runCountdown(state.exercise.duration, 'Recupero', advanceToNextWorkoutItem));
-            return;
-        }
-
-        // Only reset series count if it's the first time for this exercise type
-        if(state.currentSeries === 0) state.currentSeries = 1;
-
-        transitionTo("Pronti?", 3, () => {
-            runCountdown(3, 'VIA!', () => {
-                if (state.exercise.type === 'reps') {
-                    runTempoCycle();
-                } else { // time
-                    transitionTo("Azione", state.exercise.duration, () => runCountdown(state.exercise.duration, "Azione", advanceToNextWorkoutItem));
-                }
-            });
-        });
-      }
-
-      export function startTrainer(exercises, dateKey) {
-        if (!exercises || exercises.length === 0) return;
-        const freshState = { workout: JSON.parse(JSON.stringify(exercises)), dateKey: dateKey, currentExerciseIndex: 0, currentSeries: 1, currentRep: 0 };
-        state = { ...state, ...freshState };
-        ui.showView('trainer');
-        setState(STATES.READY, {phase: "INIZIA"});
-      }
-
-      export function confirmStart() {
-        if (state.currentState === STATES.READY) startExercisePhase();
-      }
-
-      export function pauseOrResumeTrainer() {
-        if (state.currentState === STATES.PAUSED) {
-            const ps = state.pausedState;
-            state.currentState = ps.currentState; 
-            runCountdown(ps.totalDuration, ps.phase, ps.onTimerComplete, ps.timeOffsetMs);
-        } else {
-            clearTimers();
-            const elapsed = (Date.now() - state.timerStartTime) + state.timeOffsetMs;
-            const pausedContext = {
-                totalDuration: state.totalDuration,
-                phase: state.phase,
-                onTimerComplete: state.onTimerComplete,
-                timeOffsetMs: elapsed,
-                exercise: state.exercise,
-                currentSeries: state.currentSeries,
-                currentRep: state.currentRep,
-                currentState: state.currentState
-            };
-            setState(STATES.PAUSED, { pausedState: pausedContext });
-            ui.updateTrainerUI(state);
-        }
-      }
-
-      export function terminateTrainer() {
-          clearTimers();
-          const result = { ...state, wasTerminated: true };
-          storage.addWorkoutToHistory(state.dateKey, result);
-          showDebriefing(result);
-          setState(STATES.IDLE, { phase: '' });
-      }
-  - file: src/ui.js
-    content: |
-      /**
-       * @file ui.js
-       * Responsible for all direct DOM manipulations and user feedback (visual/audio).
+       *
+       * Punto di ingresso principale dell'applicazione "Mio Trainer Personale".
+       * Da qui verranno orchestrati i vari moduli (UI, stato, logica, etc.).
        */
 
-      // --- Elements ---
-      const views = {
-        calendar: document.getElementById('calendar-view'),
-        trainer: document.getElementById('trainer-view'),
-        debriefing: document.getElementById('debriefing-view')
-      };
-      const trainerExerciseTitle = document.getElementById('trainer-exercise-title');
-      const trainerSeriesCounter = document.getElementById('trainer-series-counter');
-      const trainerMainText = document.getElementById('trainer-main-text');
-      const trainerMainDisplay = document.getElementById('trainer-main-display');
-      const trainerDescription = document.getElementById('trainer-description');
-      const trainerFullDescription = document.getElementById('trainer-full-description');
-      const startSessionBtn = document.getElementById('start-session-btn');
-      const pauseResumeBtn = document.getElementById('pause-resume-btn');
-      const terminateBtn = document.getElementById('terminate-btn');
-      const progressRingFg = document.getElementById('progress-ring-foreground');
+      console.log("MTP App Initialized.");
 
-      export function updateProgressOnly(percentage) {
-        if (isNaN(percentage)) return;
-        const offset = 100 - percentage;
-        progressRingFg.style.strokeDashoffset = Math.max(0, Math.min(100, offset));
-      }
-
-      export function showView(viewName) {
-        Object.values(views).forEach(view => view.classList.remove('view--active'));
-        if (views[viewName]) views[viewName].classList.add('view--active');
-      }
-
-      function getExerciseDetails(exercise) {
-        if (!exercise || exercise.type === 'rest') return '';
-        if (exercise.type === 'reps') {
-          const tempo = exercise.tempo;
-          return `${exercise.series} serie × ${exercise.reps} rip. | Tempo: up ${tempo.up}s - hold ${tempo.hold}s - down ${tempo.down}s`;
-        } else { // time
-          return `${exercise.series} serie × ${exercise.duration} secondi`;
-        }
-      }
-
-      export function updateTrainerUI(state) {
-        const { exercise, currentSeries, currentRep, phase, totalDuration, currentState, pausedState } = state;
-        const displayState = currentState === 'paused' ? pausedState : state;
-
-        trainerExerciseTitle.textContent = displayState.exercise ? displayState.exercise.name : 'Workout';
-        trainerDescription.textContent = getExerciseDetails(displayState.exercise);
-        trainerFullDescription.textContent = displayState.exercise ? displayState.exercise.description : '';
-        
-        if (displayState.exercise && displayState.exercise.type !== 'rest') {
-          let seriesText = `Serie ${displayState.currentSeries} / ${displayState.exercise.series}`;
-          const isAction = currentState === 'action' || (currentState === 'paused' && pausedState?.currentState === 'action');
-          if (displayState.exercise.type === 'reps' && isAction) {
-            seriesText += `  |  Rip. ${displayState.currentRep} / ${displayState.exercise.reps}`;
-          }
-          trainerSeriesCounter.textContent = seriesText;
-        } else {
-          trainerSeriesCounter.textContent = '';
-        }
-
-        if (currentState === 'paused') {
-            const interruptedPhase = pausedState?.phase || '';
-            trainerMainText.innerHTML = `PAUSA<br><small style="text-transform: capitalize;">${interruptedPhase.toLowerCase()}</small>`;
-        } else if (displayState.totalDuration > 0) {
-            trainerMainText.innerHTML = `${displayState.phase}<br><small>${displayState.totalDuration}s</small>`;
-        } else {
-            trainerMainText.textContent = displayState.phase;
-        }
-
-        if (phase === 'INIZIA' || phase.length > 8) {
-            trainerMainText.classList.add('trainer-main-text--small');
-        } else {
-            trainerMainText.classList.remove('trainer-main-text--small');
-        }
-
-        if (currentState === 'announcing') {
-            trainerMainDisplay.classList.add('is-flashing');
-        } else {
-            trainerMainDisplay.classList.remove('is-flashing');
-        }
-        
-        startSessionBtn.style.display = currentState === 'ready' ? 'block' : 'none';
-        const inProgress = currentState !== 'ready' && currentState !== 'idle' && currentState !== 'finished';
-        pauseResumeBtn.style.display = inProgress ? 'block' : 'none';
-        terminateBtn.style.display = inProgress ? 'block' : 'none';
-        
-        const canBeInterrupted = currentState === 'action' || currentState === 'announcing' || currentState === 'paused';
-        pauseResumeBtn.disabled = !canBeInterrupted;
-        terminateBtn.textContent = 'Termina';
-        pauseResumeBtn.textContent = currentState === 'paused' ? 'Riprendi' : 'Pausa';
-      }
-
-      export function initTrainerControls(handlers) {
-          startSessionBtn.addEventListener('click', () => handlers.onConfirmStart());
-          pauseResumeBtn.addEventListener('click', () => handlers.onPauseResume());
-          terminateBtn.addEventListener('click', () => handlers.onTerminate());
-      }
-
-      export function playTick() {
-          // Empty function body to avoid errors if Web Audio API context is complex to manage
-      }
-  - file: src/calendar.js
-    content: |
-      /**
-       * @file calendar.js
-       * Manages the state, rendering, and interactions of the calendar view.
-       */
-      import * as storage from './storage.js';
-      import { openDayModal } from './modal.js';
-      import { startTrainer } from './trainer.js';
-
-      // DOM Elements
-      const calendarGrid = document.getElementById('calendar-grid');
-      const currentWeekRange = document.getElementById('current-week-range');
-      const prevWeekBtn = document.getElementById('prev-week-btn');
-      const nextWeekBtn = document.getElementById('next-week-btn');
-
-      let currentDate = new Date();
-
-      function formatDateKey(date) {
-        return date.toISOString().split('T')[0];
-      }
-
-      function formatWeekRange(start, end) {
-        const startDay = start.getDate();
-        const startMonth = start.toLocaleDateString('it-IT', { month: 'long' });
-        const endDay = end.getDate();
-        const endMonth = end.toLocaleDateString('it-IT', { month: 'long' });
-        const year = start.getFullYear();
-
-        if (startMonth === endMonth) {
-          return `${startDay} - ${endDay} ${startMonth} ${year}`;
-        } else {
-          return `${startDay} ${startMonth} - ${endDay} ${endMonth} ${year}`;
-        }
-      }
-
-      export function renderCalendar(date = currentDate) {
-        const dateForWeek = new Date(date);
-        const dayOfWeek = dateForWeek.getDay();
-        const offsetToMonday = (dayOfWeek === 0) ? 6 : dayOfWeek - 1;
-        dateForWeek.setDate(dateForWeek.getDate() - offsetToMonday);
-        
-        const weekStart = new Date(dateForWeek);
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekStart.getDate() + 6);
-        
-        currentWeekRange.textContent = formatWeekRange(weekStart, weekEnd);
-        const history = storage.getHistory();
-
-        calendarGrid.innerHTML = '';
-        for (let i = 0; i < 7; i++) {
-          const day = new Date(weekStart);
-          day.setDate(weekStart.getDate() + i);
-          const dateKey = formatDateKey(day);
-
-          const dayCell = document.createElement('div');
-          dayCell.className = 'day-cell';
-          dayCell.dataset.date = dateKey;
-
-          const dayName = day.toLocaleDateString('it-IT', { weekday: 'long' });
-          const dayNumber = day.getDate();
-
-          const scheduledExercises = storage.getWorkoutsForDate(dateKey);
-          const hasHistory = history[dateKey] && history[dateKey].length > 0;
-          
-          let summaryText = 'Nessun esercizio';
-          if (scheduledExercises.length > 0) {
-            summaryText = `${scheduledExercises.length} ${scheduledExercises.length > 1 ? 'esercizi' : 'esercizio'}`;
-          }
-          
-          let historyIndicator = '';
-          if(hasHistory) {
-            summaryText = 'Completato';
-            historyIndicator = `<div class="day-history-indicator">✓</div>`;
-          }
-
-          dayCell.innerHTML = `
-            <div class="day-name">${dayName}</div>
-            <div class="day-number">${dayNumber} ${historyIndicator}</div>
-            <div class="day-summary">${summaryText}</div>
-            <button class="btn btn-secondary start-workout-btn" data-date="${dateKey}" ${scheduledExercises.length === 0 ? 'disabled' : ''}>START</button>
-          `;
-
-          calendarGrid.appendChild(dayCell);
-        }
-      }
-
-      export function initCalendar() {
-        prevWeekBtn.addEventListener('click', () => {
-          currentDate.setDate(currentDate.getDate() - 7);
-          renderCalendar(currentDate);
-        });
-
-        nextWeekBtn.addEventListener('click', () => {
-          currentDate.setDate(currentDate.getDate() + 7);
-          renderCalendar(currentDate);
-        });
-
-        calendarGrid.addEventListener('click', (event) => {
-          const target = event.target;
-          const dayCell = target.closest('.day-cell');
-          if (!dayCell) return;
-
-          const dateKey = dayCell.dataset.date;
-          if (target.matches('.start-workout-btn')) {
-            const exercises = storage.getWorkoutsForDate(dateKey);
-            if (exercises.length > 0) {
-              startTrainer(exercises, dateKey);
-            }
-          } else {
-            openDayModal(dateKey);
-          }
-        });
-
-        renderCalendar(currentDate);
-      }
-  - file: src/debriefing.js
-    content: |
-      /**
-       * @file debriefing.js
-       * Handles the display and logic of the post-workout debriefing screen.
-       */
-      import { showView } from './ui.js';
-      import { renderCalendar } from './calendar.js';
-
-      const summaryList = document.getElementById('debriefing-summary');
-      const reportTextArea = document.getElementById('debriefing-text-report');
-      const copyBtn = document.getElementById('copy-report-btn');
-      const returnBtn = document.getElementById('return-to-calendar-btn');
-
-      function getExerciseDetails(exercise) {
-        if (!exercise) return '';
-        if (exercise.type === 'reps') {
-          return `(${exercise.series} × ${exercise.reps} rip., Tempo: ${exercise.tempo.up}-${exercise.tempo.hold}-${exercise.tempo.down})`;
-        }
-        if (exercise.type === 'time') {
-          return `(${exercise.series} × ${exercise.duration}s)`;
-        }
-        return `(${exercise.duration}s)`;
-      }
-
-      function generateTextReport(result) {
-          let report = `Report Allenamento del ${new Date().toLocaleDateString('it-IT')}:\n`;
-          if (result.wasTerminated) {
-              report += "(Allenamento interrotto manualmente)\n\n";
-          } else {
-              report += "(Allenamento completato)\n\n";
-          }
-
-          result.workout.forEach((exercise, index) => {
-              if (result.wasTerminated && index > result.currentExerciseIndex) return;
-              
-              const details = getExerciseDetails(exercise);
-              report += `* ${exercise.name} ${details}:\n`;
-
-              if (!result.wasTerminated || index < result.currentExerciseIndex) {
-                  report += `  - Completato\n`;
-              } else {
-                  if (exercise.type === 'rest') {
-                      report += `  - Eseguito parzialmente\n`;
-                  } else {
-                      const seriesText = `  - Arrivato a ${result.currentSeries} / ${exercise.series} serie`;
-                      const repText = exercise.type === 'reps' && result.currentRep > 0 ? `, ${result.currentRep} rip.` : '';
-                      report += `${seriesText}${repText}\n`;
-                  }
-              }
-          });
-
-          return report;
-      }
-
-      export function showDebriefing(result) {
-          summaryList.innerHTML = '';
-          result.workout.forEach((exercise, index) => {
-              if (result.wasTerminated && index > result.currentExerciseIndex) return;
-              
-              const li = document.createElement('li');
-              li.className = 'modal-list-item';
-              const details = getExerciseDetails(exercise);
-              const name = exercise.type === 'rest' ? `Recupero` : exercise.name;
-
-              li.innerHTML = `
-                <span class="debrief-exercise-name">${name} <small>${details}</small></span>
-                <span class="debrief-status">Completato</span>
-              `;
-              summaryList.appendChild(li);
-          });
-
-          reportTextArea.value = generateTextReport(result);
-          showView('debriefing');
-      }
-
-      export function initDebriefing() {
-          returnBtn.addEventListener('click', () => {
-              showView('calendar');
-              renderCalendar();
-          });
-
-          copyBtn.addEventListener('click', () => {
-              if (navigator.clipboard) {
-                  navigator.clipboard.writeText(reportTextArea.value).then(() => {
-                      copyBtn.textContent = 'Copiato!';
-                      setTimeout(() => (copyBtn.textContent = 'Copia Report'), 2000);
-                  });
-              }
-          });
-      }
-  - file: src/workouts.js
-    content: |
-      /**
-       * @file workouts.js
-       * Contains the master list of all available exercises in the application.
-       */
-
-      export const ALL_EXERCISES = [
-        {
-          id: 'pushup',
-          name: 'Push Up',
-          type: 'reps',
-          series: 3,
-          reps: 10,
-          rest: 60, // seconds
-          tempo: { up: 1, hold: 1, down: 2 }, // seconds
-          description: "Esercizio a corpo libero per pettorali, tricipiti e spalle. Mantenere il corpo in linea retta dalla testa ai talloni."
-        },
-        {
-          id: 'squat',
-          name: 'Squat a corpo libero',
-          type: 'reps',
-          series: 3,
-          reps: 12,
-          rest: 60,
-          tempo: { up: 1, hold: 0, down: 2 },
-          description: "Esercizio fondamentale per gambe e glutei. Scendere come per sedersi su una sedia, mantenendo la schiena dritta."
-        },
-        {
-          id: 'plank',
-          name: 'Plank',
-          type: 'time',
-          series: 1,
-          duration: 45, // seconds
-          rest: 45,
-          description: "Esercizio isometrico per il core. Mantenere una linea retta e contrarre gli addominali per tutta la durata."
-        },
-        {
-          id: 'burpees',
-          name: 'Burpees',
-          type: 'reps',
-          series: 4,
-          reps: 8,
-          rest: 90,
-          tempo: { up: 1, hold: 0, down: 1 },
-          description: "Esercizio total body ad alta intensità. Combina un push-up, uno squat e un salto verticale in un unico movimento fluido."
-        },
-        {
-          id: 'jumping_jacks',
-          name: 'Jumping Jacks',
-          type: 'time',
-          series: 1,
-          duration: 60,
-          rest: 30,
-          description: "Esercizio cardiovascolare classico per riscaldamento o per aumentare la frequenza cardiaca."
-        },
-        {
-          id: 'calf_raises',
-          name: 'Calf Raises',
-          type: 'reps',
-          series: 3,
-          reps: 15,
-          rest: 45,
-          tempo: { up: 1, hold: 1, down: 2 },
-          description: "Esercizio di isolamento per i polpacci. Sollevarsi sulla punta dei piedi, mantenere la contrazione e scendere lentamente."
-        }
-      ];
+      // Le prossime fasi popoleranno questo file per inizializzare
+      // i gestori di eventi e i moduli dell'applicazione.
+commands:
+  - "echo 'Patch applicato. Controlla i nuovi file:'"
+  - "ls -R"
+  - "echo 'Verifica lo stato di git per confermare le modifiche.'"
+  - "git status"
