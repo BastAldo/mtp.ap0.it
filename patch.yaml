@@ -1,227 +1,239 @@
-commit_message: "feat(calendar): Collega la vista al layer dati e mostra sommari workout"
+commit_message: "feat(ui): Implementa sistema di modali generico e interattività calendario"
 rationale: |
-  Questo commit rende la Calendar View "data-driven" come specificato nei documenti di funzionalità e architettura.
+  Questo commit introduce un componente modale riutilizzabile e rende le celle del calendario interattive, come da piano d'azione approvato.
 
-  - È stato implementato il modulo `storage.js` per una reale persistenza dei dati su `localStorage`.
-  - È stato aggiunto un file di dati fittizi (`_mockData.js`) per popolare l'applicazione al primo avvio, facilitando lo sviluppo.
-  - La logica di inizializzazione in `main.js` ora orchestra il caricamento dei dati da `localStorage` e li popola nello store centrale.
-  - La `CalendarView.js` è stata aggiornata per leggere lo stato degli allenamenti e renderizzare dinamicamente il conteggio degli esercizi e il pulsante "START" nelle celle corrispondenti.
+  - È stato aggiunto un contenitore modale (`#modal-container`) in `index.html` e gli stili CSS corrispondenti.
+  - È stato creato un nuovo modulo `src/ui/Modal.js` che gestisce la logica di visualizzazione/chiusura della modale, sottoscrivendosi allo store.
+  - Lo store (`store.js`) ora include lo stato (`isModalOpen`, `modalContext`) e le azioni (`OPEN_MODAL`, `CLOSE_MODAL`) per un controllo centralizzato delle modali.
+  - `main.js` è stato aggiornato per inizializzare il nuovo componente modale.
+  - `CalendarView.js` ora usa la delegazione degli eventi per catturare i click sulle celle dei giorni e invia un'azione per aprire la modale, passando la data selezionata come contesto.
 patches:
-  - file: src/modules/_mockData.js
+  - file: index.html
     content: |
-      // --- Dati di Sviluppo Fittizi ---
-      // Questi dati vengono usati per popolare localStorage al primo avvio.
+      <!DOCTYPE html>
+      <html lang="it">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Mio Trainer Personale</title>
+          <link rel="stylesheet" href="assets/css/style.css">
+      </head>
+      <body>
 
-      // Nota: la data corrente è 30 Giugno 2025.
-      // Questo allenamento è per Martedì 1 Luglio 2025.
-      const MOCK_DATE_KEY = 'workout-2025-07-01';
+          <div id="app-container">
+              <div id="calendar-view" class="view view--active">
+                  </div>
+              <div id="trainer-view" class="view">
+                  <h1>Trainer View</h1>
+              </div>
+              <div id="debriefing-view" class="view">
+                  <h1>Debriefing View</h1>
+              </div>
+          </div>
 
-      export const mockWorkouts = {
-        [MOCK_DATE_KEY]: [
-          {
-            id: 'squat-1',
-            type: 'exercise',
-            exerciseId: 'squat',
-            name: 'Squat',
-            series: 3,
-            reps: 10
-          },
-          {
-            id: 'rest-1',
-            type: 'rest',
-            duration: 90 // secondi
-          },
-          {
-            id: 'pushups-1',
-            type: 'exercise',
-            exerciseId: 'pushups',
-            name: 'Push-ups',
-            series: 3,
-            reps: 12
-          }
-        ]
-      };
-  - file: src/modules/storage.js
+          <div id="modal-container">
+              </div>
+
+          <script src="src/main.js" type="module"></script>
+      </body>
+      </html>
+  - file: assets/css/style.css
     content: |
-      // --- Modulo di Persistenza Dati per localStorage ---
-
-      /**
-       * Carica i dati dal localStorage e li valida.
-       * @param {string} key La chiave da cui caricare.
-       * @returns {object | null} I dati validati o null se non validi/presenti.
-       */
-      export function loadFromStorage(key) {
-        try {
-          const serializedData = localStorage.getItem(key);
-          if (serializedData === null) {
-            return null;
-          }
-          // Futuro: Aggiungere qui la validazione dello schema.
-          return JSON.parse(serializedData);
-        } catch (error) {
-          console.error(`Errore nel caricare dati da localStorage per la chiave "${key}":`, error);
-          return null;
-        }
+      /* --- GLOBAL STYLES & MOBILE FIRST --- */
+      :root {
+          --bg-color: #1a1a1d;
+          --card-color: #2c2c34;
+          --primary-color: #9575cd;
+          --secondary-color: #4db6ac;
+          --text-color: #f4f4f9;
+          --text-color-muted: #aaa;
+          --border-color: #40404a;
       }
-
-      /**
-       * Salva i dati nel localStorage.
-       * @param {string} key La chiave con cui salvare.
-       * @param {object} data I dati da salvare.
-       */
-      export function saveToStorage(key, data) {
-        try {
-          const serializedData = JSON.stringify(data);
-          localStorage.setItem(key, serializedData);
-        } catch (error) {
-          console.error(`Errore nel salvare dati in localStorage per la chiave "${key}":`, error);
-        }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+          background-color: var(--bg-color);
+          color: var(--text-color);
       }
-  - file: src/modules/store.js
-    content: |
-      // --- Centralized State Store (Single Source of Truth) ---
+      #app-container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+      .view { display: none; width: 100%; }
+      .view--active { display: block; }
 
-      function createStore() {
-          let state = {
-              currentView: 'calendar',
-              focusedDate: new Date(),
-              workouts: {}, // Qui verranno memorizzati tutti gli allenamenti caricati
-          };
+      /* --- CALENDAR VIEW STYLES --- */
+      .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+      .calendar-header h2 { font-size: 1.25rem; text-align: center; }
+      .calendar-header button { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: background-color 0.2s; }
+      .calendar-header button:hover { background-color: var(--primary-color); }
+      .calendar-grid { display: grid; grid-template-columns: 1fr; gap: 0.5rem; }
+      .day-cell { background-color: var(--card-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; min-height: 150px; display: flex; flex-direction: column; cursor: pointer; transition: border-color 0.2s; }
+      .day-cell:hover { border-color: var(--primary-color); }
+      .day-cell__header { display: flex; justify-content: space-between; font-weight: bold; color: var(--text-color-muted); text-transform: uppercase; font-size: 0.8rem; pointer-events: none; }
+      .day-cell__body { margin-top: 0.5rem; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; pointer-events: none; }
+      .exercise-count { font-size: 0.9rem; color: var(--secondary-color); }
+      .start-btn { background-color: var(--secondary-color); color: var(--bg-color); border: none; padding: 0.6rem; border-radius: 6px; cursor: pointer; font-weight: bold; text-transform: uppercase; width: 100%; margin-top: 1rem; transition: opacity 0.2s; pointer-events: all !important; /* Permette il click sul bottone */ }
+      .start-btn:hover { opacity: 0.85; }
 
-          const subscribers = new Set();
-
-          function notify() {
-              subscribers.forEach(callback => callback());
-          }
-
-          function dispatch(action) {
-              const oldState = state;
-              switch (action.type) {
-                  case 'CHANGE_VIEW':
-                      state = { ...state, currentView: action.payload };
-                      break;
-
-                  case 'PREV_WEEK': {
-                      const newDate = new Date(state.focusedDate);
-                      newDate.setDate(newDate.getDate() - 7);
-                      state = { ...state, focusedDate: newDate };
-                      break;
-                  }
-
-                  case 'NEXT_WEEK': {
-                      const newDate = new Date(state.focusedDate);
-                      newDate.setDate(newDate.getDate() + 7);
-                      state = { ...state, focusedDate: newDate };
-                      break;
-                  }
-
-                  case 'SET_WORKOUTS':
-                      state = { ...state, workouts: action.payload };
-                      break;
-
-                  default:
-                      console.warn(`Azione non riconosciuta: ${action.type}`);
-                      return;
-              }
-
-              if (state !== oldState) {
-                  console.log(`Action: ${action.type}`, action.payload);
-                  notify();
-              }
-          }
-
-          return {
-              getState: () => ({ ...state }),
-              subscribe: (callback) => {
-                  subscribers.add(callback);
-                  return () => subscribers.delete(callback);
-              },
-              dispatch,
-          };
+      /* --- MODAL STYLES --- */
+      #modal-container {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background-color: rgba(0, 0, 0, 0.7);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 0.3s ease;
       }
+      #modal-container.active {
+          opacity: 1;
+          pointer-events: all;
+      }
+      .modal-content {
+          background-color: var(--card-color);
+          padding: 2rem;
+          border-radius: 8px;
+          border: 1px solid var(--border-color);
+          min-width: 300px;
+          max-width: 90%;
+          transform: scale(0.95);
+          transition: transform 0.3s ease;
+      }
+      #modal-container.active .modal-content {
+          transform: scale(1);
+      }
+      .modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 1rem;
+      }
+      .modal-header h3 { color: var(--primary-color); }
+      .modal-close-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; cursor: pointer; }
 
-      const store = createStore();
-      export default store;
+      /* --- TABLET/DESKTOP OVERRIDES --- */
+      @media (min-width: 768px) {
+          #app-container { padding: 2rem; }
+          .calendar-grid { grid-template-columns: repeat(7, 1fr); gap: 1rem; }
+          .calendar-header h2 { font-size: 1.5rem; }
+          .modal-content { min-width: 500px; max-width: 60%; }
+      }
   - file: src/main.js
     content: |
       import store from './modules/store.js';
       import { init as initCalendarView } from './views/CalendarView.js';
+      import { init as initModal } from './ui/Modal.js';
       import { loadFromStorage, saveToStorage } from './modules/storage.js';
       import { mockWorkouts } from './modules/_mockData.js';
 
       const WORKOUTS_STORAGE_KEY = 'workouts';
 
-      // Cache delle viste per performance
       const views = {
           calendar: document.getElementById('calendar-view'),
           trainer: document.getElementById('trainer-view'),
           debriefing: document.getElementById('debriefing-view'),
       };
 
-      // --- Funzione di Inizializzazione App ---
       function initializeApp() {
         let workouts = loadFromStorage(WORKOUTS_STORAGE_KEY);
-
-        // Se non ci sono dati in localStorage, popola con i dati mock
         if (!workouts) {
-          console.log('Nessun dato trovato in localStorage. Popolamento con dati mock.');
           saveToStorage(WORKOUTS_STORAGE_KEY, mockWorkouts);
           workouts = mockWorkouts;
         }
-
-        // Invia i dati allo store
         store.dispatch({ type: 'SET_WORKOUTS', payload: workouts });
 
-        // Inizializza le viste
         initCalendarView(views.calendar);
-
-        // Aggiungere qui l'inizializzazione di altre viste...
+        initModal(document.getElementById('modal-container'));
       }
 
-      // --- Logica di Cambio Vista ---
       let currentActiveView = views.calendar;
       function handleViewChange() {
-          const state = store.getState();
-          const newActiveViewEl = views[state.currentView];
+        const { currentView } = store.getState();
+        const newActiveViewEl = views[currentView];
 
-          if (currentActiveView !== newActiveViewEl) {
-              currentActiveView.classList.remove('view--active');
-              newActiveViewEl.classList.add('view--active');
-              currentActiveView = newActiveViewEl;
-          }
+        if (currentActiveView !== newActiveViewEl) {
+          currentActiveView.classList.remove('view--active');
+          newActiveViewEl.classList.add('view--active');
+          currentActiveView = newActiveViewEl;
+        }
       }
 
       store.subscribe(handleViewChange);
       initializeApp();
-      console.log('App "Mio Trainer Personale" inizializzata e dati caricati.');
+      console.log('App "Mio Trainer Personale" inizializzata.');
+  - file: src/modules/store.js
+    content: |
+      function createStore() {
+        let state = {
+          currentView: 'calendar',
+          focusedDate: new Date(),
+          workouts: {},
+          isModalOpen: false,
+          modalContext: null, // Es: { type: 'EDIT_WORKOUT', date: '2025-07-01' }
+        };
+
+        const subscribers = new Set();
+        function notify() { subscribers.forEach(callback => callback()); }
+
+        function dispatch(action) {
+          const oldState = state;
+          switch (action.type) {
+            case 'CHANGE_VIEW':
+              state = { ...state, currentView: action.payload };
+              break;
+            case 'PREV_WEEK': {
+              const newDate = new Date(state.focusedDate);
+              newDate.setDate(newDate.getDate() - 7);
+              state = { ...state, focusedDate: newDate };
+              break;
+            }
+            case 'NEXT_WEEK': {
+              const newDate = new Date(state.focusedDate);
+              newDate.setDate(newDate.getDate() + 7);
+              state = { ...state, focusedDate: newDate };
+              break;
+            }
+            case 'SET_WORKOUTS':
+              state = { ...state, workouts: action.payload };
+              break;
+            case 'OPEN_MODAL':
+              state = { ...state, isModalOpen: true, modalContext: action.payload };
+              break;
+            case 'CLOSE_MODAL':
+              state = { ...state, isModalOpen: false, modalContext: null };
+              break;
+            default:
+              console.warn(`Azione non riconosciuta: ${action.type}`);
+              return;
+          }
+          if (state !== oldState) {
+            console.log(`Action: ${action.type}`, action.payload);
+            notify();
+          }
+        }
+        return {
+          getState: () => ({ ...state }),
+          subscribe: (callback) => { subscribers.add(callback); return () => subscribers.delete(callback); },
+          dispatch,
+        };
+      }
+      const store = createStore();
+      export default store;
   - file: src/views/CalendarView.js
     content: |
       import store from '../modules/store.js';
 
-      // --- UTILITIES ---
-      function getWeekStartDate(date) {
-        const d = new Date(date);
-        const day = d.getDay();
-        const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-        return new Date(d.setDate(diff));
-      }
+      function getWeekStartDate(date) { /* ... (unchanged) ... */ }
+      function formatShortDate(date) { /* ... (unchanged) ... */ }
+      function toISODateString(date) { /* ... (unchanged) ... */ }
+      // --- UTILITIES (omesse per brevità, sono invariate) ---
+      function getWeekStartDate(date) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(d.setDate(diff)); }
+      function formatShortDate(date) { return date.toLocaleDateString('it-IT', { day: 'numeric', month: 'long' }); }
+      function toISODateString(date) { return date.getFullYear() + '-' + ('0' + (date.getMonth() + 1)).slice(-2) + '-' + ('0' + date.getDate()).slice(-2); }
 
-      function formatShortDate(date) {
-        return date.toLocaleDateString('it-IT', { day: 'numeric', month: 'long' });
-      }
-
-      /**
-       * Formatta una data in una stringa YYYY-MM-DD.
-       * @param {Date} date
-       * @returns {string}
-       */
-      function toISODateString(date) {
-          return date.getFullYear() + '-' +
-                 ('0' + (date.getMonth() + 1)).slice(-2) + '-' +
-                 ('0' + date.getDate()).slice(-2);
-      }
-
-      // --- MODULE ---
       export function init(element) {
         element.innerHTML = `
           <header class="calendar-header">
@@ -240,188 +252,92 @@ patches:
         prevBtn.addEventListener('click', () => store.dispatch({ type: 'PREV_WEEK' }));
         nextBtn.addEventListener('click', () => store.dispatch({ type: 'NEXT_WEEK' }));
 
+        // Delegazione degli eventi
+        gridContainer.addEventListener('click', (event) => {
+          const dayCell = event.target.closest('.day-cell');
+          if (dayCell && event.target.tagName !== 'BUTTON') {
+            const date = dayCell.dataset.date;
+            store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'EDIT_WORKOUT', date } });
+          }
+        });
+
         function render() {
           const { focusedDate, workouts } = store.getState();
           const weekStart = getWeekStartDate(focusedDate);
-          const weekEnd = new Date(weekStart);
-          weekEnd.setDate(weekEnd.getDate() + 6);
-
+          const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6);
           weekTitle.textContent = `${formatShortDate(weekStart)} - ${formatShortDate(weekEnd)}`;
           gridContainer.innerHTML = '';
 
           for (let i = 0; i < 7; i++) {
             const dayDate = new Date(weekStart);
             dayDate.setDate(dayDate.getDate() + i);
-            const dateKey = `workout-${toISODateString(dayDate)}`;
+            const isoDate = toISODateString(dayDate);
+            const dateKey = `workout-${isoDate}`;
             const workoutForDay = workouts[dateKey];
 
             const dayCell = document.createElement('div');
             dayCell.className = 'day-cell';
+            dayCell.dataset.date = isoDate; // Aggiungiamo la data come data-attribute
 
             let bodyContent = '';
-            if (workoutForDay && workoutForDay.length > 0) {
+            if (workoutForDay?.length > 0) {
               const exerciseCount = workoutForDay.filter(item => item.type === 'exercise').length;
-              bodyContent = `
-                <div class="exercise-count">${exerciseCount} esercizi</div>
-                <button class="start-btn">START</button>
-              `;
+              bodyContent = `<div class="exercise-count">${exerciseCount} esercizi</div><button class="start-btn">START</button>`;
             }
-
-            dayCell.innerHTML = `
-              <div class="day-cell__header">
-                <span>${dayDate.toLocaleDateString('it-IT', { weekday: 'long' })}</span>
-                <span>${dayDate.getDate()}</span>
-              </div>
-              <div class="day-cell__body">
-                ${bodyContent}
-              </div>
-            `;
+            dayCell.innerHTML = `<div class="day-cell__header"><span>${dayDate.toLocaleDateString('it-IT', { weekday: 'long' })}</span><span>${dayDate.getDate()}</span></div><div class="day-cell__body">${bodyContent}</div>`;
             gridContainer.appendChild(dayCell);
           }
         }
         store.subscribe(render);
         render();
       }
-  - file: assets/css/style.css
+  - file: src/ui/Modal.js
     content: |
-      /* --- GLOBAL STYLES & MOBILE FIRST --- */
+      import store from '../modules/store.js';
 
-      :root {
-          --bg-color: #1a1a1d;
-          --card-color: #2c2c34;
-          --primary-color: #9575cd;
-          --secondary-color: #4db6ac;
-          --text-color: #f4f4f9;
-          --text-color-muted: #aaa;
-          --border-color: #40404a;
-      }
+      export function init(element) {
+          // Gestione click per chiudere la modale
+          element.addEventListener('click', (event) => {
+              // Chiude se si clicca sull'overlay (l'elemento stesso)
+              if (event.target === element) {
+                  store.dispatch({ type: 'CLOSE_MODAL' });
+              }
+          });
 
-      * {
-          box-sizing: border-box;
-          margin: 0;
-          padding: 0;
-      }
+          function render() {
+              const { isModalOpen, modalContext } = store.getState();
 
-      body {
-          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-          background-color: var(--bg-color);
-          color: var(--text-color);
-      }
+              if (isModalOpen) {
+                  element.classList.add('active');
+                  let content = '';
+                  // Renderizza il contenuto in base al contesto
+                  if (modalContext?.type === 'EDIT_WORKOUT') {
+                      content = `
+                          <div class="modal-header">
+                              <h3>Editor Workout - ${modalContext.date}</h3>
+                              <button class="modal-close-btn">&times;</button>
+                          </div>
+                          <div class="modal-body">
+                              <p>Contenuto dell'editor per il giorno ${modalContext.date} verrà qui.</p>
+                          </div>
+                      `;
+                  }
+                  element.innerHTML = `<div class="modal-content">${content}</div>`;
 
-      #app-container {
-          max-width: 1200px;
-          margin: 0 auto;
-          padding: 1rem;
-      }
-
-      .view {
-          display: none;
-          width: 100%;
-      }
-
-      .view--active {
-          display: block;
-      }
-
-      /* --- CALENDAR VIEW STYLES --- */
-
-      .calendar-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 1.5rem;
-      }
-
-      .calendar-header h2 {
-          font-size: 1.25rem;
-          text-align: center;
-      }
-
-      .calendar-header button {
-          background-color: var(--card-color);
-          color: var(--text-color);
-          border: 1px solid var(--border-color);
-          padding: 0.5rem 1rem;
-          border-radius: 6px;
-          cursor: pointer;
-          transition: background-color 0.2s;
-      }
-
-      .calendar-header button:hover {
-          background-color: var(--primary-color);
-      }
-
-      .calendar-grid {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 0.5rem;
-      }
-
-      .day-cell {
-          background-color: var(--card-color);
-          border: 1px solid var(--border-color);
-          border-radius: 8px;
-          padding: 1rem;
-          min-height: 150px;
-          display: flex;
-          flex-direction: column;
-      }
-
-      .day-cell__header {
-          display: flex;
-          justify-content: space-between;
-          font-weight: bold;
-          color: var(--text-color-muted);
-          text-transform: uppercase;
-          font-size: 0.8rem;
-      }
-
-      .day-cell__body {
-          margin-top: 0.5rem;
-          flex-grow: 1;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-          align-items: flex-start;
-      }
-
-      .exercise-count {
-        font-size: 0.9rem;
-        color: var(--secondary-color);
-      }
-
-      .start-btn {
-        background-color: var(--secondary-color);
-        color: var(--bg-color);
-        border: none;
-        padding: 0.6rem;
-        border-radius: 6px;
-        cursor: pointer;
-        font-weight: bold;
-        text-transform: uppercase;
-        width: 100%;
-        margin-top: 1rem; /* Spazio tra count e bottone */
-        transition: opacity 0.2s;
-      }
-
-      .start-btn:hover {
-        opacity: 0.85;
-      }
-
-
-      /* --- TABLET/DESKTOP OVERRIDES --- */
-      @media (min-width: 768px) {
-          #app-container {
-              padding: 2rem;
+                  // Aggiunge l'event listener al pulsante di chiusura appena creato
+                  const closeButton = element.querySelector('.modal-close-btn');
+                  if (closeButton) {
+                      closeButton.addEventListener('click', () => {
+                          store.dispatch({ type: 'CLOSE_MODAL' });
+                      });
+                  }
+              } else {
+                  element.classList.remove('active');
+                  element.innerHTML = ''; // Rimuove il contenuto quando la modale è chiusa
+              }
           }
 
-          .calendar-grid {
-              grid-template-columns: repeat(7, 1fr);
-              gap: 1rem;
-          }
-
-          .calendar-header h2 {
-            font-size: 1.5rem;
-          }
+          store.subscribe(render);
+          render();
       }
 commands: []
