@@ -1,88 +1,186 @@
-commit_message: "fix(calendar): Rimuove la dichiarazione duplicata di funzioni"
+commit_message: "feat(editor): Popola la modale con la vista dei dati del workout"
 rationale: |
-  Questo commit corregge un SyntaxError nel file `src/views/CalendarView.js`.
-  L'errore era causato dalla dichiarazione duplicata delle funzioni di utilità (`getWeekStartDate`, `formatShortDate`, `toISODateString`), un problema introdotto nella patch precedente.
-  Questa correzione rimuove le dichiarazioni ridondanti, risolvendo l'errore e ripristinando la piena funzionalità dell'applicazione.
+  Questo commit implementa il passo successivo nella creazione del "Workout Editor", sostituendo il contenuto placeholder della modale con una vista in sola lettura degli esercizi e dei riposi programmati.
+
+  - È stato creato un nuovo modulo di vista `src/views/WorkoutEditorView.js`, la cui unica responsabilità è renderizzare la lista degli item di un workout.
+  - Il modulo generico `src/ui/Modal.js` è stato refattorizzato per agire da controller, delegando la creazione del contenuto al modulo di vista appropriato in base al contesto. Questo migliora la separazione delle responsabilità e la scalabilità.
+  - Sono stati aggiunti gli stili CSS per formattare la lista degli item all'interno della modale, migliorando la leggibilità.
 patches:
-  - file: src/views/CalendarView.js
+  - file: src/ui/Modal.js
+    content: |
+      import store from '../modules/store.js';
+      import { render as renderWorkoutEditor } from '../views/WorkoutEditorView.js';
+
+      export function init(element) {
+          element.addEventListener('click', (event) => {
+              if (event.target === element) {
+                  store.dispatch({ type: 'CLOSE_MODAL' });
+              }
+          });
+
+          function render() {
+              const { isModalOpen, modalContext } = store.getState();
+
+              if (isModalOpen) {
+                  element.classList.add('active');
+                  let headerContent = '';
+                  let bodyContent = '';
+
+                  switch (modalContext?.type) {
+                      case 'EDIT_WORKOUT':
+                          headerContent = `<h3>Editor Workout - ${modalContext.date}</h3>`;
+                          bodyContent = renderWorkoutEditor(modalContext);
+                          break;
+                      default:
+                          headerContent = '<h3>Attenzione</h3>';
+                          bodyContent = '<p>Contenuto della modale non specificato.</p>';
+                  }
+
+                  element.innerHTML = `
+                      <div class="modal-content">
+                          <div class="modal-header">
+                              ${headerContent}
+                              <button class="modal-close-btn">&times;</button>
+                          </div>
+                          <div class="modal-body">
+                              ${bodyContent}
+                          </div>
+                      </div>
+                  `;
+
+                  const closeButton = element.querySelector('.modal-close-btn');
+                  if (closeButton) {
+                      closeButton.addEventListener('click', () => {
+                          store.dispatch({ type: 'CLOSE_MODAL' });
+                      });
+                  }
+              } else {
+                  element.classList.remove('active');
+                  element.innerHTML = '';
+              }
+          }
+
+          store.subscribe(render);
+          render();
+      }
+  - file: src/views/WorkoutEditorView.js
     content: |
       import store from '../modules/store.js';
 
-      // --- UTILITIES ---
-      function getWeekStartDate(date) {
-          const d = new Date(date);
-          const day = d.getDay(); // Domenica = 0, Lunedì = 1, ...
-          const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adegua per la domenica
-          return new Date(d.setDate(diff));
-      }
+      /**
+       * Renderizza il contenuto per la modale dell'editor di workout.
+       * @param {object} context - Il contesto della modale, es. { type: 'EDIT_WORKOUT', date: 'YYYY-MM-DD' }
+       * @returns {string} La stringa HTML per il corpo della modale.
+       */
+      export function render(context) {
+          const { workouts } = store.getState();
+          const dateKey = `workout-${context.date}`;
+          const workoutItems = workouts[dateKey];
 
-      function formatShortDate(date) {
-        return date.toLocaleDateString('it-IT', { day: 'numeric', month: 'long' });
-      }
-
-      function toISODateString(date) {
-          return date.getFullYear() + '-' +
-                 ('0' + (date.getMonth() + 1)).slice(-2) + '-' +
-                 ('0' + date.getDate()).slice(-2);
-      }
-
-      // --- MODULE ---
-      export function init(element) {
-        element.innerHTML = `
-          <header class="calendar-header">
-            <button id="prev-week-btn">&lt; Prev</button>
-            <h2 id="week-title"></h2>
-            <button id="next-week-btn">Next &gt;</button>
-          </header>
-          <div class="calendar-grid" id="calendar-grid-container"></div>
-        `;
-
-        const prevBtn = element.querySelector('#prev-week-btn');
-        const nextBtn = element.querySelector('#next-week-btn');
-        const weekTitle = element.querySelector('#week-title');
-        const gridContainer = element.querySelector('#calendar-grid-container');
-
-        prevBtn.addEventListener('click', () => store.dispatch({ type: 'PREV_WEEK' }));
-        nextBtn.addEventListener('click', () => store.dispatch({ type: 'NEXT_WEEK' }));
-
-        // Delegazione degli eventi
-        gridContainer.addEventListener('click', (event) => {
-          const dayCell = event.target.closest('.day-cell');
-          // Assicurati che il click non sia sul pulsante START
-          if (dayCell && event.target.tagName !== 'BUTTON') {
-            const date = dayCell.dataset.date;
-            store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'EDIT_WORKOUT', date } });
+          if (!workoutItems || workoutItems.length === 0) {
+              return '<p>Nessun allenamento programmato per questo giorno.</p>';
           }
-        });
 
-        function render() {
-          const { focusedDate, workouts } = store.getState();
-          const weekStart = getWeekStartDate(focusedDate);
-          const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6);
-          weekTitle.textContent = `${formatShortDate(weekStart)} - ${formatShortDate(weekEnd)}`;
-          gridContainer.innerHTML = '';
+          const itemsHtml = workoutItems.map(item => {
+              if (item.type === 'exercise') {
+                  return `
+                      <li class="workout-item workout-item--exercise">
+                          <span class="item-name">${item.name}</span>
+                          <span class="item-details">${item.series}x${item.reps}</span>
+                      </li>
+                  `;
+              }
+              if (item.type === 'rest') {
+                  return `
+                      <li class="workout-item workout-item--rest">
+                          <span class="item-name">Riposo</span>
+                          <span class="item-details">${item.duration}s</span>
+                      </li>
+                  `;
+              }
+              return '';
+          }).join('');
 
-          for (let i = 0; i < 7; i++) {
-            const dayDate = new Date(weekStart);
-            dayDate.setDate(dayDate.getDate() + i);
-            const isoDate = toISODateString(dayDate);
-            const dateKey = `workout-${isoDate}`;
-            const workoutForDay = workouts[dateKey];
+          return `<ul class="workout-item-list">${itemsHtml}</ul>`;
+      }
+  - file: assets/css/style.css
+    content: |
+      /* --- GLOBAL STYLES & MOBILE FIRST --- */
+      :root {
+          --bg-color: #1a1a1d;
+          --card-color: #2c2c34;
+          --primary-color: #9575cd;
+          --secondary-color: #4db6ac;
+          --text-color: #f4f4f9;
+          --text-color-muted: #aaa;
+          --border-color: #40404a;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+          background-color: var(--bg-color);
+          color: var(--text-color);
+      }
+      #app-container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+      .view { display: none; width: 100%; }
+      .view--active { display: block; }
 
-            const dayCell = document.createElement('div');
-            dayCell.className = 'day-cell';
-            dayCell.dataset.date = isoDate; // Aggiungiamo la data come data-attribute
+      /* --- CALENDAR VIEW STYLES --- */
+      .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+      .calendar-header h2 { font-size: 1.25rem; text-align: center; }
+      .calendar-header button { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: background-color 0.2s; }
+      .calendar-header button:hover { background-color: var(--primary-color); }
+      .calendar-grid { display: grid; grid-template-columns: 1fr; gap: 0.5rem; }
+      .day-cell { background-color: var(--card-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; min-height: 150px; display: flex; flex-direction: column; cursor: pointer; transition: border-color 0.2s; }
+      .day-cell:hover { border-color: var(--primary-color); }
+      .day-cell__header { display: flex; justify-content: space-between; font-weight: bold; color: var(--text-color-muted); text-transform: uppercase; font-size: 0.8rem; pointer-events: none; }
+      .day-cell__body { margin-top: 0.5rem; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; pointer-events: none; }
+      .exercise-count { font-size: 0.9rem; color: var(--secondary-color); }
+      .start-btn { background-color: var(--secondary-color); color: var(--bg-color); border: none; padding: 0.6rem; border-radius: 6px; cursor: pointer; font-weight: bold; text-transform: uppercase; width: 100%; margin-top: 1rem; transition: opacity 0.2s; pointer-events: all !important; }
+      .start-btn:hover { opacity: 0.85; }
 
-            let bodyContent = '';
-            if (workoutForDay?.length > 0) {
-              const exerciseCount = workoutForDay.filter(item => item.type === 'exercise').length;
-              bodyContent = `<div class="exercise-count">${exerciseCount} esercizi</div><button class="start-btn">START</button>`;
-            }
-            dayCell.innerHTML = `<div class="day-cell__header"><span>${dayDate.toLocaleDateString('it-IT', { weekday: 'long' })}</span><span>${dayDate.getDate()}</span></div><div class="day-cell__body">${bodyContent}</div>`;
-            gridContainer.appendChild(dayCell);
-          }
-        }
-        store.subscribe(render);
-        render();
+      /* --- MODAL STYLES --- */
+      #modal-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; z-index: 1000; }
+      #modal-container.active { opacity: 1; pointer-events: all; }
+      .modal-content { background-color: var(--card-color); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color); min-width: 300px; max-width: 90%; transform: scale(0.95); transition: transform 0.3s ease; }
+      #modal-container.active .modal-content { transform: scale(1); }
+      .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; }
+      .modal-header h3 { color: var(--primary-color); }
+      .modal-close-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; cursor: pointer; }
+
+      /* --- WORKOUT EDITOR STYLES --- */
+      .workout-item-list {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+      }
+      .workout-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 1rem 0.5rem;
+          border-bottom: 1px solid var(--border-color);
+      }
+      .workout-item:last-child {
+          border-bottom: none;
+      }
+      .workout-item .item-name {
+          font-weight: bold;
+      }
+      .workout-item--rest .item-name {
+          color: var(--text-color-muted);
+          font-style: italic;
+      }
+      .workout-item .item-details {
+          color: var(--secondary-color);
+      }
+
+
+      /* --- TABLET/DESKTOP OVERRIDES --- */
+      @media (min-width: 768px) {
+          #app-container { padding: 2rem; }
+          .calendar-grid { grid-template-columns: repeat(7, 1fr); gap: 1rem; }
+          .calendar-header h2 { font-size: 1.5rem; }
+          .modal-content { min-width: 500px; max-width: 60%; padding: 2rem; }
       }
 commands: []

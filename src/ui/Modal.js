@@ -1,9 +1,8 @@
 import store from '../modules/store.js';
+import { render as renderWorkoutEditor } from '../views/WorkoutEditorView.js';
 
 export function init(element) {
-    // Gestione click per chiudere la modale
     element.addEventListener('click', (event) => {
-        // Chiude se si clicca sull'overlay (l'elemento stesso)
         if (event.target === element) {
             store.dispatch({ type: 'CLOSE_MODAL' });
         }
@@ -14,22 +13,31 @@ export function init(element) {
 
         if (isModalOpen) {
             element.classList.add('active');
-            let content = '';
-            // Renderizza il contenuto in base al contesto
-            if (modalContext?.type === 'EDIT_WORKOUT') {
-                content = `
+            let headerContent = '';
+            let bodyContent = '';
+
+            switch (modalContext?.type) {
+                case 'EDIT_WORKOUT':
+                    headerContent = `<h3>Editor Workout - ${modalContext.date}</h3>`;
+                    bodyContent = renderWorkoutEditor(modalContext);
+                    break;
+                default:
+                    headerContent = '<h3>Attenzione</h3>';
+                    bodyContent = '<p>Contenuto della modale non specificato.</p>';
+            }
+
+            element.innerHTML = `
+                <div class="modal-content">
                     <div class="modal-header">
-                        <h3>Editor Workout - ${modalContext.date}</h3>
+                        ${headerContent}
                         <button class="modal-close-btn">&times;</button>
                     </div>
                     <div class="modal-body">
-                        <p>Contenuto dell'editor per il giorno ${modalContext.date} verrà qui.</p>
+                        ${bodyContent}
                     </div>
-                `;
-            }
-            element.innerHTML = `<div class="modal-content">${content}</div>`;
+                </div>
+            `;
 
-            // Aggiunge l'event listener al pulsante di chiusura appena creato
             const closeButton = element.querySelector('.modal-close-btn');
             if (closeButton) {
                 closeButton.addEventListener('click', () => {
@@ -38,7 +46,7 @@ export function init(element) {
             }
         } else {
             element.classList.remove('active');
-            element.innerHTML = ''; // Rimuove il contenuto quando la modale è chiusa
+            element.innerHTML = '';
         }
     }
 
