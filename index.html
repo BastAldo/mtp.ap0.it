@@ -3,58 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mio Trainer Personale</title>
+    <title>MTP Advanced Programming</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:ital,wght@0,300;0,400;0,700;1,400&display=swap" rel="stylesheet">
+    <link rel="manifest" href="manifest.json">
 </head>
 <body>
-
-    <div id="app-container">
-
-        <section id="calendar-view" class="view">
-            </section>
-
-        <section id="trainer-view" class="view">
-            <h2 id="trainer-exercise-name">--</h2>
-            <p id="trainer-series-counter" class="trainer-subtitle">--</p>
-
-            <div class="progress-ring-container">
-                <svg id="progress-ring" class="progress-ring" width="300" height="300">
-                    <circle class="progress-ring__track" stroke-width="15" fill="transparent" r="140" cx="150" cy="150"/>
-                    <circle id="progress-ring-bar" class="progress-ring__bar" stroke-width="15" fill="transparent" r="140" cx="150" cy="150"/>
-                </svg>
-                <div id="trainer-display" class="trainer-display">
-                    <div id="trainer-display-countdown" style="display: none;">
-                        <div id="trainer-countdown-number">3</div>
-                        <div id="trainer-phase-label">UP</div>
-                    </div>
-                    <div id="trainer-display-announcement" class="is-flashing">READY</div>
-                </div>
+    <div id="app">
+        <div id="config-view">
+            <h1>Workout Configurator</h1>
+            <div class="exercise-list-container">
+                <ul id="exercises-list">
+                    </ul>
             </div>
-            
-            <p id="trainer-exercise-description" class="trainer-subtitle">--</p>
-
-            <div id="trainer-controls" class="trainer-controls">
-                <button class="btn btn-primary" data-action="start-series">Inizia Serie</button>
-                <button class="btn" data-action="pause" style="display: none;">Pausa</button>
-                <button class="btn btn-secondary" data-action="resume" style="display: none;">Riprendi</button>
-                <button class="btn btn-danger" data-action="stop">Termina Allenamento</button>
+            <div class="config-actions">
+              <button id="start-training-button">Start Training</button>
+              <p>Seleziona gli esercizi da includere nell'allenamento.</p>
             </div>
-        </section>
+        </div>
 
-        <section id="debriefing-view" class="view">
-            <h1>Debriefing Sessione</h1>
-            </section>
-
+        <div id="trainer-view" style="display: none;">
+            <div class="trainer-header">
+              <h2 id="exercise-name">Exercise Name</h2>
+              <p id="series-counter">Series 1 / 3</p>
+            </div>
+            <div class="timer-container">
+                <p id="timer">00</p>
+                <p id="status-message">Prepare</p>
+            </div>
+            <div class="trainer-controls">
+                <button id="pause-button">Pause</button>
+                <button id="resume-button" style="display: none;">Resume</button>
+                <button id="next-exercise-button" style="display: none;">Next Exercise</button>
+            </div>
+        </div>
     </div>
 
-    <div id="modal-overlay" class="modal-overlay">
-        <div id="modal-content" class="modal-content">
-            </div>
-    </div>
-
+    <script src="src/storage.js"></script>
     <script type="module" src="src/main.js"></script>
 </body>
 </html>

@@ -1,196 +1,147 @@
 /**
  * @file trainer.js
- *
- * Contiene la macchina a stati e tutta la logica di business
- * per una sessione di allenamento. È completamente disaccoppiato dal DOM.
+ * Contains the entire state machine logic for the training session.
+ * It is completely decoupled from the DOM.
  */
 import * as ui from './ui.js';
-import { EXERCISES } from './config.js';
-import { playTick } from './utils.js';
 
-let state = {};
+const PREPARATION_TIME = 5;
 
-function resetState() {
-    if (state.intervalId) clearInterval(state.intervalId);
-    state = {
-        workoutPlan: [],
-        currentExerciseIndex: 0,
-        currentSeries: 1,
-        currentState: 'idle', // idle, ready, announcing, preparing, action, paused, rest, finished
-        pausedState: null, // Salva lo stato prima della pausa
-        countdown: 0,
-        countdownDuration: 0,
-        intervalId: null,
-        phase: '', // 'up', 'hold', 'down', 'rest', 'prepare'
-        repCount: 0,
-        progress: 1,
-    };
+// Application states
+const State = {
+    IDLE: 'IDLE',
+    PREPARING: 'PREPARING',
+    WORKING: 'WORKING',
+    RESTING: 'RESTING',
+    PAUSED: 'PAUSED',
+    EXERCISE_COMPLETED: 'EXERCISE_COMPLETED',
+    WORKOUT_COMPLETED: 'WORKOUT_COMPLETED',
+};
+
+let currentState = State.IDLE;
+let pausedState = null;
+
+let exercises = [];
+let currentExerciseIndex = 0;
+let currentSeries = 1;
+let countdown = 0;
+let intervalId = null;
+
+function getCurrentExercise() {
+    return exercises[currentExerciseIndex];
 }
 
-function setState(newState, data = {}) {
-    state.currentState = newState;
-    // Esegui azioni all'ingresso del nuovo stato
-    switch (newState) {
-        case 'idle':
-            resetState();
+function tick() {
+    countdown--;
+    updateUI();
+
+    if (countdown <= 0) {
+        transitionToNextState();
+    }
+}
+
+function transitionToNextState() {
+    const exercise = getCurrentExercise();
+    switch (currentState) {
+        case State.PREPARING:
+            currentState = State.WORKING;
+            countdown = exercise.duration;
             break;
-        case 'ready':
-            state.currentExercise = state.workoutPlan[state.currentExerciseIndex];
-            if (state.currentSeries === 1) {
-                state.currentSeries = 1;
-            }
-            ui.updateTrainerUI(state);
-            break;
-        case 'announcing':
-            state.phase = data.phase;
-            ui.updateTrainerUI(state);
-            playTick();
-            setTimeout(() => setState(data.nextState, data.nextStateData), 750);
-            break;
-        case 'preparing':
-            state.phase = 'prepare';
-            runCountdown(3, 'action');
-            break;
-        case 'action':
-            runActionPhase();
-            break;
-        case 'rest':
-            state.phase = 'rest';
-            runCountdown(state.currentExercise.rest, 'readyForNext');
-            break;
-        case 'paused':
-            clearInterval(state.intervalId);
-            ui.updateTrainerUI(state);
-            break;
-        case 'readyForNext':
-            if (state.currentSeries < state.currentExercise.series) {
-                state.currentSeries++;
-                setState('announcing', { phase: 'ready', nextState: 'ready' });
-            } else if (state.currentExerciseIndex < state.workoutPlan.length - 1) {
-                state.currentExerciseIndex++;
-                state.currentSeries = 1;
-                setState('announcing', { phase: 'ready', nextState: 'ready' });
+
+        case State.WORKING:
+            if (currentSeries < exercise.series) {
+                currentState = State.RESTING;
+                countdown = exercise.rest;
+                currentSeries++;
             } else {
-                setState('finished');
+                // Exercise finished
+                clearInterval(intervalId);
+                intervalId = null;
+                currentState = State.EXERCISE_COMPLETED;
             }
             break;
-        case 'finished':
-            // Per ora, torna al calendario. In futuro andrà al debriefing.
-            alert("Allenamento completato!");
-            ui.showView('calendar-view');
-            resetState();
+
+        case State.RESTING:
+            currentState = State.WORKING;
+            countdown = exercise.duration;
             break;
     }
+    updateUI();
 }
 
-function runCountdown(duration, nextState, nextStateData = {}) {
-    state.countdown = duration;
-    state.countdownDuration = duration;
-    // Calcolo corretto per riempire, non svuotare
-    state.progress = (state.countdownDuration - state.countdown) / state.countdownDuration;
+function updateUI() {
+    const exercise = getCurrentExercise();
+    const isPaused = currentState === State.PAUSED;
 
-    ui.updateTrainerUI(state);
-    if (duration > 0) playTick();
+    let statusMessage = currentState;
+    if(currentState === State.PREPARING) statusMessage = `Get Ready: ${exercise.name}`;
+    if(currentState === State.WORKING) statusMessage = 'Work!';
+    if(currentState === State.RESTING) statusMessage = 'Rest';
+    if(currentState === State.PAUSED) statusMessage = 'Paused';
+    if(currentState === State.EXERCISE_COMPLETED) statusMessage = `Exercise '${exercise.name}' Complete!`;
+    if(currentState === State.WORKOUT_COMPLETED) statusMessage = `Workout Complete!`;
 
-    state.intervalId = setInterval(() => {
-        state.countdown--;
-        // Calcolo corretto per riempire, non svuotare
-        state.progress = (state.countdownDuration - state.countdown) / state.countdownDuration;
-        ui.updateTrainerUI(state);
-        if (state.countdown > 0) playTick();
 
-        if (state.countdown <= 0) {
-            clearInterval(state.intervalId);
-            setState(nextState, nextStateData);
-        }
-    }, 1000);
+    ui.updateTrainerUI({
+        exerciseName: exercise.name,
+        currentSeries: currentSeries,
+        totalSeries: exercise.series,
+        time: countdown,
+        statusMessage: statusMessage,
+        isLastExercise: currentExerciseIndex >= exercises.length - 1,
+        isExerciseCompleted: currentState === State.EXERCISE_COMPLETED,
+        isWorkoutCompleted: currentState === State.WORKOUT_COMPLETED,
+    });
+    ui.togglePause(isPaused);
 }
 
-function runActionPhase() {
-    const exercise = state.currentExercise;
-    if (exercise.type === 'time') {
-        state.phase = 'action';
-        runCountdown(exercise.duration, 'rest');
-    } else if (exercise.type === 'reps') {
-        state.repCount = 0;
-        runRep();
-    }
+function startInterval() {
+    if (intervalId) clearInterval(intervalId);
+    intervalId = setInterval(tick, 1000);
 }
 
-function runRep() {
-    const { reps } = state.currentExercise;
-    if (state.repCount >= reps) {
-        setState('rest');
-        return;
-    }
-    state.repCount++;
-    setState('announcing', { phase: 'up', nextState: 'action.rep.up' });
-}
+// --- Public API ---
 
-function runRepPhase(phase) {
-    const { tempo } = state.currentExercise;
-    state.phase = phase;
-    const nextStates = { 'up': 'action.rep.hold', 'hold': 'action.rep.down', 'down': null };
-    runCountdown(tempo[phase], 'action.rep.transition', { next: nextStates[phase] });
-}
+export function startTrainer(exerciseConfigs) {
+    exercises = exerciseConfigs;
+    currentExerciseIndex = 0;
+    currentSeries = 1;
+    currentState = State.PREPARING;
+    countdown = PREPARATION_TIME;
 
-// Entry points dall'esterno
-export function start(exerciseIds) {
-    resetState();
-    state.workoutPlan = exerciseIds.map(id => EXERCISES.find(e => e.id === id));
-    if (state.workoutPlan.length > 0) {
-        setState('ready');
-    }
-}
-
-export function startSeries() {
-    if (state.currentState !== 'ready') return;
-    setState('announcing', { phase: 'prepare', nextState: 'preparing' });
+    ui.showView('trainer');
+    updateUI();
+    startInterval();
 }
 
 export function pause() {
-    if (!['action', 'rest', 'preparing'].includes(state.currentState) && !state.currentState.startsWith('action.rep')) return;
-    state.pausedState = state.currentState; // Salva lo stato esatto
-    setState('paused');
+    if (currentState !== State.WORKING && currentState !== State.RESTING && currentState !== State.PREPARING) return;
+    clearInterval(intervalId);
+    pausedState = currentState;
+    currentState = State.PAUSED;
+    updateUI();
 }
 
 export function resume() {
-    if (state.currentState !== 'paused') return;
-    // Ripristina lo stato esatto che era stato messo in pausa
-    const stateToResume = state.pausedState; 
-    setState(stateToResume);
+    if (currentState !== State.PAUSED) return;
+    currentState = pausedState;
+    pausedState = null;
+    updateUI();
+    startInterval();
 }
 
-export function stop() {
-    if (confirm("Sei sicuro di voler terminare l'allenamento?")) {
-        setState('finished');
-    }
-}
+export function nextExercise() {
+  if (currentState !== State.EXERCISE_COMPLETED) return;
 
-// Mini-stati per la logica delle ripetizioni
-function setRepState(newState, data) {
-     switch(newState) {
-          case 'action.rep.up':
-          case 'action.rep.down':
-          case 'action.rep.hold':
-             runRepPhase(newState.split('.').pop());
-             break;
-          case 'action.rep.transition':
-              if (data.next) {
-                  setState('announcing', { phase: data.next.split('.').pop(), nextState: data.next });
-              } else {
-                  runRep(); // Prossima ripetizione
-              }
-              break;
-     }
-}
-
-// Intercetta la chiamata a setState per gestire gli stati complessi
-const originalSetState = setState;
-setState = (newState, data = {}) => {
-    if (newState.startsWith('action.rep')) {
-        setRepState(newState, data);
-    } else {
-        originalSetState(newState, data);
-    }
+  if (currentExerciseIndex < exercises.length - 1) {
+      currentExerciseIndex++;
+      currentSeries = 1;
+      currentState = State.PREPARING;
+      countdown = PREPARATION_TIME;
+      updateUI();
+      startInterval();
+  } else {
+      currentState = State.WORKOUT_COMPLETED;
+      updateUI();
+  }
 }
