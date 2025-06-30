@@ -4,6 +4,7 @@
  */
 
 const EXERCISES_KEY = 'workout_exercises';
+const WORKOUT_HISTORY_KEY = 'workout_history';
 
 // Initial default data
 const defaultExercises = [
@@ -20,6 +21,9 @@ function initializeStorage() {
     if (!localStorage.getItem(EXERCISES_KEY)) {
         localStorage.setItem(EXERCISES_KEY, JSON.stringify(defaultExercises));
     }
+    if (!localStorage.getItem(WORKOUT_HISTORY_KEY)) {
+      localStorage.setItem(WORKOUT_HISTORY_KEY, JSON.stringify([]));
+  }
 }
 
 /**
@@ -47,6 +51,33 @@ export function saveExercises(exercises) {
 export function getExerciseById(id) {
     const exercises = getAllExercises();
     return exercises.find(ex => ex.id === id);
+}
+
+/**
+ * Retrieves the entire workout history.
+ * @returns {object[]} An array of workout log entries.
+ */
+export function getWorkoutHistory() {
+  const history = localStorage.getItem(WORKOUT_HISTORY_KEY);
+  return history ? JSON.parse(history) : [];
+}
+
+/**
+ * Saves a completed workout session to the history.
+ * @param {object[]} completedExercises - An array of the exercises that were part of the workout.
+ */
+export function saveCompletedWorkout(completedExercises) {
+  const history = getWorkoutHistory();
+  const today = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+
+  const newLogEntry = {
+      logId: Date.now(),
+      date: today,
+      completedExerciseIds: completedExercises.map(ex => ex.id)
+  };
+
+  history.push(newLogEntry);
+  localStorage.setItem(WORKOUT_HISTORY_KEY, JSON.stringify(history));
 }
 
 // Initialize storage on load

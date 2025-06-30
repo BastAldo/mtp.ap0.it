@@ -4,6 +4,7 @@
  * It is completely decoupled from the DOM.
  */
 import * as ui from './ui.js';
+import * as storage from './storage.js';
 
 const PREPARATION_TIME = 5;
 
@@ -79,13 +80,13 @@ function updateUI() {
     if(currentState === State.RESTING) statusMessage = 'Rest';
     if(currentState === State.PAUSED) statusMessage = 'Paused';
     if(currentState === State.EXERCISE_COMPLETED) statusMessage = `Exercise '${exercise.name}' Complete!`;
-    if(currentState === State.WORKOUT_COMPLETED) statusMessage = `Workout Complete!`;
+    if(currentState === State.WORKOUT_COMPLETED) statusMessage = `Workout Complete! Well done!`;
 
 
     ui.updateTrainerUI({
-        exerciseName: exercise.name,
+        exerciseName: exercise ? exercise.name : 'Workout',
         currentSeries: currentSeries,
-        totalSeries: exercise.series,
+        totalSeries: exercise ? exercise.series : 0,
         time: countdown,
         statusMessage: statusMessage,
         isLastExercise: currentExerciseIndex >= exercises.length - 1,
@@ -98,6 +99,14 @@ function updateUI() {
 function startInterval() {
     if (intervalId) clearInterval(intervalId);
     intervalId = setInterval(tick, 1000);
+}
+
+function completeWorkout() {
+  currentState = State.WORKOUT_COMPLETED;
+  clearInterval(intervalId);
+  intervalId = null;
+  storage.saveCompletedWorkout(exercises);
+  updateUI();
 }
 
 // --- Public API ---
@@ -141,7 +150,6 @@ export function nextExercise() {
       updateUI();
       startInterval();
   } else {
-      currentState = State.WORKOUT_COMPLETED;
-      updateUI();
+      completeWorkout();
   }
 }

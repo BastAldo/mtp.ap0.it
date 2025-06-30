@@ -1,37 +1,261 @@
-commit_message: "fix(pwa): Add SVG icon to resolve manifest 404 errors"
+commit_message: "feat(storage): Add workout history data model and persistence"
 rationale: |
-  This commit fixes the 404 errors for `icon-192.png` and `icon-512.png` that were reported by the browser.
-  The previous commit introduced a `manifest.json` file that referenced these non-existent placeholder icons.
+  This commit implements the first sub-task for the new calendar feature, as outlined in the development plan. It establishes the data layer required to track user progress over time.
 
-  To resolve this cleanly, this patch introduces a single, self-contained, scalable vector graphic (`icon.svg`) and updates `manifest.json` to point to it. Using a single SVG file is a modern and efficient approach for basic PWA icons, as it's lightweight and scales to any required size without quality loss.
+  The key changes are:
+
+  1.  **New Storage Functions:** The `src/storage.js` module has been extended with two new functions:
+      - `saveCompletedWorkout(exercises)`: This function is called when a workout is finished. It creates a log entry containing the current date (in `YYYY-MM-DD` format) and the IDs of the completed exercises. This log is appended to a new `workout_history` array in localStorage.
+      - `getWorkoutHistory()`: This function retrieves the array of all completed workout logs, providing the data needed for the upcoming calendar UI.
+
+  2.  **Trainer Integration:** `src/trainer.js` has been updated to call `saveCompletedWorkout` at the precise moment the workout state transitions to `WORKOUT_COMPLETED`. This ensures that every finished session is automatically and reliably logged without any user intervention.
+
+  This is a foundational, non-UI change that enables all future development on the calendar and progress tracking features.
 patches:
-  - file: manifest.json
+  - file: src/storage.js
     content: |
-      {
-        "name": "MTP Workout Trainer",
-        "short_name": "Workout",
-        "start_url": ".",
-        "display": "standalone",
-        "background_color": "#ffffff",
-        "theme_color": "#333333",
-        "description": "A simple workout trainer application.",
-        "icons": [
-          {
-            "src": "icon.svg",
-            "sizes": "any",
-            "type": "image/svg+xml"
+      /**
+       * @file storage.js
+       * Handles all interactions with localStorage.
+       */
+
+      const EXERCISES_KEY = 'workout_exercises';
+      const WORKOUT_HISTORY_KEY = 'workout_history';
+
+      // Initial default data
+      const defaultExercises = [
+          { id: '1', name: 'Push-up', duration: 30, rest: 15, series: 3 },
+          { id: '2', name: 'Squat', duration: 45, rest: 20, series: 3 },
+          { id: '3', name: 'Plank', duration: 60, rest: 15, series: 2 },
+          { id: '4', name: 'Jumping Jacks', duration: 60, rest: 20, series: 2 }
+      ];
+
+      /**
+       * Initializes the storage with default exercises if it's empty.
+       */
+      function initializeStorage() {
+          if (!localStorage.getItem(EXERCISES_KEY)) {
+              localStorage.setItem(EXERCISES_KEY, JSON.stringify(defaultExercises));
           }
-        ]
+          if (!localStorage.getItem(WORKOUT_HISTORY_KEY)) {
+            localStorage.setItem(WORKOUT_HISTORY_KEY, JSON.stringify([]));
+        }
       }
-  - file: icon.svg
+
+      /**
+       * Retrieves all exercises from localStorage.
+       * @returns {object[]} An array of exercise objects.
+       */
+      export function getAllExercises() {
+          const exercises = localStorage.getItem(EXERCISES_KEY);
+          return exercises ? JSON.parse(exercises) : [];
+      }
+
+      /**
+       * Saves an array of exercises to localStorage.
+       * @param {object[]} exercises - The array of exercises to save.
+       */
+      export function saveExercises(exercises) {
+          localStorage.setItem(EXERCISES_KEY, JSON.stringify(exercises));
+      }
+
+      /**
+       * Retrieves a single exercise by its ID.
+       * @param {string} id - The ID of the exercise.
+       * @returns {object | undefined} The exercise object or undefined if not found.
+       */
+      export function getExerciseById(id) {
+          const exercises = getAllExercises();
+          return exercises.find(ex => ex.id === id);
+      }
+
+      /**
+       * Retrieves the entire workout history.
+       * @returns {object[]} An array of workout log entries.
+       */
+      export function getWorkoutHistory() {
+        const history = localStorage.getItem(WORKOUT_HISTORY_KEY);
+        return history ? JSON.parse(history) : [];
+      }
+
+      /**
+       * Saves a completed workout session to the history.
+       * @param {object[]} completedExercises - An array of the exercises that were part of the workout.
+       */
+      export function saveCompletedWorkout(completedExercises) {
+        const history = getWorkoutHistory();
+        const today = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+
+        const newLogEntry = {
+            logId: Date.now(),
+            date: today,
+            completedExerciseIds: completedExercises.map(ex => ex.id)
+        };
+
+        history.push(newLogEntry);
+        localStorage.setItem(WORKOUT_HISTORY_KEY, JSON.stringify(history));
+      }
+
+      // Initialize storage on load
+      initializeStorage();
+  - file: src/trainer.js
     content: |
-      <svg width="512" height="512" viewBox="0 0 512 512" version="1.1" xmlns="http://www.w3.org/2000/svg">
-        <rect width="512" height="512" fill="#333333"/>
-        <text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="280px" fill="#FFFFFF">W</text>
-      </svg>
+      /**
+       * @file trainer.js
+       * Contains the entire state machine logic for the training session.
+       * It is completely decoupled from the DOM.
+       */
+      import * as ui from './ui.js';
+      import * as storage from './storage.js';
+
+      const PREPARATION_TIME = 5;
+
+      // Application states
+      const State = {
+          IDLE: 'IDLE',
+          PREPARING: 'PREPARING',
+          WORKING: 'WORKING',
+          RESTING: 'RESTING',
+          PAUSED: 'PAUSED',
+          EXERCISE_COMPLETED: 'EXERCISE_COMPLETED',
+          WORKOUT_COMPLETED: 'WORKOUT_COMPLETED',
+      };
+
+      let currentState = State.IDLE;
+      let pausedState = null;
+
+      let exercises = [];
+      let currentExerciseIndex = 0;
+      let currentSeries = 1;
+      let countdown = 0;
+      let intervalId = null;
+
+      function getCurrentExercise() {
+          return exercises[currentExerciseIndex];
+      }
+
+      function tick() {
+          countdown--;
+          updateUI();
+
+          if (countdown <= 0) {
+              transitionToNextState();
+          }
+      }
+
+      function transitionToNextState() {
+          const exercise = getCurrentExercise();
+          switch (currentState) {
+              case State.PREPARING:
+                  currentState = State.WORKING;
+                  countdown = exercise.duration;
+                  break;
+
+              case State.WORKING:
+                  if (currentSeries < exercise.series) {
+                      currentState = State.RESTING;
+                      countdown = exercise.rest;
+                      currentSeries++;
+                  } else {
+                      // Exercise finished
+                      clearInterval(intervalId);
+                      intervalId = null;
+                      currentState = State.EXERCISE_COMPLETED;
+                  }
+                  break;
+
+              case State.RESTING:
+                  currentState = State.WORKING;
+                  countdown = exercise.duration;
+                  break;
+          }
+          updateUI();
+      }
+
+      function updateUI() {
+          const exercise = getCurrentExercise();
+          const isPaused = currentState === State.PAUSED;
+
+          let statusMessage = currentState;
+          if(currentState === State.PREPARING) statusMessage = `Get Ready: ${exercise.name}`;
+          if(currentState === State.WORKING) statusMessage = 'Work!';
+          if(currentState === State.RESTING) statusMessage = 'Rest';
+          if(currentState === State.PAUSED) statusMessage = 'Paused';
+          if(currentState === State.EXERCISE_COMPLETED) statusMessage = `Exercise '${exercise.name}' Complete!`;
+          if(currentState === State.WORKOUT_COMPLETED) statusMessage = `Workout Complete! Well done!`;
+
+
+          ui.updateTrainerUI({
+              exerciseName: exercise ? exercise.name : 'Workout',
+              currentSeries: currentSeries,
+              totalSeries: exercise ? exercise.series : 0,
+              time: countdown,
+              statusMessage: statusMessage,
+              isLastExercise: currentExerciseIndex >= exercises.length - 1,
+              isExerciseCompleted: currentState === State.EXERCISE_COMPLETED,
+              isWorkoutCompleted: currentState === State.WORKOUT_COMPLETED,
+          });
+          ui.togglePause(isPaused);
+      }
+
+      function startInterval() {
+          if (intervalId) clearInterval(intervalId);
+          intervalId = setInterval(tick, 1000);
+      }
+
+      function completeWorkout() {
+        currentState = State.WORKOUT_COMPLETED;
+        clearInterval(intervalId);
+        intervalId = null;
+        storage.saveCompletedWorkout(exercises);
+        updateUI();
+      }
+
+      // --- Public API ---
+
+      export function startTrainer(exerciseConfigs) {
+          exercises = exerciseConfigs;
+          currentExerciseIndex = 0;
+          currentSeries = 1;
+          currentState = State.PREPARING;
+          countdown = PREPARATION_TIME;
+
+          ui.showView('trainer');
+          updateUI();
+          startInterval();
+      }
+
+      export function pause() {
+          if (currentState !== State.WORKING && currentState !== State.RESTING && currentState !== State.PREPARING) return;
+          clearInterval(intervalId);
+          pausedState = currentState;
+          currentState = State.PAUSED;
+          updateUI();
+      }
+
+      export function resume() {
+          if (currentState !== State.PAUSED) return;
+          currentState = pausedState;
+          pausedState = null;
+          updateUI();
+          startInterval();
+      }
+
+      export function nextExercise() {
+        if (currentState !== State.EXERCISE_COMPLETED) return;
+
+        if (currentExerciseIndex < exercises.length - 1) {
+            currentExerciseIndex++;
+            currentSeries = 1;
+            currentState = State.PREPARING;
+            countdown = PREPARATION_TIME;
+            updateUI();
+            startInterval();
+        } else {
+            completeWorkout();
+        }
+      }
 commands:
-  - echo "✅ PWA icon fix applied."
-  - echo "‼️  AZIONE RICHIESTA: Per risolvere l'errore 'getSelectedExercises', esegua un HARD REFRESH."
-  - echo "   - Windows/Linux: Ctrl + Shift + R"
-  - echo "   - macOS:         Cmd + Shift + R"
-  - echo "Dopo l'hard refresh, entrambi gli errori dovrebbero essere scomparsi. Mi faccia sapere."
+  - echo "✅ Step 1/3 (Calendar) complete: Data model updated."
+  - echo "The application now saves workout history 'behind the scenes'."
+  - echo "Ready to proceed with Step 2: Creating the UI component for the calendar."
