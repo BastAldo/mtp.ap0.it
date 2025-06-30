@@ -3,8 +3,8 @@
 function createStore() {
     let state = {
         currentView: 'calendar', // 'calendar', 'trainer', 'debriefing'
+        focusedDate: new Date(), // Traccia la data per la navigazione del calendario
         workouts: {},
-        // Altri stati verranno aggiunti qui
     };
 
     const subscribers = new Set();
@@ -14,31 +14,45 @@ function createStore() {
     }
 
     function dispatch(action) {
-        // Le azioni sono oggetti con { type, payload }
+        const oldState = state;
         switch (action.type) {
             case 'CHANGE_VIEW':
                 if (state.currentView !== action.payload) {
                     state = { ...state, currentView: action.payload };
-                    console.log(`State changed: view is now "${action.payload}"`);
-                    notify();
                 }
                 break;
-            // Altri tipi di azione verranno gestiti qui
+
+            case 'PREV_WEEK': {
+                const newDate = new Date(state.focusedDate);
+                newDate.setDate(newDate.getDate() - 7);
+                state = { ...state, focusedDate: newDate };
+                break;
+            }
+
+            case 'NEXT_WEEK': {
+                const newDate = new Date(state.focusedDate);
+                newDate.setDate(newDate.getDate() + 7);
+                state = { ...state, focusedDate: newDate };
+                break;
+            }
+
             default:
                 console.warn(`Azione non riconosciuta: ${action.type}`);
+                return; // Nessuna notifica se l'azione non è valida
+        }
+        // Notifica solo se lo stato è effettivamente cambiato
+        if (state !== oldState) {
+            console.log(`Action: ${action.type}`, state);
+            notify();
         }
     }
 
     return {
-        // Ritorna una copia dello stato per impedire modifiche dirette
         getState: () => ({ ...state }),
-        // Aggiunge un listener
         subscribe: (callback) => {
             subscribers.add(callback);
-            // Ritorna una funzione per annullare l'iscrizione
             return () => subscribers.delete(callback);
         },
-        // Invia un'azione per modificare lo stato
         dispatch,
     };
 }

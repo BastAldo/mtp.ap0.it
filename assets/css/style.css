@@ -6,7 +6,8 @@
     --primary-color: #9575cd;
     --secondary-color: #4db6ac;
     --text-color: #f4f4f9;
-    /* Aggiungere altri colori dalla guida di stile se necessario */
+    --text-color-muted: #aaa;
+    --border-color: #40404a;
 }
 
 * {
@@ -36,10 +37,76 @@ body {
     display: block;
 }
 
+/* --- CALENDAR VIEW STYLES --- */
+
+.calendar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.calendar-header h2 {
+    font-size: 1.25rem;
+    text-align: center;
+}
+
+.calendar-header button {
+    background-color: var(--card-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.calendar-header button:hover {
+    background-color: var(--primary-color);
+}
+
+.calendar-grid {
+    display: grid;
+    grid-template-columns: 1fr; /* Mobile: una colonna */
+    gap: 0.5rem;
+}
+
+.day-cell {
+    background-color: var(--card-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem;
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+}
+
+.day-cell__header {
+    display: flex;
+    justify-content: space-between;
+    font-weight: bold;
+    color: var(--text-color-muted);
+    text-transform: uppercase;
+    font-size: 0.8rem;
+}
+
+.day-cell__body {
+    margin-top: 0.5rem;
+}
+
 
 /* --- TABLET/DESKTOP OVERRIDES --- */
 @media (min-width: 768px) {
     #app-container {
         padding: 2rem;
+    }
+
+    .calendar-grid {
+        grid-template-columns: repeat(7, 1fr); /* Desktop: 7 colonne */
+        gap: 1rem;
+    }
+
+    .calendar-header h2 {
+      font-size: 1.5rem;
     }
 }

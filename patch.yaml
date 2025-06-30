@@ -1,12 +1,12 @@
-commit_message: "feat: Inizializza la struttura del progetto SPA e i moduli core"
+commit_message: "feat(calendar): Implementa la Calendar View dinamica con navigazione settimanale"
 rationale: |
-  Questo commit crea lo scheletro fondamentale della Single-Page Application come definito e approvato nel piano d'azione.
-  L'implementazione è strettamente allineata ai documenti di architettura, funzionalità e stile.
+  In linea con il piano d'azione approvato, questo commit implementa la prima funzionalità principale: la vista Calendario.
 
-  - Viene creata la struttura dei file (HTML, CSS, JS).
-  - Viene implementata una prima versione funzionante dello store centralizzato (`store.js`), che è il cuore dell'architettura.
-  - Viene impostato il foglio di stile con le variabili di colore e l'approccio mobile-first.
-  - Vengono rimossi i file Python (`main.py`, `requirements.txt`) non pertinenti all'architettura SPA.
+  - È stato creato il modulo `src/views/CalendarView.js`, che ora gestisce il rendering e la logica della vista.
+  - Lo store (`store.js`) è stato esteso per includere `focusedDate` e le azioni `PREV_WEEK` e `NEXT_WEEK` per la navigazione.
+  - Il file `main.js` è stato aggiornato per inizializzare la nuova vista.
+  - Sono stati aggiunti nuovi stili CSS per la griglia del calendario e i suoi componenti, seguendo un approccio mobile-first.
+  - Il flusso di dati rimane strettamente unidirezionale: `View -> dispatch(action) -> Store -> notify() -> View.render()`.
 patches:
   - file: index.html
     content: |
@@ -22,8 +22,7 @@ patches:
 
           <div id="app-container">
               <div id="calendar-view" class="view view--active">
-                  <h1>Calendar View</h1>
-              </div>
+                  </div>
               <div id="trainer-view" class="view">
                   <h1>Trainer View</h1>
               </div>
@@ -45,7 +44,8 @@ patches:
           --primary-color: #9575cd;
           --secondary-color: #4db6ac;
           --text-color: #f4f4f9;
-          /* Aggiungere altri colori dalla guida di stile se necessario */
+          --text-color-muted: #aaa;
+          --border-color: #40404a;
       }
 
       * {
@@ -75,16 +75,83 @@ patches:
           display: block;
       }
 
+      /* --- CALENDAR VIEW STYLES --- */
+
+      .calendar-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 1.5rem;
+      }
+
+      .calendar-header h2 {
+          font-size: 1.25rem;
+          text-align: center;
+      }
+
+      .calendar-header button {
+          background-color: var(--card-color);
+          color: var(--text-color);
+          border: 1px solid var(--border-color);
+          padding: 0.5rem 1rem;
+          border-radius: 6px;
+          cursor: pointer;
+          transition: background-color 0.2s;
+      }
+
+      .calendar-header button:hover {
+          background-color: var(--primary-color);
+      }
+
+      .calendar-grid {
+          display: grid;
+          grid-template-columns: 1fr; /* Mobile: una colonna */
+          gap: 0.5rem;
+      }
+
+      .day-cell {
+          background-color: var(--card-color);
+          border: 1px solid var(--border-color);
+          border-radius: 8px;
+          padding: 1rem;
+          min-height: 120px;
+          display: flex;
+          flex-direction: column;
+      }
+
+      .day-cell__header {
+          display: flex;
+          justify-content: space-between;
+          font-weight: bold;
+          color: var(--text-color-muted);
+          text-transform: uppercase;
+          font-size: 0.8rem;
+      }
+
+      .day-cell__body {
+          margin-top: 0.5rem;
+      }
+
 
       /* --- TABLET/DESKTOP OVERRIDES --- */
       @media (min-width: 768px) {
           #app-container {
               padding: 2rem;
           }
+
+          .calendar-grid {
+              grid-template-columns: repeat(7, 1fr); /* Desktop: 7 colonne */
+              gap: 1rem;
+          }
+
+          .calendar-header h2 {
+            font-size: 1.5rem;
+          }
       }
   - file: src/main.js
     content: |
       import store from './modules/store.js';
+      import { init as initCalendarView } from './views/CalendarView.js';
 
       // Cache delle viste per performance
       const views = {
@@ -93,38 +160,26 @@ patches:
           debriefing: document.getElementById('debriefing-view'),
       };
 
-      let currentActiveView = null;
+      // --- Inizializzazione Viste ---
+      // Per ora, inizializziamo solo la vista calendario
+      initCalendarView(views.calendar);
 
-      function render() {
+
+      // --- Logica di Cambio Vista (semplificata per ora) ---
+      let currentActiveView = views.calendar; // Impostiamo la vista iniziale
+
+      function handleViewChange() {
           const state = store.getState();
-          const activeViewId = state.currentView;
+          const newActiveViewEl = views[state.currentView];
 
-          // Se la vista attiva è già quella giusta, non fare nulla
-          if (currentActiveView === views[activeViewId]) {
-              return;
-          }
-
-          // Nascondi la vista precedentemente attiva
-          if (currentActiveView) {
+          if (currentActiveView !== newActiveViewEl) {
               currentActiveView.classList.remove('view--active');
-          }
-
-          // Mostra la nuova vista attiva
-          const newActiveView = views[activeViewId];
-          if (newActiveView) {
-              newActiveView.classList.add('view--active');
-              currentActiveView = newActiveView;
-          } else {
-              console.error(`View "${activeViewId}" non trovata.`);
-              currentActiveView = null;
+              newActiveViewEl.classList.add('view--active');
+              currentActiveView = newActiveViewEl;
           }
       }
 
-      // Sottoscrivi la funzione di rendering ai cambiamenti dello store
-      store.subscribe(render);
-
-      // Renderizza lo stato iniziale all'avvio
-      render();
+      store.subscribe(handleViewChange);
 
       console.log('App "Mio Trainer Personale" inizializzata.');
   - file: src/modules/store.js
@@ -134,8 +189,8 @@ patches:
       function createStore() {
           let state = {
               currentView: 'calendar', // 'calendar', 'trainer', 'debriefing'
+              focusedDate: new Date(), // Traccia la data per la navigazione del calendario
               workouts: {},
-              // Altri stati verranno aggiunti qui
           };
 
           const subscribers = new Set();
@@ -145,67 +200,130 @@ patches:
           }
 
           function dispatch(action) {
-              // Le azioni sono oggetti con { type, payload }
+              const oldState = state;
               switch (action.type) {
                   case 'CHANGE_VIEW':
                       if (state.currentView !== action.payload) {
                           state = { ...state, currentView: action.payload };
-                          console.log(`State changed: view is now "${action.payload}"`);
-                          notify();
                       }
                       break;
-                  // Altri tipi di azione verranno gestiti qui
+
+                  case 'PREV_WEEK': {
+                      const newDate = new Date(state.focusedDate);
+                      newDate.setDate(newDate.getDate() - 7);
+                      state = { ...state, focusedDate: newDate };
+                      break;
+                  }
+
+                  case 'NEXT_WEEK': {
+                      const newDate = new Date(state.focusedDate);
+                      newDate.setDate(newDate.getDate() + 7);
+                      state = { ...state, focusedDate: newDate };
+                      break;
+                  }
+
                   default:
                       console.warn(`Azione non riconosciuta: ${action.type}`);
+                      return; // Nessuna notifica se l'azione non è valida
+              }
+              // Notifica solo se lo stato è effettivamente cambiato
+              if (state !== oldState) {
+                  console.log(`Action: ${action.type}`, state);
+                  notify();
               }
           }
 
           return {
-              // Ritorna una copia dello stato per impedire modifiche dirette
               getState: () => ({ ...state }),
-              // Aggiunge un listener
               subscribe: (callback) => {
                   subscribers.add(callback);
-                  // Ritorna una funzione per annullare l'iscrizione
                   return () => subscribers.delete(callback);
               },
-              // Invia un'azione per modificare lo stato
               dispatch,
           };
       }
 
       const store = createStore();
       export default store;
-  - file: src/modules/storage.js
+  - file: src/views/CalendarView.js
     content: |
-      // --- Modulo di Persistenza Dati per localStorage ---
+      import store from '../modules/store.js';
 
+      // --- UTILITIES ---
       /**
-       * Carica i dati dal localStorage e li valida contro uno schema.
-       * @param {string} key La chiave da cui caricare.
-       * @returns {object | null} I dati validati o null se non validi/presenti.
+       * Calcola la data del lunedì della stessa settimana di una data data.
+       * @param {Date} date - La data di riferimento.
+       * @returns {Date} La data del lunedì.
        */
-      export function loadFromStorage(key) {
-          // Logica futura:
-          // 1. Leggere da localStorage.
-          // 2. Parsare il JSON.
-          // 3. Validare lo schema.
-          // 4. Ritornare i dati o null.
-          console.log(`Placeholder: caricamento da storage per la chiave "${key}"`);
-          return null;
+      function getWeekStartDate(date) {
+          const d = new Date(date);
+          const day = d.getDay(); // Domenica = 0, Lunedì = 1, ...
+          const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adegua per la domenica
+          return new Date(d.setDate(diff));
       }
 
       /**
-       * Salva i dati nel localStorage.
-       * @param {string} key La chiave con cui salvare.
-       * @param {object} data I dati da salvare.
+       * Formatta una data nel formato "DD MMMM". Es: "30 Giugno"
+       * @param {Date} date
+       * @returns {string}
        */
-      export function saveToStorage(key, data) {
-          // Logica futura:
-          // 1. Stringify dei dati.
-          // 2. Salvare in localStorage.
-          console.log(`Placeholder: salvataggio su storage per la chiave "${key}"`);
+      function formatShortDate(date) {
+        return date.toLocaleDateString('it-IT', { day: 'numeric', month: 'long' });
       }
-commands:
-  - "rm -f main.py"
-  - "echo 'Struttura del progetto inizializzata. File obsoleti rimossi con successo.'"
+
+
+      // --- MODULE ---
+      export function init(element) {
+          // Creazione della struttura interna della vista
+          element.innerHTML = `
+              <header class="calendar-header">
+                  <button id="prev-week-btn">&lt; Prev</button>
+                  <h2 id="week-title"></h2>
+                  <button id="next-week-btn">Next &gt;</button>
+              </header>
+              <div class="calendar-grid" id="calendar-grid-container"></div>
+          `;
+
+          // Cache degli elementi del DOM
+          const prevBtn = element.querySelector('#prev-week-btn');
+          const nextBtn = element.querySelector('#next-week-btn');
+          const weekTitle = element.querySelector('#week-title');
+          const gridContainer = element.querySelector('#calendar-grid-container');
+
+          // Aggiunta Event Listeners
+          prevBtn.addEventListener('click', () => store.dispatch({ type: 'PREV_WEEK' }));
+          nextBtn.addEventListener('click', () => store.dispatch({ type: 'NEXT_WEEK' }));
+
+          // Funzione di rendering principale
+          function render() {
+              const { focusedDate } = store.getState();
+              const weekStart = getWeekStartDate(focusedDate);
+              const weekEnd = new Date(weekStart);
+              weekEnd.setDate(weekEnd.getDate() + 6);
+
+              weekTitle.textContent = `${formatShortDate(weekStart)} - ${formatShortDate(weekEnd)}`;
+              gridContainer.innerHTML = ''; // Pulisce la griglia prima di ridisegnare
+
+              for (let i = 0; i < 7; i++) {
+                  const dayDate = new Date(weekStart);
+                  dayDate.setDate(dayDate.getDate() + i);
+
+                  const dayCell = document.createElement('div');
+                  dayCell.className = 'day-cell';
+                  dayCell.innerHTML = `
+                      <div class="day-cell__header">
+                          <span>${dayDate.toLocaleDateString('it-IT', { weekday: 'long' })}</span>
+                          <span>${dayDate.getDate()}</span>
+                      </div>
+                      <div class="day-cell__body">
+                          </div>
+                  `;
+                  gridContainer.appendChild(dayCell);
+              }
+          }
+
+          // Sottoscrizione allo store e rendering iniziale
+          store.subscribe(render);
+          render();
+      }
+commands: []

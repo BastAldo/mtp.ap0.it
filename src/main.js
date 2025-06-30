@@ -1,4 +1,5 @@
 import store from './modules/store.js';
+import { init as initCalendarView } from './views/CalendarView.js';
 
 // Cache delle viste per performance
 const views = {
@@ -7,37 +8,25 @@ const views = {
     debriefing: document.getElementById('debriefing-view'),
 };
 
-let currentActiveView = null;
+// --- Inizializzazione Viste ---
+// Per ora, inizializziamo solo la vista calendario
+initCalendarView(views.calendar);
 
-function render() {
+
+// --- Logica di Cambio Vista (semplificata per ora) ---
+let currentActiveView = views.calendar; // Impostiamo la vista iniziale
+
+function handleViewChange() {
     const state = store.getState();
-    const activeViewId = state.currentView;
+    const newActiveViewEl = views[state.currentView];
 
-    // Se la vista attiva è già quella giusta, non fare nulla
-    if (currentActiveView === views[activeViewId]) {
-        return;
-    }
-
-    // Nascondi la vista precedentemente attiva
-    if (currentActiveView) {
+    if (currentActiveView !== newActiveViewEl) {
         currentActiveView.classList.remove('view--active');
-    }
-
-    // Mostra la nuova vista attiva
-    const newActiveView = views[activeViewId];
-    if (newActiveView) {
-        newActiveView.classList.add('view--active');
-        currentActiveView = newActiveView;
-    } else {
-        console.error(`View "${activeViewId}" non trovata.`);
-        currentActiveView = null;
+        newActiveViewEl.classList.add('view--active');
+        currentActiveView = newActiveViewEl;
     }
 }
 
-// Sottoscrivi la funzione di rendering ai cambiamenti dello store
-store.subscribe(render);
-
-// Renderizza lo stato iniziale all'avvio
-render();
+store.subscribe(handleViewChange);
 
 console.log('App "Mio Trainer Personale" inizializzata.');
