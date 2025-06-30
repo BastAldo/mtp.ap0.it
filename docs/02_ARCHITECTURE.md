@@ -4,40 +4,47 @@ This document outlines the high-level architecture for the "Mio Trainer Personal
 
 ## 1. Core Principles
 
--   **Modularity:** The application is broken down into distinct, single-responsibility modules. This simplifies development, testing, and maintenance.
--   **State-Driven UI:** The user interface reacts to changes in the application's state, rather than being manipulated directly.
+-   **Modularity:** The application is broken down into distinct, single-responsibility modules.
+-   **State-Driven UI:** The user interface reacts to changes in the application's state.
 
 ## 2. Directory Structure
 
 -   `docs/`: Contains all project documentation.
--   `index.html`: The single HTML entry point for the SPA.
+-   `index.html`: The single HTML entry point.
 -   `src/`: Contains all application source code.
-    -   `src/main.js`: The main application entry point, responsible for initialization and view management.
-    -   `src/style.css`: The global stylesheet.
-    -   `src/views/`: Each file in this directory manages the DOM and logic for a specific application view (e.g., `calendar.js`, `trainer.js`).
-    -   `src/modules/`: Contains shared logic and helpers.
+    -   `src/modules/store.js`: The centralized application state store.
+    -   ... and other modules.
 
 ## 3. View Management
 
-The application uses a simple view manager controlled by `main.js`. Only one view is active (`.view--active`) at any given time.
+The application uses a simple view manager controlled by `main.js`. Only one view is active (`.view--active`) at any given time. This is driven by the state in the central store.
 
 ## 4. Data Persistence
 
-All user data (scheduled workouts, progress) is persisted in the browser's `localStorage`. The `storage.js` module provides a clean API to abstract direct `localStorage` interactions.
+All user data is persisted in `localStorage`. The `storage.js` module provides a clean API for this.
 
-The data structure for a daily workout is an array of "workout items". Each item is an object with a `type` key to distinguish between different kinds of items:
+### 4.1. Data Schemas and Validation
+To ensure data integrity, all data read from `localStorage` MUST be validated against a defined schema before being used by the application. This prevents errors from corrupted or outdated data structures.
+
+- **Daily Workout Schema:** An array of "workout item" objects.
+  - `item`: `{ id: string, type: 'exercise' | 'rest', ...rest }`
+- **Exercise Schema:** An object defining an exercise's properties.
+  - `exercise`: `{ id: string, name: string, tempo: object, ...rest }`
+
+### 4.2. Workout Item Structure
+The data structure for a daily workout is an array of "workout items". Each item is an object with a `type` key:
 -   `{ type: 'exercise', id: 'squat', ... }`
 -   `{ type: 'rest', duration: 60, ... }`
 
-This flexible structure allows for complex workout routines to be composed easily by the user.
+## 5. State Management
 
-## 5. Architectural Decision Records (ADRs)
+The application MUST use a centralized state store (`src/modules/store.js`) as the Single Source of Truth (SSoT) for all application state.
+-   **State:** A single, read-only JavaScript object containing all shared application data (e.g., `currentView`, `workouts`, `trainerState`).
+-   **Actions:** State can only be modified by dispatching predefined, synchronous "actions" (functions within the store). These actions are the only place where state mutations can occur.
+-   **Subscriptions:** UI modules can "subscribe" to the store. Whenever the state is updated via an action, all subscribers are notified so they can re-render themselves with the new data. This creates a predictable, one-way data flow.
 
-This section records important architectural decisions made during the project's lifecycle.
+## 6. Architectural Decision Records (ADRs)
 
 ### ADR 001: No Native Pop-ups
-
 -   **Status**: Accepted
--   **Context**: The application needs to present users with dialogs, confirmations, and prompts (e.g., editing a value, confirming deletion). Using native browser pop-ups (`alert()`, `prompt()`, `confirm()`) creates an inconsistent user experience across different browsers and operating systems, and does not align with the application's visual style.
--   **Decision**: All forms of pop-up dialogs MUST be implemented as "pop-ins" or modals rendered within the application's own DOM. This ensures complete control over styling and a consistent user experience. The modal system defined in `docs/03_STYLE_GUIDE.md` should be used as the basis for these components.
--   **Consequences**: Developers must not use native pop-up functions. All interactions requiring a dialog must be implemented using the in-page modal system.
+-   **Decision**: All forms of pop-up dialogs MUST be implemented as "pop-ins" or modals rendered within the application's own DOM.
