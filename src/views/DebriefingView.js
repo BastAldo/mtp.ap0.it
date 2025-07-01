@@ -12,6 +12,7 @@ function generateSummaryHtml(completedWorkout) {
     const itemsHtml = completedWorkout.fullPlan.map((item, index) => {
         let itemClass = 'debrief-item';
         let statusText = '';
+        let animationDelay = `style="animation-delay: ${index * 50}ms;"`;
 
         if (completedWorkout.completed) {
             itemClass += ' debrief-item--completed';
@@ -24,6 +25,7 @@ function generateSummaryHtml(completedWorkout) {
                 statusText = `(interrotto alla serie ${currentSeries})`;
             } else {
                 itemClass += ' debrief-item--skipped';
+                animationDelay = ''; // Don't animate skipped items
             }
         }
 
@@ -36,7 +38,7 @@ function generateSummaryHtml(completedWorkout) {
             mainText = `${item.name}: ${series}x${reps} ${statusText}`;
         }
 
-        return `<li class="${itemClass}">${mainText}</li>`;
+        return `<li class="${itemClass}" ${animationDelay}>${mainText}</li>`;
     }).join('');
 
     return `${title}<ul class="debrief-list">${itemsHtml}</ul>`;
@@ -111,5 +113,7 @@ export function init(element) {
     });
 
     store.subscribe(() => render(element));
-    render(element);
+    // Initial render can be empty as the subscription will populate it
+    // when the view becomes active and completedWorkout is set.
+    element.innerHTML = '';
 }

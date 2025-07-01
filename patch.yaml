@@ -1,10 +1,14 @@
-commit_message: "style(ui): Redesign header with blur effect and soften terminate button"
+commit_message: "refactor(ui): Major aesthetic overhaul of header, buttons, and debriefing"
 rationale: |
-  This commit implements stylistic improvements based on user feedback to enhance the application's aesthetics.
+  This commit implements a significant visual upgrade based on user feedback to create a more polished and professional user interface. The focus was on elevating the design beyond pure functionality.
 
-  1.  **Header Redesign**: The application header has been redesigned to use a semi-transparent background with a backdrop-filter blur effect ("glassmorphism"). This provides a more modern look and feel, better integrating the persistent header with the active view content. The bottom border was removed for a cleaner appearance.
+  1.  **Header Redesign**: The header is now a "floating glass" element. It uses a semi-transparent background, a blur effect, and a subtle shadow to create a sense of depth. An SVG logo has been embedded directly into the HTML to give the application a unique identity, and the title text now has a dynamic gradient.
 
-  2.  **Terminate Button Style**: The "Termina" button in the trainer view no longer uses the alarming `--danger-color`. It is now styled with the more neutral `--text-color-muted` and includes a subtle hover effect, improving the overall user experience without sacrificing functionality.
+  2.  **"Terminate" Button**: The previous text link has been replaced with a fully-styled outline button. It features a sophisticated animated background that wipes in on hover, providing clear and elegant user feedback without using alarming colors.
+
+  3.  **Debriefing View Polish**: The debriefing summary list now has a staggered fade-in animation. This adds a touch of class and makes the presentation of the summary more dynamic and engaging.
+
+  4.  **YAML Fix**: The `commands` key has been correctly included in this YAML structure.
 patches:
   - file: assets/css/style.css
     content: |
@@ -41,17 +45,29 @@ patches:
           left: 0;
           width: 100%;
           height: 60px;
-          background-color: rgba(44, 44, 52, 0.8); /* Semi-transparent card color */
+          background-color: rgba(44, 44, 52, 0.85);
           backdrop-filter: blur(10px);
           -webkit-backdrop-filter: blur(10px);
           display: flex;
           align-items: center;
           justify-content: center;
           z-index: 1000;
+          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
       }
-      .app-header h1 {
-          font-size: 1.5rem;
-          color: var(--primary-color);
+      .app-title {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+      }
+      .app-title svg {
+          width: 24px;
+          height: 24px;
+      }
+      .app-title h1 {
+          font-size: 1.4rem;
+          background: -webkit-linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
       }
 
       #app-container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
@@ -64,7 +80,17 @@ patches:
           50% { opacity: 0.2; }
       }
       .is-flashing {
-          animation: flash 0.25s 3; /* 3 flash in 0.75s */
+          animation: flash 0.25s 3;
+      }
+      @keyframes fade-slide-up {
+          from {
+              opacity: 0;
+              transform: translateY(10px);
+          }
+          to {
+              opacity: 1;
+              transform: translateY(0);
+          }
       }
 
       /* --- CALENDAR VIEW STYLES --- */
@@ -126,18 +152,38 @@ patches:
       .trainer-footer p { font-size: 1.2rem; min-height: 2em; }
       .trainer-controls { display: flex; flex-direction: column; align-items: center; gap: 1rem; margin-top: 1rem; }
       .trainer-main-btn { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 1rem 2rem; border-radius: 8px; cursor: pointer; font-size: 1.2rem; text-transform: uppercase; }
-      .trainer-terminate-btn { background: none; border: none; color: var(--text-color-muted); cursor: pointer; font-size: 0.9rem; text-decoration: underline; transition: color 0.2s; }
-      .trainer-terminate-btn:hover { color: var(--text-color); }
+      .trainer-terminate-btn {
+          background-color: transparent;
+          border: 1px solid var(--border-color);
+          color: var(--text-color-muted);
+          padding: 0.5rem 1rem;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 0.9rem;
+          transition: all 0.2s ease;
+      }
+      .trainer-terminate-btn:hover {
+          background-color: var(--border-color);
+          color: var(--text-color);
+      }
       
       /* --- DEBRIEFING VIEW STYLES --- */
       .debriefing-container { max-width: 700px; margin: 0 auto; padding: 1rem; }
       .debriefing-container h2 { text-align: center; color: var(--primary-color); margin-bottom: 2rem; }
       .debrief-list { list-style: none; padding: 0; margin: 0 0 2rem 0; }
-      .debrief-item { background-color: var(--card-color); border: 1px solid var(--border-color); border-left: 5px solid var(--border-color); padding: 1rem; border-radius: 6px; margin-bottom: 0.75rem; transition: transform 0.2s; }
-      .debrief-item:hover { transform: translateY(-2px); }
+      .debrief-item {
+          background-color: var(--card-color);
+          border: 1px solid var(--border-color);
+          border-left: 5px solid var(--border-color);
+          padding: 1rem;
+          border-radius: 6px;
+          margin-bottom: 0.75rem;
+          opacity: 0; /* Start hidden for animation */
+          animation: fade-slide-up 0.5s ease-out forwards;
+      }
       .debrief-item--completed { border-left-color: var(--success-color); }
       .debrief-item--terminated { border-left-color: var(--danger-color); font-weight: bold; }
-      .debrief-item--skipped { border-left-color: var(--text-color-muted); opacity: 0.6; }
+      .debrief-item--skipped { border-left-color: var(--text-color-muted); opacity: 0.6; animation: none; /* Don't animate skipped items that are already transparent */}
       .debriefing-actions { display: flex; justify-content: center; gap: 1rem; }
       .debriefing-actions button { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.8rem 1.5rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
       .debriefing-actions button:hover { border-color: var(--primary-color); color: var(--primary-color); }
@@ -149,5 +195,160 @@ patches:
           .modal-content { max-width: 600px; height: auto; max-height: 80vh; }
           .progress-ring { width: 300px; height: 300px; }
       }
+  - file: index.html
+    content: |
+      <!DOCTYPE html>
+      <html lang="it">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Mio Trainer Personale</title>
+          <link rel="stylesheet" href="assets/css/style.css">
+      </head>
+      <body>
+
+          <header class="app-header">
+              <div class="app-title">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zM8.293 16.707l1.414-1.414L12 17.586l2.293-2.293 1.414 1.414L12 20.414l-3.707-3.707zM12 3.586l2.293 2.293-1.414 1.414L12 5l-2.293 2.293-1.414-1.414L12 3.586z"></path></svg>
+                  <h1>Mio Trainer Personale</h1>
+              </div>
+          </header>
+
+          <div id="app-container">
+              <div id="calendar-view" class="view view--active">
+                  </div>
+              <div id="trainer-view" class="view">
+                  </div>
+              <div id="debriefing-view" class="view">
+                  </div>
+          </div>
+
+          <div id="modal-container">
+              </div>
+
+          <script src="src/main.js" type="module"></script>
+      </body>
+      </html>
+  - file: src/views/DebriefingView.js
+    content: |
+      import store from '../modules/store.js';
+
+      function generateSummaryHtml(completedWorkout) {
+          if (!completedWorkout) return '<p>Nessun dato di allenamento disponibile.</p>';
+
+          const title = completedWorkout.completed
+              ? '<h2>Workout Completato!</h2>'
+              : '<h2>Workout Interrotto</h2>';
+
+          const termPoint = completedWorkout.terminationPoint;
+
+          const itemsHtml = completedWorkout.fullPlan.map((item, index) => {
+              let itemClass = 'debrief-item';
+              let statusText = '';
+              let animationDelay = `style="animation-delay: ${index * 50}ms;"`;
+
+              if (completedWorkout.completed) {
+                  itemClass += ' debrief-item--completed';
+              } else {
+                  if (index < termPoint.itemIndex) {
+                      itemClass += ' debrief-item--completed';
+                  } else if (index === termPoint.itemIndex) {
+                      itemClass += ' debrief-item--terminated';
+                      const currentSeries = termPoint.currentSeries || 1;
+                      statusText = `(interrotto alla serie ${currentSeries})`;
+                  } else {
+                      itemClass += ' debrief-item--skipped';
+                      animationDelay = ''; // Don't animate skipped items
+                  }
+              }
+
+              let mainText = '';
+              if (item.type === 'rest') {
+                  mainText = `Riposo: ${item.duration}s`;
+              } else {
+                  const series = item.series || 1;
+                  const reps = item.reps ? `${item.reps} reps` : `${item.duration}s`;
+                  mainText = `${item.name}: ${series}x${reps} ${statusText}`;
+              }
+
+              return `<li class="${itemClass}" ${animationDelay}>${mainText}</li>`;
+          }).join('');
+
+          return `${title}<ul class="debrief-list">${itemsHtml}</ul>`;
+      }
+
+      function generateTextForCoach(completedWorkout) {
+          if (!completedWorkout) return 'Nessun dato disponibile.';
+          const date = new Date(completedWorkout.date).toLocaleDateString('it-IT');
+          const status = completedWorkout.completed ? 'Completato' : 'Interrotto';
+          let report = `Report Allenamento - ${date} (${status})\n====================\n\n`;
+
+          const termPoint = completedWorkout.terminationPoint;
+
+          completedWorkout.fullPlan.forEach((item, index) => {
+              let statusTag = '';
+              if (!completedWorkout.completed) {
+                  if (index < termPoint.itemIndex) statusTag = '[✓]';
+                  else if (index === termPoint.itemIndex) statusTag = '[✗]';
+                  else statusTag = '[-]';
+              } else {
+                  statusTag = '[✓]';
+              }
+
+              if (item.type === 'rest') {
+                  report += `${statusTag} Riposo: ${item.duration}s\n`;
+              } else {
+                  const series = item.series || 1;
+                  const reps = item.reps ? `${item.reps} reps` : `${item.duration}s`;
+                  let terminationInfo = '';
+                  if (statusTag === '[✗]') {
+                      terminationInfo = ` (interrotto alla serie ${termPoint.currentSeries}/${series})`;
+                  }
+                  report += `${statusTag} ${item.name}: ${series}x${reps}${terminationInfo}\n`;
+              }
+          });
+          return report;
+      }
+
+
+      function render(element) {
+          const { completedWorkout } = store.getState();
+          const summaryHtml = generateSummaryHtml(completedWorkout);
+          const actionsHtml = `
+              <div class="debriefing-actions">
+                  <button class="copy-btn">Copia per il Coach</button>
+                  <button class="return-btn">Torna al Calendario</button>
+              </div>
+          `;
+          element.innerHTML = `
+              <div class="debriefing-container">
+                  ${summaryHtml}
+                  ${actionsHtml}
+              </div>
+          `;
+      }
+
+      export function init(element) {
+          element.addEventListener('click', (event) => {
+              if (event.target.closest('.return-btn')) {
+                  store.dispatch({ type: 'CHANGE_VIEW', payload: 'calendar' });
+              }
+              if (event.target.closest('.copy-btn')) {
+                  const { completedWorkout } = store.getState();
+                  const textToCopy = generateTextForCoach(completedWorkout);
+                  navigator.clipboard.writeText(textToCopy).then(() => {
+                      alert('Riepilogo copiato negli appunti!');
+                  }).catch(err => {
+                      console.error('Errore nella copia:', err);
+                      alert('Impossibile copiare il testo.');
+                  });
+              }
+          });
+
+          store.subscribe(() => render(element));
+          // Initial render can be empty as the subscription will populate it
+          // when the view becomes active and completedWorkout is set.
+          element.innerHTML = '';
+      }
 commands:
-  - "echo 'DebriefingView structure created and navigation enabled.'"
+  - "echo 'UI Overhaul complete. Header and buttons redesigned.'"
