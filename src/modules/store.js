@@ -13,6 +13,7 @@ function createStore() {
     isModalOpen: false,
     modalContext: null,
     activeWorkout: null,
+    completedWorkout: null, // Holds data for the debriefing view
     trainerState: 'idle',
     trainerContext: {},
   };
@@ -104,14 +105,26 @@ function createStore() {
         newState = {
           ...state,
           currentView: 'trainer',
-          activeWorkout: { date, items: workoutItems },
+          activeWorkout: { date, items: workoutItems, completed: false },
+          completedWorkout: null,
           trainerState: 'ready',
           trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 }
         };
         break;
       }
       case 'FINISH_WORKOUT': {
-        newState = { ...state, currentView: 'debriefing', activeWorkout: null, trainerState: 'idle', trainerContext: {} };
+        newState = { ...state, currentView: 'debriefing', completedWorkout: { ...state.activeWorkout, completed: true }, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
+        break;
+      }
+      case 'TERMINATE_WORKOUT': {
+        const { activeWorkout, trainerContext } = state;
+        const partialWorkout = {
+          ...activeWorkout,
+          completed: false,
+          items: activeWorkout.items.slice(0, trainerContext.itemIndex + 1),
+          terminationPoint: trainerContext
+        };
+        newState = { ...state, currentView: 'debriefing', completedWorkout: partialWorkout, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
         break;
       }
       case 'SET_TRAINER_STATE': {
@@ -223,7 +236,9 @@ function createStore() {
     }
     state = newState;
     if (state !== oldState) {
-      logState(action.type, state);
+      if (action.type !== 'PAUSE_TRAINER' && action.type !== 'RESUME_TRAINER') {
+          logState(action.type, state);
+      }
       if (state.workouts !== oldState.workouts) {
         saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
       }

@@ -1,21 +1,62 @@
 import store from '../modules/store.js';
 
-function render() {
-    // In a future step, we'll get the completed workout from the store
-    // and generate a real summary.
-    const summaryHtml = `
-        <h2>Workout Completato!</h2>
-        <p>Qui verrà mostrato il riepilogo dell'allenamento.</p>
-    `;
+function generateSummary(completedWorkout) {
+    if (!completedWorkout) return '<p>Nessun dato di allenamento disponibile.</p>';
 
+    const title = completedWorkout.completed
+        ? '<h2>Workout Completato!</h2>'
+        : '<h2>Workout Interrotto</h2>';
+
+    const itemsHtml = completedWorkout.items.map((item, index) => {
+        if (item.type === 'rest') {
+            return `<li>Riposo: ${item.duration}s</li>`;
+        }
+        const series = item.series || 1;
+        const reps = item.reps ? `${item.reps} reps` : `${item.duration}s`;
+        let status = '';
+        if (!completedWorkout.completed && index === completedWorkout.items.length - 1) {
+            const point = completedWorkout.terminationPoint;
+            status = ` (interrotto a serie ${point.currentSeries}/${series})`;
+        }
+        return `<li>${item.name}: ${series} x ${reps}${status}</li>`;
+    }).join('');
+
+    return `${title}<ul>${itemsHtml}</ul>`;
+}
+
+function generateTextForCoach(completedWorkout) {
+    if (!completedWorkout) return 'Nessun dato disponibile.';
+    const date = new Date(completedWorkout.date).toLocaleDateString('it-IT');
+    const status = completedWorkout.completed ? 'Completato' : 'Interrotto';
+    let report = `Report Allenamento - ${date} (${status})\n\n`;
+
+    completedWorkout.items.forEach((item, index) => {
+        if (item.type === 'rest') {
+            report += `- Riposo: ${item.duration}s\n`;
+        } else {
+            const series = item.series || 1;
+            const reps = item.reps ? `${item.reps} reps` : `${item.duration}s`;
+            let terminationInfo = '';
+            if (!completedWorkout.completed && index === completedWorkout.items.length - 1) {
+                const point = completedWorkout.terminationPoint;
+                terminationInfo = ` (interrotto a serie ${point.currentSeries}/${series})`;
+            }
+            report += `- ${item.name}: ${series} x ${reps}${terminationInfo}\n`;
+        }
+    });
+    return report;
+}
+
+function render(element) {
+    const { completedWorkout } = store.getState();
+    const summaryHtml = generateSummary(completedWorkout);
     const actionsHtml = `
         <div class="debriefing-actions">
             <button class="copy-btn">Copia per il Coach</button>
             <button class="return-btn">Torna al Calendario</button>
         </div>
     `;
-
-    return `
+    element.innerHTML = `
         <div class="debriefing-container">
             ${summaryHtml}
             ${actionsHtml}
@@ -29,12 +70,17 @@ export function init(element) {
             store.dispatch({ type: 'CHANGE_VIEW', payload: 'calendar' });
         }
         if (event.target.closest('.copy-btn')) {
-            // Logic for copying to clipboard will be added later
-            alert('Funzione di copia non ancora implementata.');
+            const { completedWorkout } = store.getState();
+            const textToCopy = generateTextForCoach(completedWorkout);
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                alert('Riepilogo copiato negli appunti!');
+            }).catch(err => {
+                console.error('Errore nella copia:', err);
+                alert('Impossibile copiare il testo.');
+            });
         }
     });
 
-    // We don't need to subscribe to the store for this basic version,
-    // but we will in the future to render the workout data.
-    element.innerHTML = render();
+    store.subscribe(() => render(element));
+    render(element);
 }

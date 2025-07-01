@@ -1,70 +1,139 @@
-commit_message: "feat(debriefing): Add DebriefingView structure and navigation"
+commit_message: "feat(debriefing): Implement workout summary and terminate button"
 rationale: |
-  This commit introduces the foundational structure for the Debriefing View, fulfilling the next logical step after stabilizing the Trainer.
+  This commit delivers a major feature enhancement by implementing a fully functional Debriefing View and adding the ability for users to terminate a workout prematurely.
 
-  1.  **New View File**: A new file, `src/views/DebriefingView.js`, has been created to encapsulate the view's logic, following the project's established pattern.
-  2.  **Navigation Logic**: The system now correctly navigates from the completed Trainer view to the new Debriefing view. This is achieved by adding a `FINISH_WORKOUT` action, which is dispatched from the `TrainerView` and handled by the `store` to change the active view.
-  3.  **View Initialization**: `main.js` has been updated to lazy-load and initialize the `DebriefingView` upon its first activation.
-  4.  **Basic Layout**: The Debriefing view renders a basic layout with a title and a functional "Return to Calendar" button, setting the stage for future implementation of the workout summary.
+  1.  **State Management**: A `completedWorkout` property has been added to the store. This acts as a vessel to transfer data of the finished (or terminated) workout to the Debriefing View, ensuring a clean separation of concerns.
+
+  2.  **Terminate Functionality**: A "Termina" button has been added to the Trainer. It dispatches a new `TERMINATE_WORKOUT` action, which saves the partial workout progress to `completedWorkout` and navigates to the debriefing screen.
+
+  3.  **Dynamic Debriefing View**: The `DebriefingView` is no longer static. It now subscribes to the store and dynamically renders a summary based on the `completedWorkout` data. It also includes a functional "Copy for Coach" button that uses the Clipboard API.
+
+  4.  **Documentation**: All relevant documentation (`01_FUNCTIONALITY.md`, `functionality_spec.md`) has been updated to reflect the new "Terminate" button and the detailed behavior of the Debriefing View for both complete and partial workouts.
 patches:
-  - file: src/main.js
+  - file: docs/01_FUNCTIONALITY.md
     content: |
-      import store from './modules/store.js';
-      import { init as initCalendarView } from './views/CalendarView.js';
-      import { init as initTrainerView } from './views/TrainerView.js';
-      import { init as initDebriefingView } from './views/DebriefingView.js';
-      import { init as initModal } from './ui/Modal.js';
-      import { loadFromStorage, saveToStorage } from './modules/storage.js';
-      import { mockWorkouts } from './modules/_mockData.js';
+      # App Functionality Specification
 
-      const WORKOUTS_STORAGE_KEY = 'workouts';
+      This document outlines the core features and operational logic of the "Mio Trainer Personale" web application.
 
-      const views = {
-          calendar: document.getElementById('calendar-view'),
-          trainer: document.getElementById('trainer-view'),
-          debriefing: document.getElementById('debriefing-view'),
-      };
-      const initializedViews = new Set();
+      ## 1. Core Concept
 
-      function initializeApp() {
-        let workouts = loadFromStorage(WORKOUTS_STORAGE_KEY);
-        if (!workouts) {
-          saveToStorage(WORKOUTS_STORAGE_KEY, mockWorkouts);
-          workouts = mockWorkouts;
-        }
-        store.dispatch({ type: 'SET_WORKOUTS', payload: workouts });
+      The application is a single-page app (SPA) designed for users to schedule, execute, and track workouts. All user data is persisted locally in the browser's `localStorage`.
 
-        initCalendarView(views.calendar);
-        initializedViews.add('calendar');
-        initModal(document.getElementById('modal-container'));
-      }
+      ## 2. Main Views
 
-      let currentActiveView = views.calendar;
-      function handleViewChange() {
-        const { currentView } = store.getState();
-        const newActiveViewEl = views[currentView];
+      The application operates using three primary, mutually exclusive views: `Calendar`, `Trainer`, and `Debriefing`.
 
-        if (currentActiveView !== newActiveViewEl) {
-          currentActiveView.classList.remove('view--active');
-          newActiveViewEl.classList.add('view--active');
-          currentActiveView = newActiveViewEl;
+      ### 2.1. Calendar View
 
-          // Inizializza la vista solo la prima volta che viene mostrata
-          if (!initializedViews.has(currentView)) {
-            if (currentView === 'trainer') {
-              initTrainerView(views.trainer);
-            } else if (currentView === 'debriefing') {
-              initDebriefingView(views.debriefing);
-            }
-            // Aggiungere qui l'inizializzazione di altre viste future
-            initializedViews.add(currentView);
-          }
-        }
-      }
+      -   **Function:** The main dashboard and default view of the application.
+      -   **Display:** It presents a weekly grid layout.
+      -   **Navigation:** Users can navigate to the previous or next week.
+      -   **Day Cells:** Each cell represents a day and displays a summary of the number of exercises scheduled for that day. A "START" button is enabled if one or more exercises are scheduled.
+      -   **Interaction:** Clicking a day cell (but not the "START" button) opens the Workout Editor modal for that specific date.
 
-      store.subscribe(handleViewChange);
-      initializeApp();
-      console.log('App "Mio Trainer Personale" inizializzata.');
+      ### 2.2. Workout Editor (Modal System)
+
+      The editor is a modal system for managing a day's workout routine. It allows for the composition of exercises and configurable rest periods.
+
+      -   **Daily Workout Modal:**
+          -   Triggered by clicking a day cell.
+          -   Displays a list of items (exercises or rests) currently scheduled for the selected date.
+      -   **Exercise Library Modal:**
+          -   Triggered by the "Add Exercise" button.
+          -   Displays a list of all **available exercises** from the application's library.
+
+      ### 2.3. Interactive Trainer View
+
+      -   **Function:** An interactive, state-driven interface that guides the user through a scheduled workout in real-time.
+      -   **Activation:** Triggered by clicking the "START" button on a day cell in the calendar.
+      -   **Controls:** Includes a main button for starting/pausing/resuming and a secondary button to **terminate** the workout at any time.
+
+      #### Trainer State Machine & Flow
+      The trainer operates as a state machine. The primary user flow is as follows:
+
+      1.  **Ready (`ready`):** The initial state. The trainer displays the first exercise and awaits user input.
+      2.  **Preparing (`preparing`):** A 3-second countdown that runs **only once** at the very beginning of the workout.
+      3.  **Announcing (`announcing`):** A 0.75-second state that displays the name of the upcoming phase (e.g., "UP", "REST") to alert the user.
+      4.  **Action (`action`):** The core execution phase where the user performs the movement for a timed duration.
+      5.  **Rest (`rest`):** A timed countdown for rest. This state is **only** activated when the trainer encounters a user-defined rest block in the workout sequence. There are no automatic rests between series or exercises.
+      6.  **Paused (`paused`):** The user can pause the workout at any time during `preparing`, `announcing`, `action`, or `rest`.
+      7.  **Advancement Logic:**
+          - After an `action` phase, the logic checks for more phases, repetitions, or series within the same exercise.
+          - Once an entire exercise item is complete (all series and reps), the trainer immediately advances to the next item in the workout list.
+          - If the next item is an exercise, it begins the `announcing` phase for it.
+          - If the next item is a rest block, it enters the `rest` state.
+      8.  **Finished (`finished`):** Once all items in the routine are complete, the trainer's main button changes to "DEBRIEFING". Clicking it transitions to the Debriefing View.
+      9.  **Terminated (`terminate`):** If the user clicks "Termina", the workout is immediately stopped, and the app transitions to the Debriefing View with a partial summary.
+
+      ### 2.4. Debriefing View
+
+      -   **Activation:** Appears automatically after a workout is finished or terminated.
+      -   **Content:** Displays a summary of all exercises completed (or partially completed). For partial workouts, it indicates exactly where the user left off.
+      -   **Actions:**
+          - **"Copy for Coach"**: Copies a pre-formatted text summary of the workout to the clipboard.
+          - **"Return to Calendar"**: Navigates back to the main calendar view.
+  - file: functionality_spec.md
+    content: |
+      # App Functionality Specification
+
+      This document outlines the core features and operational logic of the "Mio Trainer Personale" web application.
+
+      ## 1. Core Concept
+
+      The application is a single-page app (SPA) designed for users to schedule, execute, and track workouts. All user data is persisted locally in the browser's `localStorage`.
+
+      ## 2. Main Views
+
+      The application operates using three primary, mutually exclusive views: `Calendar`, `Trainer`, and `Debriefing`.
+
+      ### 2.1. Calendar View
+      - **Function:** The main dashboard and default view of the application.
+      - **Display:** It presents a weekly grid layout.
+      - **Navigation:** Users can navigate to the previous or next week.
+      - **Day Cells:** Each cell represents a day and displays a summary of the number of exercises scheduled for that day. A "START" button is enabled if one or more exercises are scheduled.
+      - **Interaction:** Clicking a day cell (but not the "START" button) opens the Workout Editor modal for that specific date.
+
+      ### 2.2. Workout Editor (Modal System)
+      The editor is a two-stage modal system for managing a day's workout routine.
+      - **Daily Workout Modal:**
+          - Triggered by clicking a day cell.
+          - Displays a list of exercises currently scheduled for the selected date.
+          - Allows **removal** of any exercise from the list.
+          - Contains an "Add Exercise" button to open the Exercise Library modal.
+      - **Exercise Library Modal:**
+          - Triggered by the "Add Exercise" button.
+          - Displays a complete list of all available exercises defined in the app's configuration.
+          - Allows **selection** of an exercise to add to the current day's routine.
+
+      ### 2.3. Interactive Trainer View
+      - **Function:** An interactive, state-driven interface that guides the user through a scheduled workout in real-time.
+      - **Activation:** Triggered by clicking the "START" button on a day cell in the calendar.
+      - **Controls:** Includes a main button for flow control (start/pause) and a secondary button to **terminate** the workout.
+
+      #### Trainer State Machine & Flow
+      The trainer operates as a state machine. Each exercise consists of a number of **series**. The primary user flow is as follows:
+
+      1.  **Ready (`ready`):** The trainer displays the current exercise and series number. It shows "READY" inside the progress ring. It awaits user input to begin.
+      2.  **Announcing (`announcing`):** Before every new phase, this 0.75-second state is activated. The progress ring is shown as empty. The content inside the ring is replaced by a large, flashing text label announcing the upcoming phase (e.g., "PREPARE", "UP", "REST"). An audio tick alerts the user.
+      3.  **Preparing (`preparing`):** A 3-second countdown to prepare the user for the first series of an exercise. The progress ring fills up, and the countdown is displayed inside.
+      4.  **Action (`action`):** The core execution phase. The progress ring animates for the duration of the phase, with the countdown and phase label shown inside.
+          - For **`reps`**-based exercises, the trainer automatically cycles through timed phases as defined by the exercise's `tempo` object (e.g., `up`, `hold`, `down`), each with its own countdown and progress ring animation.
+          - For **`time`**-based exercises, a single countdown for the specified `duration` is run.
+      5.  **Paused (`paused`):** The user can pause the workout at any time during a countdown state. The timer and the progress ring animation stop. The user must click "RESUME" to continue.
+      6.  **Rest (`rest`):** This state is **only** activated when the trainer encounters a user-defined rest block in the workout sequence. There are no automatic rests between series or exercises. A countdown for the specified `rest` duration is shown, and the progress ring animates accordingly.
+      7.  **Advancement:** After completing all series/reps of an exercise, the system automatically proceeds to the next item in the workout list. If the next item is another exercise, it begins immediately. If it is an explicit rest block, the `rest` state is triggered.
+      8.  **Finished (`finished`):** Once all exercises and series are complete, the trainer automatically transitions to the Debriefing View.
+      9.  **Terminated (`terminate`):** If the user clicks the "Termina" button, the workout is immediately stopped, and the app transitions to the Debriefing View with a partial summary.
+
+      ### 2.4. Debriefing View
+      - **Activation:** Appears automatically when a workout is completed or manually terminated.
+      - **Content:**
+          - **Summary:** Displays a list of all exercises completed during the session. For terminated workouts, it clearly indicates the last attempted exercise and series/rep.
+          - **Text Report:** Generates a pre-formatted, multi-line string summarizing the workout, ready for sharing.
+      - **Actions:**
+          - **Copy for Coach:** Copies the text report to the user's clipboard.
+          - **Return to Calendar:** Switches the view back to the main Calendar.
   - file: src/modules/store.js
     content: |
       import { saveToStorage } from './storage.js';
@@ -82,6 +151,7 @@ patches:
           isModalOpen: false,
           modalContext: null,
           activeWorkout: null,
+          completedWorkout: null, // Holds data for the debriefing view
           trainerState: 'idle',
           trainerContext: {},
         };
@@ -173,14 +243,26 @@ patches:
               newState = {
                 ...state,
                 currentView: 'trainer',
-                activeWorkout: { date, items: workoutItems },
+                activeWorkout: { date, items: workoutItems, completed: false },
+                completedWorkout: null,
                 trainerState: 'ready',
                 trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 }
               };
               break;
             }
             case 'FINISH_WORKOUT': {
-              newState = { ...state, currentView: 'debriefing', activeWorkout: null, trainerState: 'idle', trainerContext: {} };
+              newState = { ...state, currentView: 'debriefing', completedWorkout: { ...state.activeWorkout, completed: true }, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
+              break;
+            }
+            case 'TERMINATE_WORKOUT': {
+              const { activeWorkout, trainerContext } = state;
+              const partialWorkout = {
+                ...activeWorkout,
+                completed: false,
+                items: activeWorkout.items.slice(0, trainerContext.itemIndex + 1),
+                terminationPoint: trainerContext
+              };
+              newState = { ...state, currentView: 'debriefing', completedWorkout: partialWorkout, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
               break;
             }
             case 'SET_TRAINER_STATE': {
@@ -292,7 +374,9 @@ patches:
           }
           state = newState;
           if (state !== oldState) {
-            logState(action.type, state);
+            if (action.type !== 'PAUSE_TRAINER' && action.type !== 'RESUME_TRAINER') {
+                logState(action.type, state);
+            }
             if (state.workouts !== oldState.workouts) {
               saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
             }
@@ -311,22 +395,63 @@ patches:
     content: |
       import store from '../modules/store.js';
 
-      function render() {
-          // In a future step, we'll get the completed workout from the store
-          // and generate a real summary.
-          const summaryHtml = `
-              <h2>Workout Completato!</h2>
-              <p>Qui verrà mostrato il riepilogo dell'allenamento.</p>
-          `;
+      function generateSummary(completedWorkout) {
+          if (!completedWorkout) return '<p>Nessun dato di allenamento disponibile.</p>';
 
+          const title = completedWorkout.completed
+              ? '<h2>Workout Completato!</h2>'
+              : '<h2>Workout Interrotto</h2>';
+
+          const itemsHtml = completedWorkout.items.map((item, index) => {
+              if (item.type === 'rest') {
+                  return `<li>Riposo: ${item.duration}s</li>`;
+              }
+              const series = item.series || 1;
+              const reps = item.reps ? `${item.reps} reps` : `${item.duration}s`;
+              let status = '';
+              if (!completedWorkout.completed && index === completedWorkout.items.length - 1) {
+                  const point = completedWorkout.terminationPoint;
+                  status = ` (interrotto a serie ${point.currentSeries}/${series})`;
+              }
+              return `<li>${item.name}: ${series} x ${reps}${status}</li>`;
+          }).join('');
+
+          return `${title}<ul>${itemsHtml}</ul>`;
+      }
+
+      function generateTextForCoach(completedWorkout) {
+          if (!completedWorkout) return 'Nessun dato disponibile.';
+          const date = new Date(completedWorkout.date).toLocaleDateString('it-IT');
+          const status = completedWorkout.completed ? 'Completato' : 'Interrotto';
+          let report = `Report Allenamento - ${date} (${status})\n\n`;
+
+          completedWorkout.items.forEach((item, index) => {
+              if (item.type === 'rest') {
+                  report += `- Riposo: ${item.duration}s\n`;
+              } else {
+                  const series = item.series || 1;
+                  const reps = item.reps ? `${item.reps} reps` : `${item.duration}s`;
+                  let terminationInfo = '';
+                  if (!completedWorkout.completed && index === completedWorkout.items.length - 1) {
+                      const point = completedWorkout.terminationPoint;
+                      terminationInfo = ` (interrotto a serie ${point.currentSeries}/${series})`;
+                  }
+                  report += `- ${item.name}: ${series} x ${reps}${terminationInfo}\n`;
+              }
+          });
+          return report;
+      }
+
+      function render(element) {
+          const { completedWorkout } = store.getState();
+          const summaryHtml = generateSummary(completedWorkout);
           const actionsHtml = `
               <div class="debriefing-actions">
                   <button class="copy-btn">Copia per il Coach</button>
                   <button class="return-btn">Torna al Calendario</button>
               </div>
           `;
-
-          return `
+          element.innerHTML = `
               <div class="debriefing-container">
                   ${summaryHtml}
                   ${actionsHtml}
@@ -340,14 +465,19 @@ patches:
                   store.dispatch({ type: 'CHANGE_VIEW', payload: 'calendar' });
               }
               if (event.target.closest('.copy-btn')) {
-                  // Logic for copying to clipboard will be added later
-                  alert('Funzione di copia non ancora implementata.');
+                  const { completedWorkout } = store.getState();
+                  const textToCopy = generateTextForCoach(completedWorkout);
+                  navigator.clipboard.writeText(textToCopy).then(() => {
+                      alert('Riepilogo copiato negli appunti!');
+                  }).catch(err => {
+                      console.error('Errore nella copia:', err);
+                      alert('Impossibile copiare il testo.');
+                  });
               }
           });
 
-          // We don't need to subscribe to the store for this basic version,
-          // but we will in the future to render the workout data.
-          element.innerHTML = render();
+          store.subscribe(() => render(element));
+          render(element);
       }
   - file: src/views/TrainerView.js
     content: |
@@ -360,8 +490,17 @@ patches:
       export function init(element) {
           element.addEventListener('click', (event) => {
               const mainButton = event.target.closest('.trainer-main-btn');
+              const terminateButton = event.target.closest('.trainer-terminate-btn');
+
+              if (terminateButton) {
+                  if (confirm('Sei sicuro di voler terminare l\'allenamento?')) {
+                      store.dispatch({ type: 'TERMINATE_WORKOUT' });
+                  }
+                  return;
+              }
+
               if (!mainButton) return;
-              
+
               const { trainerState } = store.getState();
               switch (trainerState) {
                   case 'ready':
@@ -392,7 +531,7 @@ patches:
               if (!ringEl || !timerEl) return;
               const circumference = 2 * Math.PI * ringEl.r.baseVal.value;
               const { trainerContext } = store.getState();
-              
+
               const isResuming = trainerContext.stateBeforePause && trainerContext.remaining > 0;
               const duration = isResuming ? trainerContext.remaining : detail.duration;
               let startTime = performance.now();
@@ -400,12 +539,12 @@ patches:
               if (isResuming) {
                   store.dispatch({ type: 'UPDATE_TRAINER_CONTEXT', payload: { remaining: 0, stateBeforePause: null }});
               }
-              
+
               const animationStep = (timestamp) => {
                   const elapsed = timestamp - startTime;
                   const progress = Math.min(1, elapsed / duration);
                   ringEl.style.strokeDashoffset = circumference * (1 - progress);
-                  
+
                   if (store.getState().trainerState !== 'announcing') {
                     timerEl.textContent = Math.ceil((duration - elapsed) / 1000);
                   } else {
@@ -425,7 +564,7 @@ patches:
 
           function runStateBasedTimer() {
               const { trainerState, trainerContext, activeWorkout } = store.getState();
-              
+
               if (animationFrameId && trainerState !== 'paused') {
                   cancelAnimationFrame(animationFrameId);
                   animationFrameId = null;
@@ -478,6 +617,7 @@ patches:
               let ringOffset = circumference;
               const isExercise = currentItem.type === 'exercise' || currentItem.type === 'time';
               let currentDuration = 0;
+              let terminateButtonHidden = trainerState === 'finished' || trainerState === 'ready';
 
               switch (trainerState) {
                   case 'ready':
@@ -509,8 +649,8 @@ patches:
                       else if(prevState === 'rest') { phaseText = 'RIPOSO'; }
                       else if(prevState === 'announcing' || prevState === 'action') { phaseText = trainerContext.currentPhase?.toUpperCase() || ''; }
                       if(prevState === 'announcing') { phaseClass = 'is-flashing'; }
-                      
-                      instructionText = 'Pausa'; buttonText = 'RIPRENDI'; 
+
+                      instructionText = 'Pausa'; buttonText = 'RIPRENDI';
                       if(prevState !== 'announcing') { timerText = Math.ceil(trainerContext.remaining/1000); }
                       ringOffset = circumference * (1 - ( (trainerContext.duration - trainerContext.remaining) / trainerContext.duration) );
                       currentDuration = trainerContext.duration;
@@ -545,11 +685,12 @@ patches:
                           <p class="trainer-instruction">${instructionText}</p>
                           <div class="trainer-controls">
                               <button class="trainer-main-btn" data-duration="${currentDuration}">${buttonText}</button>
+                              <button class="trainer-terminate-btn" ${terminateButtonHidden ? 'hidden' : ''}>Termina</button>
                           </div>
                       </footer>
                   </div>
               `;
-              
+
               if (trainerState !== 'paused') {
                 runStateBasedTimer();
               }

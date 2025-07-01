@@ -33,6 +33,7 @@ The editor is a modal system for managing a day's workout routine. It allows for
 
 -   **Function:** An interactive, state-driven interface that guides the user through a scheduled workout in real-time.
 -   **Activation:** Triggered by clicking the "START" button on a day cell in the calendar.
+-   **Controls:** Includes a main button for starting/pausing/resuming and a secondary button to **terminate** the workout at any time.
 
 #### Trainer State Machine & Flow
 The trainer operates as a state machine. The primary user flow is as follows:
@@ -48,10 +49,13 @@ The trainer operates as a state machine. The primary user flow is as follows:
     - Once an entire exercise item is complete (all series and reps), the trainer immediately advances to the next item in the workout list.
     - If the next item is an exercise, it begins the `announcing` phase for it.
     - If the next item is a rest block, it enters the `rest` state.
-8.  **Finished (`finished`):** Once all items in the routine are complete, the trainer automatically transitions to the Debriefing View.
+8.  **Finished (`finished`):** Once all items in the routine are complete, the trainer's main button changes to "DEBRIEFING". Clicking it transitions to the Debriefing View.
+9.  **Terminated (`terminate`):** If the user clicks "Termina", the workout is immediately stopped, and the app transitions to the Debriefing View with a partial summary.
 
 ### 2.4. Debriefing View
 
--   **Activation:** Appears automatically when a workout is completed.
--   **Content:** Displays a summary of all exercises completed.
--   **Actions:** "Copy for Coach" and "Return to Calendar".
+-   **Activation:** Appears automatically after a workout is finished or terminated.
+-   **Content:** Displays a summary of all exercises completed (or partially completed). For partial workouts, it indicates exactly where the user left off.
+-   **Actions:**
+    - **"Copy for Coach"**: Copies a pre-formatted text summary of the workout to the clipboard.
+    - **"Return to Calendar"**: Navigates back to the main calendar view.

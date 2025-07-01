@@ -32,6 +32,7 @@ The editor is a two-stage modal system for managing a day's workout routine.
 ### 2.3. Interactive Trainer View
 - **Function:** An interactive, state-driven interface that guides the user through a scheduled workout in real-time.
 - **Activation:** Triggered by clicking the "START" button on a day cell in the calendar.
+- **Controls:** Includes a main button for flow control (start/pause) and a secondary button to **terminate** the workout.
 
 #### Trainer State Machine & Flow
 The trainer operates as a state machine. Each exercise consists of a number of **series**. The primary user flow is as follows:
@@ -46,11 +47,12 @@ The trainer operates as a state machine. Each exercise consists of a number of *
 6.  **Rest (`rest`):** This state is **only** activated when the trainer encounters a user-defined rest block in the workout sequence. There are no automatic rests between series or exercises. A countdown for the specified `rest` duration is shown, and the progress ring animates accordingly.
 7.  **Advancement:** After completing all series/reps of an exercise, the system automatically proceeds to the next item in the workout list. If the next item is another exercise, it begins immediately. If it is an explicit rest block, the `rest` state is triggered.
 8.  **Finished (`finished`):** Once all exercises and series are complete, the trainer automatically transitions to the Debriefing View.
+9.  **Terminated (`terminate`):** If the user clicks the "Termina" button, the workout is immediately stopped, and the app transitions to the Debriefing View with a partial summary.
 
 ### 2.4. Debriefing View
 - **Activation:** Appears automatically when a workout is completed or manually terminated.
 - **Content:**
-    - **Summary:** Displays a list of all exercises completed during the session.
+    - **Summary:** Displays a list of all exercises completed during the session. For terminated workouts, it clearly indicates the last attempted exercise and series/rep.
     - **Text Report:** Generates a pre-formatted, multi-line string summarizing the workout, ready for sharing.
 - **Actions:**
     - **Copy for Coach:** Copies the text report to the user's clipboard.

@@ -7,8 +7,17 @@ let animationStartTime = null;
 export function init(element) {
     element.addEventListener('click', (event) => {
         const mainButton = event.target.closest('.trainer-main-btn');
+        const terminateButton = event.target.closest('.trainer-terminate-btn');
+
+        if (terminateButton) {
+            if (confirm('Sei sicuro di voler terminare l\'allenamento?')) {
+                store.dispatch({ type: 'TERMINATE_WORKOUT' });
+            }
+            return;
+        }
+
         if (!mainButton) return;
-        
+
         const { trainerState } = store.getState();
         switch (trainerState) {
             case 'ready':
@@ -39,7 +48,7 @@ export function init(element) {
         if (!ringEl || !timerEl) return;
         const circumference = 2 * Math.PI * ringEl.r.baseVal.value;
         const { trainerContext } = store.getState();
-        
+
         const isResuming = trainerContext.stateBeforePause && trainerContext.remaining > 0;
         const duration = isResuming ? trainerContext.remaining : detail.duration;
         let startTime = performance.now();
@@ -47,12 +56,12 @@ export function init(element) {
         if (isResuming) {
             store.dispatch({ type: 'UPDATE_TRAINER_CONTEXT', payload: { remaining: 0, stateBeforePause: null }});
         }
-        
+
         const animationStep = (timestamp) => {
             const elapsed = timestamp - startTime;
             const progress = Math.min(1, elapsed / duration);
             ringEl.style.strokeDashoffset = circumference * (1 - progress);
-            
+
             if (store.getState().trainerState !== 'announcing') {
               timerEl.textContent = Math.ceil((duration - elapsed) / 1000);
             } else {
@@ -72,7 +81,7 @@ export function init(element) {
 
     function runStateBasedTimer() {
         const { trainerState, trainerContext, activeWorkout } = store.getState();
-        
+
         if (animationFrameId && trainerState !== 'paused') {
             cancelAnimationFrame(animationFrameId);
             animationFrameId = null;
@@ -125,6 +134,7 @@ export function init(element) {
         let ringOffset = circumference;
         const isExercise = currentItem.type === 'exercise' || currentItem.type === 'time';
         let currentDuration = 0;
+        let terminateButtonHidden = trainerState === 'finished' || trainerState === 'ready';
 
         switch (trainerState) {
             case 'ready':
@@ -156,8 +166,8 @@ export function init(element) {
                 else if(prevState === 'rest') { phaseText = 'RIPOSO'; }
                 else if(prevState === 'announcing' || prevState === 'action') { phaseText = trainerContext.currentPhase?.toUpperCase() || ''; }
                 if(prevState === 'announcing') { phaseClass = 'is-flashing'; }
-                
-                instructionText = 'Pausa'; buttonText = 'RIPRENDI'; 
+
+                instructionText = 'Pausa'; buttonText = 'RIPRENDI';
                 if(prevState !== 'announcing') { timerText = Math.ceil(trainerContext.remaining/1000); }
                 ringOffset = circumference * (1 - ( (trainerContext.duration - trainerContext.remaining) / trainerContext.duration) );
                 currentDuration = trainerContext.duration;
@@ -192,11 +202,12 @@ export function init(element) {
                     <p class="trainer-instruction">${instructionText}</p>
                     <div class="trainer-controls">
                         <button class="trainer-main-btn" data-duration="${currentDuration}">${buttonText}</button>
+                        <button class="trainer-terminate-btn" ${terminateButtonHidden ? 'hidden' : ''}>Termina</button>
                     </div>
                 </footer>
             </div>
         `;
-        
+
         if (trainerState !== 'paused') {
           runStateBasedTimer();
         }
