@@ -3,6 +3,7 @@ import { init as initCalendarView } from './views/CalendarView.js';
 import { init as initTrainerView } from './views/TrainerView.js';
 import { init as initDebriefingView } from './views/DebriefingView.js';
 import { init as initModal } from './ui/Modal.js';
+import { init as initNotice } from './ui/Notice.js';
 import { loadFromStorage, saveToStorage } from './modules/storage.js';
 import { mockWorkouts } from './modules/_mockData.js';
 
@@ -26,6 +27,7 @@ function initializeApp() {
   initCalendarView(views.calendar);
   initializedViews.add('calendar');
   initModal(document.getElementById('modal-container'));
+  initNotice(document.getElementById('notice-container'));
 }
 
 let currentActiveView = views.calendar;

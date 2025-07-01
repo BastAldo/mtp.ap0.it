@@ -104,16 +104,19 @@ export function init(element) {
             const { completedWorkout } = store.getState();
             const textToCopy = generateTextForCoach(completedWorkout);
             navigator.clipboard.writeText(textToCopy).then(() => {
-                alert('Riepilogo copiato negli appunti!');
+                store.dispatch({ type: 'SHOW_NOTICE', payload: { message: 'Riepilogo copiato!' } });
             }).catch(err => {
                 console.error('Errore nella copia:', err);
-                alert('Impossibile copiare il testo.');
+                store.dispatch({ type: 'SHOW_NOTICE', payload: { message: 'Errore nella copia' } });
             });
         }
     });
 
-    store.subscribe(() => render(element));
-    // Initial render can be empty as the subscription will populate it
-    // when the view becomes active and completedWorkout is set.
+    store.subscribe(() => {
+        // Re-render only if the view is active to avoid unnecessary work
+        if(element.classList.contains('view--active')) {
+            render(element);
+        }
+    });
     element.innerHTML = '';
 }

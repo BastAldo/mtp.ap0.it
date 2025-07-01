@@ -4,7 +4,7 @@ This document outlines the core features and operational logic of the "Mio Train
 
 ## 1. Core Concept
 
-The application is a single-page app (SPA) designed for users to schedule, execute, and track workouts. It features a persistent header for consistent branding. All user data is persisted locally in the browser's `localStorage`.
+The application is a single-page app (SPA) designed for users to schedule, execute, and track workouts. It features a persistent header for consistent branding. All user data is persisted locally in the browser's `localStorage`. All user interactions, such as confirmations and notifications, are handled through custom, non-native UI elements.
 
 ## 2. Main Views
 
@@ -29,34 +29,31 @@ The editor is a modal system for managing a day's workout routine. It allows for
 -   **Exercise Library Modal:**
     -   Triggered by the "Add Exercise" button.
     -   Displays a list of all **available exercises** from the application's library.
+-   **Confirmation Modal**: A custom modal is used to confirm critical actions, such as terminating a workout.
 
 ### 2.3. Interactive Trainer View
 
 -   **Function:** An interactive, state-driven interface that guides the user through a scheduled workout in real-time.
 -   **Activation:** Triggered by clicking the "START" button on a day cell in the calendar.
--   **Controls:** Includes a main button for starting/pausing/resuming and a secondary button to **terminate** the workout at any time.
+-   **Controls:** Includes a main button for starting/pausing/resuming and a secondary button to **terminate** the workout at any time (which opens a confirmation modal).
 
 #### Trainer State Machine & Flow
 The trainer operates as a state machine. The primary user flow is as follows:
 
-1.  **Ready (`ready`):** The initial state. The trainer displays the first exercise and awaits user input.
-2.  **Preparing (`preparing`):** A 3-second countdown that runs **only once** at the very beginning of the workout. The logic correctly handles if the first item is a `rest` block.
-3.  **Announcing (`announcing`):** A 0.75-second state that displays the name of the upcoming phase (e.g., "UP", "REST") to alert the user.
-4.  **Action (`action`):** The core execution phase where the user performs the movement for a timed duration.
-5.  **Rest (`rest`):** A timed countdown for rest. This state is **only** activated when the trainer encounters a user-defined rest block in the workout sequence.
-6.  **Paused (`paused`):** The user can pause the workout at any time during `preparing`, `announcing`, `action`, or `rest`.
-7.  **Advancement Logic:**
-    - Once an entire exercise item is complete (all series and reps), the trainer immediately advances to the next item in the workout list.
-8.  **Finished (`finished`):** Once all items in the routine are complete, the trainer's main button changes to "DEBRIEFING". Clicking it transitions to the Debriefing View.
-9.  **Terminated (`terminate`):** If the user clicks "Termina", the workout is immediately stopped, and the app transitions to the Debriefing View with a partial summary.
+1.  **Ready (`ready`):** The initial state.
+2.  **Preparing (`preparing`):** A 3-second countdown that runs once.
+3.  **Announcing (`announcing`):** A 0.75-second state to alert the user of the next phase.
+4.  **Action (`action`):** The core execution phase.
+5.  **Rest (`rest`):** A timed countdown for user-defined rest blocks.
+6.  **Paused (`paused`):** The user can pause the workout at any time.
+7.  **Advancement Logic:** The trainer advances through phases, reps, and series automatically.
+8.  **Finished (`finished`):** After all items are complete, the main button transitions to "DEBRIEFING".
+9.  **Terminated (`terminate`):** If the user confirms termination via the modal, the workout stops.
 
 ### 2.4. Debriefing View
 
--   **Activation:** Appears automatically after a workout is finished or terminated.
+-   **Activation:** Appears after a workout is finished or terminated.
 -   **Content:** Displays a visually styled list representing the entire workout plan.
-    - **Completed** items are marked (e.g., green).
-    - The **point of termination** is clearly highlighted (e.g., red).
-    - **Skipped** items are visually distinct (e.g., greyed out).
 -   **Actions:**
-    - **"Copy for Coach"**: Copies a pre-formatted text summary of the workout to the clipboard.
+    - **"Copy for Coach"**: Copies a summary to the clipboard and shows a temporary, non-blocking notification ("toast") on success.
     - **"Return to Calendar"**: Navigates back to the main calendar view.

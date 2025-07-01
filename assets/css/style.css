@@ -78,6 +78,30 @@ body::-webkit-scrollbar-thumb, .modal-body::-webkit-scrollbar-thumb { background
         transform: translateY(0);
     }
 }
+@keyframes fade-in-out {
+  0%, 100% { opacity: 0; transform: translateY(-20px); }
+  10%, 90% { opacity: 1; transform: translateY(0); }
+}
+
+/* --- NOTICE / TOAST STYLES --- */
+#notice-container {
+    position: fixed;
+    top: 80px; /* Below header */
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2000;
+    display: flex;
+    justify-content: center;
+}
+.notice {
+    background-color: var(--secondary-color);
+    color: var(--bg-color);
+    padding: 0.8rem 1.5rem;
+    border-radius: 6px;
+    font-weight: bold;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    animation: fade-in-out 3s ease-in-out forwards;
+}
 
 /* --- CALENDAR VIEW STYLES --- */
 .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
@@ -101,8 +125,25 @@ body::-webkit-scrollbar-thumb, .modal-body::-webkit-scrollbar-thumb { background
 .modal-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; }
 .modal-header h3 { color: var(--primary-color); }
 .modal-close-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; cursor: pointer; }
-.modal-body { overflow-y: auto; flex-grow: 1; padding: 0 1.5rem; }
+.modal-body { overflow-y: auto; flex-grow: 1; padding: 1rem 1.5rem; }
 .modal-actions { padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 1rem; flex-shrink: 0; }
+.modal-actions button {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: bold;
+}
+.modal-actions .btn-confirm {
+    background-color: var(--danger-color);
+    border: 1px solid var(--danger-color);
+    color: var(--text-color);
+}
+.modal-actions .btn-cancel {
+    background-color: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-color-muted);
+}
 .add-rest-btn, .add-exercise-btn { background-color: transparent; border: 1px solid var(--secondary-color); color: var(--secondary-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
 .add-rest-btn:hover, .add-exercise-btn:hover { background-color: var(--secondary-color); color: var(--card-color); }
 

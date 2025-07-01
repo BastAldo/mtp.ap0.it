@@ -16,6 +16,10 @@ export function init(element) {
         if (addExerciseBtn) { const { date } = store.getState().modalContext; store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'CHOOSE_EXERCISE', date } }); return; }
         const addToWorkoutBtn = event.target.closest('.add-to-workout-btn');
         if (addToWorkoutBtn) { const { exerciseId } = addToWorkoutBtn.dataset; const { date } = store.getState().modalContext; store.dispatch({ type: 'ADD_EXERCISE_ITEM', payload: { date, exerciseId } }); return; }
+        const confirmBtn = event.target.closest('.btn-confirm');
+        if(confirmBtn) { store.dispatch({type: 'TERMINATE_WORKOUT'}); store.dispatch({type: 'CLOSE_MODAL'}); return; }
+        const cancelBtn = event.target.closest('.btn-cancel');
+        if(cancelBtn) { store.dispatch({type: 'CLOSE_MODAL'}); return; }
     });
 
     element.addEventListener('change', (event) => {
@@ -36,9 +40,7 @@ export function init(element) {
     element.addEventListener('dragend', (event) => {
         draggedItemId = null;
         const draggingElement = element.querySelector('.workout-item.dragging');
-        if (draggingElement) {
-            draggingElement.classList.remove('dragging');
-        }
+        if (draggingElement) draggingElement.classList.remove('dragging');
     });
 
     element.addEventListener('dragover', (event) => {
@@ -76,8 +78,8 @@ export function init(element) {
     function render() {
         const { isModalOpen, modalContext, workouts } = store.getState();
         if (isModalOpen) {
-            const dateKey = `workout-${modalContext.date}`;
-            const currentItemCount = workouts[dateKey]?.length || 0;
+            const dateKey = modalContext.date ? `workout-${modalContext.date}` : null;
+            const currentItemCount = dateKey ? (workouts[dateKey]?.length || 0) : 0;
 
             element.classList.add('active');
             let headerContent = '', bodyContent = '', actionsContent = '';
@@ -91,6 +93,11 @@ export function init(element) {
                 case 'CHOOSE_EXERCISE':
                     headerContent = `<h3>Libreria Esercizi</h3>`;
                     bodyContent = renderExerciseLibrary(modalContext);
+                    break;
+                case 'CONFIRM_TERMINATION':
+                    headerContent = `<h3>Terminare l'allenamento?</h3>`;
+                    bodyContent = `<p>Sei sicuro di voler terminare la sessione corrente? I progressi verranno salvati nel riepilogo.</p>`;
+                    actionsContent = `<button class="btn-cancel">Annulla</button><button class="btn-confirm">Conferma</button>`;
                     break;
                 default:
                     headerContent = '<h3>Attenzione</h3>';

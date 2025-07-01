@@ -12,8 +12,9 @@ function createStore() {
     workouts: {},
     isModalOpen: false,
     modalContext: null,
+    notice: null, // { message: '...' }
     activeWorkout: null,
-    completedWorkout: null, // Holds data for the debriefing view
+    completedWorkout: null,
     trainerState: 'idle',
     trainerContext: {},
   };
@@ -23,10 +24,9 @@ function createStore() {
 
   // Custom Logger Function
   function logState(actionType, state) {
-      if (actionType.startsWith('@@')) return; // Silences internal actions if any
+      if (actionType.startsWith('@@')) return;
       const { activeWorkout, trainerState, trainerContext } = state;
       if (!activeWorkout) {
-        // console.log(`%c[${actionType}]`, 'color: #88aaff; font-weight: bold;', 'No active workout.');
         return;
       }
 
@@ -34,14 +34,11 @@ function createStore() {
       const exerciseName = currentItem?.name || 'Riposo';
       const series = `${trainerContext.currentSeries || '-'}/${currentItem?.series || '-'}`;
       const reps = `${trainerContext.currentRep || '-'}/${currentItem?.reps || '-'}`;
-
       let status = trainerState.toUpperCase();
       if (trainerState === 'announcing' || trainerState === 'action') {
           status += ` (${trainerContext.currentPhase || 'N/A'})`;
       }
-
       const logString = `Esercizio: ${exerciseName} | Serie: ${series} | Rep: ${reps} | Stato: ${status}`;
-
       console.log(`%c[${actionType}]`, 'color: #88aaff; font-weight: bold;', logString);
   }
 
@@ -56,6 +53,7 @@ function createStore() {
       case 'SET_WORKOUTS': newState = { ...state, workouts: action.payload }; break;
       case 'OPEN_MODAL': newState = { ...state, isModalOpen: true, modalContext: action.payload }; break;
       case 'CLOSE_MODAL': newState = { ...state, isModalOpen: false, modalContext: null }; break;
+      case 'SHOW_NOTICE': newState = { ...state, notice: { message: action.payload.message, id: Date.now() } }; break;
       case 'ADD_EXERCISE_ITEM': {
           const { date, exerciseId } = action.payload;
           const dateKey = `workout-${date}`;
@@ -212,22 +210,22 @@ function createStore() {
               const phases = Object.keys(tempo);
               const nextPhaseIndex = trainerContext.currentPhaseIndex + 1;
 
-              if (nextPhaseIndex < phases.length) { // More phases in this rep
+              if (nextPhaseIndex < phases.length) {
                 nextState = 'announcing';
                 nextContext.currentPhaseIndex = nextPhaseIndex;
                 nextContext.currentPhase = phases[nextPhaseIndex];
-              } else { // Rep complete
-                nextContext.currentPhaseIndex = 0; // Reset for next rep
+              } else {
+                nextContext.currentPhaseIndex = 0;
                 if (trainerContext.currentRep < currentItem.reps) {
                   nextContext.currentRep++;
-                  nextState = 'announcing'; // Start next rep immediately
+                  nextState = 'announcing';
                   nextContext.currentPhase = phases[0] || 'up';
                 } else if (trainerContext.currentSeries < currentItem.series) {
                   nextContext.currentSeries++;
                   nextContext.currentRep = 1;
-                  nextState = 'announcing'; // Start next series immediately
+                  nextState = 'announcing';
                   nextContext.currentPhase = phases[0] || 'up';
-                } else { // Exercise complete
+                } else {
                   const advance = advanceToNextItem();
                   if (advance) { nextState = advance.newState; nextContext = { ...nextContext, ...advance.newContext }; }
                   else { nextState = 'finished'; }
@@ -236,7 +234,7 @@ function createStore() {
             } else if (currentItem.type === 'time') {
                 if (trainerContext.currentSeries < currentItem.series) {
                     nextContext.currentSeries++;
-                    nextState = 'announcing'; // Start next series immediately
+                    nextState = 'announcing';
                     nextContext.currentPhase = 'Esegui';
                 } else {
                     const advance = advanceToNextItem();

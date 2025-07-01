@@ -10,9 +10,7 @@ export function init(element) {
         const terminateButton = event.target.closest('.trainer-terminate-btn');
 
         if (terminateButton) {
-            if (confirm('Sei sicuro di voler terminare l\'allenamento?')) {
-                store.dispatch({ type: 'TERMINATE_WORKOUT' });
-            }
+            store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'CONFIRM_TERMINATION' } });
             return;
         }
 
