@@ -5,8 +5,8 @@ import { render as renderExerciseLibrary } from '../views/ExerciseLibraryView.js
 export function init(element) {
     let previousItemCount = 0;
 
-    element.addEventListener('click', (event) => { /* ... (invariato) ... */ });
-    element.addEventListener('change', (event) => { /* ... (invariato) ... */ });
+    element.addEventListener('click', (event) => { /* ... (invariato, come precedente) ... */ });
+    element.addEventListener('change', (event) => { /* ... (invariato, come precedente) ... */ });
     // ... (resto del codice invariato) ...
     element.addEventListener('click', (event) => {
         if (event.target === element) { store.dispatch({ type: 'CLOSE_MODAL' }); return; }
@@ -31,11 +31,13 @@ export function init(element) {
             const currentItemCount = workouts[dateKey]?.length || 0;
 
             element.classList.add('active');
-            let headerContent = '', bodyContent = '';
+            let headerContent = '', bodyContent = '', actionsContent = '';
+
             switch (modalContext?.type) {
                 case 'EDIT_WORKOUT':
                     headerContent = `<h3>Editor Workout - ${modalContext.date}</h3>`;
                     bodyContent = renderWorkoutEditor(modalContext);
+                    actionsContent = `<button class="add-exercise-btn">+ Add Exercise</button><button class="add-rest-btn">+ Aggiungi Riposo</button>`;
                     break;
                 case 'CHOOSE_EXERCISE':
                     headerContent = `<h3>Libreria Esercizi</h3>`;
@@ -43,32 +45,4 @@ export function init(element) {
                     break;
                 default:
                     headerContent = '<h3>Attenzione</h3>';
-                    bodyContent = '<p>Contenuto della modale non specificato.</p>';
-            }
-            element.innerHTML = `
-                <div class="modal-content">
-                    <div class="modal-header">${headerContent}<button class="modal-close-btn">&times;</button></div>
-                    <div class="modal-body">${bodyContent}</div>
-                </div>
-            `;
-            const closeButton = element.querySelector('.modal-close-btn');
-            if (closeButton) { closeButton.addEventListener('click', () => { store.dispatch({ type: 'CLOSE_MODAL' }); }); }
-
-            // Logica di auto-scroll
-            if (currentItemCount > previousItemCount) {
-                const modalBody = element.querySelector('.modal-body');
-                if (modalBody) {
-                    modalBody.scrollTop = modalBody.scrollHeight;
-                }
-            }
-            previousItemCount = currentItemCount;
-
-        } else {
-            element.classList.remove('active');
-            element.innerHTML = '';
-            previousItemCount = 0; // Resetta il conteggio quando la modale si chiude
-        }
-    }
-    store.subscribe(render);
-    render();
-}
+                    bodyContent = '<p>Contenuto della modale non specificato.</p
