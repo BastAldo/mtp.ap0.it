@@ -14,6 +14,9 @@ export function render(context) {
         if (item.type === 'exercise') {
             infoContent = `<span class="item-name">${item.name}</span>`;
             detailsContent = `<span class="item-details">${item.series}x${item.reps}</span>`;
+        } else if (item.type === 'time') {
+            infoContent = `<span class="item-name">${item.name}</span>`;
+            detailsContent = `<span class="item-details">${item.series || 1}x${item.duration}s</span>`;
         } else if (item.type === 'rest') {
             infoContent = `<span class="item-name">Riposo</span>`;
             detailsContent = `<input type="number" class="rest-duration-input" value="${item.duration}" data-item-id="${item.id}" /> s`;

@@ -21,10 +21,10 @@ export const mockWorkouts = {
     },
     {
       id: 'test-ex-time',
-      type: 'exercise',
+      type: 'time', // Corretto per chiarezza, anche se l'ultimo vinceva.
       exerciseId: 'test-time-exercise',
       name: 'Esercizio di Test (Tempo)',
-      type: 'time',
+      series: 2,
       duration: 5
     }
   ]
