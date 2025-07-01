@@ -20,6 +20,26 @@ function createStore() {
   const subscribers = new Set();
   function notify() { subscribers.forEach(callback => callback()); }
 
+  // Custom Logger Function
+  function logState(actionType, state) {
+      const { activeWorkout, trainerState, trainerContext } = state;
+      if (!activeWorkout) return;
+
+      const currentItem = activeWorkout.items[trainerContext.itemIndex];
+      const exerciseName = currentItem?.name || 'Riposo';
+      const series = `${trainerContext.currentSeries || '-'}/${currentItem?.series || '-'}`;
+      const reps = `${trainerContext.currentRep || '-'}/${currentItem?.reps || '-'}`;
+      
+      let status = trainerState.toUpperCase();
+      if (trainerState === 'announcing' || trainerState === 'action') {
+          status += ` (${trainerContext.currentPhase || 'N/A'})`;
+      }
+
+      const logString = `Esercizio: ${exerciseName} | Serie: ${series} | Rep: ${reps} | Stato: ${status}`;
+      
+      console.log(`%c[${actionType}]`, 'color: #88aaff; font-weight: bold;', logString);
+  }
+
   function dispatch(action) {
     const oldState = { ...state };
     let newState = { ...state };
@@ -117,46 +137,39 @@ function createStore() {
         const { activeWorkout, trainerContext } = state;
         const currentItem = activeWorkout.items[trainerContext.itemIndex];
         let nextContext = { ...trainerContext };
-        let nextStateStr = state.trainerState;
 
         const advanceToNextItem = () => {
             if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
-                nextContext = { ...nextContext, itemIndex: trainerContext.itemIndex + 1, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 };
-                const nextItem = activeWorkout.items[nextContext.itemIndex];
-                nextStateStr = (nextItem.type === 'rest') ? 'rest' : 'announcing';
-                if (nextItem.type === 'rest') nextContext.restDuration = nextItem.duration;
-            } else {
-                nextStateStr = 'finished';
+                const nextItemIndex = trainerContext.itemIndex + 1;
+                const nextItem = activeWorkout.items[nextItemIndex];
+                return { ...nextContext, itemIndex: nextItemIndex, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 };
             }
+            return null; // Signals workout is finished
         };
 
         if (currentItem.type === 'exercise') {
             if (nextContext.currentRep < currentItem.reps) {
                 nextContext.currentRep++;
-                nextContext.currentPhaseIndex = 0;
-                nextStateStr = 'announcing';
             } else if (nextContext.currentSeries < currentItem.series) {
                 nextContext.currentSeries++;
                 nextContext.currentRep = 1;
-                nextContext.currentPhaseIndex = 0;
-                nextContext.restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60;
-                nextStateStr = 'rest';
             } else {
-                advanceToNextItem();
+                const newContext = advanceToNextItem();
+                if (newContext) nextContext = newContext; else return { ...state, trainerState: 'finished' };
             }
         } else if (currentItem.type === 'time') {
             if (nextContext.currentSeries < currentItem.series) {
                 nextContext.currentSeries++;
-                nextContext.restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60;
-                nextStateStr = 'rest';
             } else {
-                advanceToNextItem();
+                const newContext = advanceToNextItem();
+                if (newContext) nextContext = newContext; else return { ...state, trainerState: 'finished' };
             }
-        } else if (state.trainerState === 'rest') {
-            // After resting, we announce the next rep/exercise
-            nextStateStr = 'announcing';
+        } else if (currentItem.type === 'rest') {
+            const newContext = advanceToNextItem();
+            if (newContext) nextContext = newContext; else return { ...state, trainerState: 'finished' };
         }
-        newState = { ...state, trainerState: nextStateStr, trainerContext: nextContext };
+        
+        newState = { ...state, trainerContext: nextContext };
         break;
       }
       default:
@@ -164,14 +177,7 @@ function createStore() {
     }
     state = newState;
     if (state !== oldState) {
-      console.log(
-        `%cACTION: ${action.type}`, 'color: #88aaff; font-weight: bold;',
-        {
-          payload: action.payload,
-          trainerState: state.trainerState,
-          context: state.trainerContext
-        }
-      );
+      logState(action.type, state);
       if (state.workouts !== oldState.workouts) {
         saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
       }
