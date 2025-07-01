@@ -25,7 +25,7 @@ The editor is a modal system for managing a day's workout routine. It allows for
 -   **Daily Workout Modal:**
     -   Triggered by clicking a day cell.
     -   Displays a list of items (exercises or rests) currently scheduled for the selected date.
-    -   **Items in this list can be reordered via drag-and-drop.**
+    -   Items in this list feature a **visual handle** and can be reordered via drag-and-drop.
 -   **Exercise Library Modal:**
     -   Triggered by the "Add Exercise" button.
     -   Displays a list of all **available exercises** from the application's library.
@@ -40,13 +40,12 @@ The editor is a modal system for managing a day's workout routine. It allows for
 The trainer operates as a state machine. The primary user flow is as follows:
 
 1.  **Ready (`ready`):** The initial state. The trainer displays the first exercise and awaits user input.
-2.  **Preparing (`preparing`):** A 3-second countdown that runs **only once** at the very beginning of the workout.
+2.  **Preparing (`preparing`):** A 3-second countdown that runs **only once** at the very beginning of the workout. The logic correctly handles if the first item is a `rest` block.
 3.  **Announcing (`announcing`):** A 0.75-second state that displays the name of the upcoming phase (e.g., "UP", "REST") to alert the user.
 4.  **Action (`action`):** The core execution phase where the user performs the movement for a timed duration.
-5.  **Rest (`rest`):** A timed countdown for rest. This state is **only** activated when the trainer encounters a user-defined rest block in the workout sequence. There are no automatic rests between series or exercises.
+5.  **Rest (`rest`):** A timed countdown for rest. This state is **only** activated when the trainer encounters a user-defined rest block in the workout sequence.
 6.  **Paused (`paused`):** The user can pause the workout at any time during `preparing`, `announcing`, `action`, or `rest`.
 7.  **Advancement Logic:**
-    - After an `action` phase, the logic checks for more phases, repetitions, or series within the same exercise.
     - Once an entire exercise item is complete (all series and reps), the trainer immediately advances to the next item in the workout list.
 8.  **Finished (`finished`):** Once all items in the routine are complete, the trainer's main button changes to "DEBRIEFING". Clicking it transitions to the Debriefing View.
 9.  **Terminated (`terminate`):** If the user clicks "Termina", the workout is immediately stopped, and the app transitions to the Debriefing View with a partial summary.
@@ -59,5 +58,5 @@ The trainer operates as a state machine. The primary user flow is as follows:
     - The **point of termination** is clearly highlighted (e.g., red).
     - **Skipped** items are visually distinct (e.g., greyed out).
 -   **Actions:**
-    - **"Copy for Coach"**: Copies a pre-formatted text summary of the workout to the clipboard, detailing what was completed, where it was stopped, and what was skipped.
+    - **"Copy for Coach"**: Copies a pre-formatted text summary of the workout to the clipboard.
     - **"Return to Calendar"**: Navigates back to the main calendar view.

@@ -108,10 +108,11 @@ body::-webkit-scrollbar-thumb, .modal-body::-webkit-scrollbar-thumb { background
 
 /* --- WORKOUT EDITOR & LIBRARY STYLES --- */
 .workout-item-list, .exercise-library-list { list-style: none; padding: 0; margin: 0; }
-.workout-item { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0.5rem; border-bottom: 1px solid var(--border-color); cursor: grab; }
+.workout-item { display: flex; align-items: center; padding: 1rem 0.5rem; border-bottom: 1px solid var(--border-color); }
 .workout-item:last-child { border-bottom: none; }
 .workout-item.dragging { opacity: 0.4; background-color: var(--border-color); }
 .workout-item.drag-over-target { border-top: 2px solid var(--primary-color); }
+.drag-handle { cursor: grab; padding-right: 1rem; color: var(--text-color-muted); }
 .item-info { display: flex; align-items: baseline; gap: 0.75rem; flex-grow: 1; }
 .item-info .item-name { font-weight: bold; }
 .item-info .item-details { color: var(--secondary-color); }

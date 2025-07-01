@@ -1,14 +1,12 @@
-commit_message: "feat(editor): Implement drag-and-drop reordering for workout items"
+commit_message: "fix(trainer): Improve robustness and add drag handle UI"
 rationale: |
-  This commit introduces a significant user experience improvement by adding drag-and-drop functionality to the workout editor list, based on user feedback to prioritize this over the history feature.
+  This commit addresses two key points based on user feedback: a logical bug in the state machine and a user interface enhancement for the workout editor.
 
-  1.  **Drag-and-Drop Logic**: The native HTML5 Drag and Drop API has been used to make workout items reorderable. The core logic, including event listeners for `dragstart`, `dragover`, and `drop`, has been implemented in `src/ui/Modal.js` to keep interaction logic centralized.
+  1.  **Robust State Machine**: The trainer logic in `store.js` has been made more robust. It now correctly handles workouts that begin with a `rest` item. A new check within the `TIMER_COMPLETE` action ensures that if the first item is a rest, the trainer transitions from `preparing` directly to the `rest` state, bypassing the irrelevant `announcing` state and preventing undefined behavior.
 
-  2.  **State Management**: A new `REORDER_WORKOUT_ITEMS` action has been added to `src/modules/store.js`. This action handles the array manipulation logic cleanly, ensuring the state remains the single source of truth for the workout order.
+  2.  **Drag Handle UI**: To improve usability, a visual drag handle (a standard three-line SVG icon) has been added to each item in the workout editor list (`WorkoutEditorView.js`). This makes the drag-and-drop functionality more intuitive for the user. Corresponding styles have been added in `assets/css/style.css` to position the handle correctly.
 
-  3.  **UI Feedback**: New styles have been added to `assets/css/style.css` to provide clear visual feedback to the user during the drag-and-drop process, including a class for the item being dragged and an indicator for the drop target.
-
-  4.  **Documentation**: The `docs/01_FUNCTIONALITY.md` and `functionality_spec.md` files have been updated to reflect this new capability. The previously discussed "Workout History" feature has been added to `docs/04_ROADMAP.md` for future consideration.
+  3.  **Documentation**: The functionality documents (`01_FUNCTIONALITY.md` and `functionality_spec.md`) have been updated to mention the presence of the new visual drag handle in the editor.
 patches:
   - file: assets/css/style.css
     content: |
@@ -122,10 +120,11 @@ patches:
 
       /* --- WORKOUT EDITOR & LIBRARY STYLES --- */
       .workout-item-list, .exercise-library-list { list-style: none; padding: 0; margin: 0; }
-      .workout-item { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0.5rem; border-bottom: 1px solid var(--border-color); cursor: grab; }
+      .workout-item { display: flex; align-items: center; padding: 1rem 0.5rem; border-bottom: 1px solid var(--border-color); }
       .workout-item:last-child { border-bottom: none; }
       .workout-item.dragging { opacity: 0.4; background-color: var(--border-color); }
       .workout-item.drag-over-target { border-top: 2px solid var(--primary-color); }
+      .drag-handle { cursor: grab; padding-right: 1rem; color: var(--text-color-muted); }
       .item-info { display: flex; align-items: baseline; gap: 0.75rem; flex-grow: 1; }
       .item-info .item-name { font-weight: bold; }
       .item-info .item-details { color: var(--secondary-color); }
@@ -226,7 +225,7 @@ patches:
       -   **Daily Workout Modal:**
           -   Triggered by clicking a day cell.
           -   Displays a list of items (exercises or rests) currently scheduled for the selected date.
-          -   **Items in this list can be reordered via drag-and-drop.**
+          -   Items in this list feature a **visual handle** and can be reordered via drag-and-drop.
       -   **Exercise Library Modal:**
           -   Triggered by the "Add Exercise" button.
           -   Displays a list of all **available exercises** from the application's library.
@@ -241,13 +240,12 @@ patches:
       The trainer operates as a state machine. The primary user flow is as follows:
 
       1.  **Ready (`ready`):** The initial state. The trainer displays the first exercise and awaits user input.
-      2.  **Preparing (`preparing`):** A 3-second countdown that runs **only once** at the very beginning of the workout.
+      2.  **Preparing (`preparing`):** A 3-second countdown that runs **only once** at the very beginning of the workout. The logic correctly handles if the first item is a `rest` block.
       3.  **Announcing (`announcing`):** A 0.75-second state that displays the name of the upcoming phase (e.g., "UP", "REST") to alert the user.
       4.  **Action (`action`):** The core execution phase where the user performs the movement for a timed duration.
-      5.  **Rest (`rest`):** A timed countdown for rest. This state is **only** activated when the trainer encounters a user-defined rest block in the workout sequence. There are no automatic rests between series or exercises.
+      5.  **Rest (`rest`):** A timed countdown for rest. This state is **only** activated when the trainer encounters a user-defined rest block in the workout sequence.
       6.  **Paused (`paused`):** The user can pause the workout at any time during `preparing`, `announcing`, `action`, or `rest`.
       7.  **Advancement Logic:**
-          - After an `action` phase, the logic checks for more phases, repetitions, or series within the same exercise.
           - Once an entire exercise item is complete (all series and reps), the trainer immediately advances to the next item in the workout list.
       8.  **Finished (`finished`):** Once all items in the routine are complete, the trainer's main button changes to "DEBRIEFING". Clicking it transitions to the Debriefing View.
       9.  **Terminated (`terminate`):** If the user clicks "Termina", the workout is immediately stopped, and the app transitions to the Debriefing View with a partial summary.
@@ -260,33 +258,8 @@ patches:
           - The **point of termination** is clearly highlighted (e.g., red).
           - **Skipped** items are visually distinct (e.g., greyed out).
       -   **Actions:**
-          - **"Copy for Coach"**: Copies a pre-formatted text summary of the workout to the clipboard, detailing what was completed, where it was stopped, and what was skipped.
+          - **"Copy for Coach"**: Copies a pre-formatted text summary of the workout to the clipboard.
           - **"Return to Calendar"**: Navigates back to the main calendar view.
-  - file: docs/04_ROADMAP.md
-    content: |
-      # Project Roadmap
-
-      This document lists potential future features and major improvements for "Mio Trainer Personale". It serves as a high-level guide for the project's evolution. Items are not strictly prioritized unless specified.
-
-      ## Proposed Features
-
-      ### 1. Workout Templates
-      - **Concept:** Allow users to save a complete daily workout routine (exercises and rests) as a named template.
-      - **Benefit:** Users can quickly apply these templates to any day in the calendar, significantly speeding up the scheduling of recurring workouts.
-
-      ### 2. Statistics & History Page
-      - **Concept:** A new dedicated view that provides insights into the user's workout history. This could be integrated into the calendar view.
-      - **Benefit:** Allows users to track their progress over time. Could include metrics like:
-        - Total workouts completed.
-        - Frequency of specific exercises.
-        - Personal records (e.g., heaviest lift - future feature).
-      - **Functionality ideas:**
-        - A button to clear all history.
-        - A toggle to show history for the current week vs. all time.
-
-      ### 3. Advanced Statistics
-      - **Concept:** A dedicated statistics page with more in-depth data visualization.
-      - **Benefit:** Allows users to track progress over time with charts and graphs for key exercises.
   - file: functionality_spec.md
     content: |
       # App Functionality Specification
@@ -313,7 +286,7 @@ patches:
       - **Daily Workout Modal:**
           - Triggered by clicking a day cell.
           - Displays a list of exercises currently scheduled for the selected date.
-          - **Items in this list can be reordered via drag-and-drop.**
+          - **Items in this list feature a visual handle and can be reordered via drag-and-drop.**
           - Allows **removal** of any exercise from the list.
           - Contains an "Add Exercise" button to open the Exercise Library modal.
       - **Exercise Library Modal:**
@@ -330,11 +303,11 @@ patches:
       The trainer operates as a state machine. Each exercise consists of a number of **series**. The primary user flow is as follows:
 
       1.  **Ready (`ready`):** The trainer displays the current exercise and series number. It shows "READY" inside the progress ring. It awaits user input to begin.
-      2.  **Announcing (`announcing`):** Before every new phase, this 0.75-second state is activated.
-      3.  **Preparing (`preparing`):** A 3-second countdown to prepare the user for the first series of an exercise.
+      2.  **Preparing (`preparing`):** A 3-second countdown to prepare the user. The logic correctly handles if the first item is a `rest` block.
+      3.  **Announcing (`announcing`):** A 0.75-second state that is activated before every new phase.
       4.  **Action (`action`):** The core execution phase for a timed duration.
       5.  **Paused (`paused`):** The user can pause the workout at any time during a countdown state.
-      6.  **Rest (`rest`):** This state is **only** activated when the trainer encounters a user-defined rest block in the workout sequence. There are no automatic rests.
+      6.  **Rest (`rest`):** This state is **only** activated when the trainer encounters a user-defined rest block in the workout sequence.
       7.  **Advancement:** After completing an item, the system automatically proceeds to the next item in the workout list.
       8.  **Finished (`finished`):** Once all items are complete, the trainer automatically transitions to the Debriefing View.
       9.  **Terminated (`terminate`):** If the user clicks the "Termina" button, the workout is immediately stopped, and the app transitions to the Debriefing View with a partial summary.
@@ -342,8 +315,8 @@ patches:
       ### 2.4. Debriefing View
       - **Activation:** Appears automatically when a workout is completed or manually terminated.
       - **Content:**
-          - **Summary:** Displays a visually styled list representing the entire workout plan. **Completed** items are marked (e.g., green). The **point of termination** is clearly highlighted (e.g., red). **Skipped** items are visually distinct (e.g., greyed out).
-          - **Text Report:** Generates a pre-formatted, multi-line string summarizing the workout, detailing what was completed, where it was stopped, and what was skipped.
+          - **Summary:** Displays a visually styled list representing the entire workout plan. **Completed** items are marked. The **point of termination** is clearly highlighted. **Skipped** items are visually distinct.
+          - **Text Report:** Generates a pre-formatted, multi-line string summarizing the workout.
       - **Actions:**
           - **Copy for Coach:** Copies the text report to the user's clipboard.
           - **Return to Calendar:** Switches the view back to the main Calendar.
@@ -543,10 +516,14 @@ patches:
 
               switch (trainerState) {
                 case 'preparing':
-                  nextState = 'announcing';
                   const firstItem = activeWorkout.items[0];
-                  if (firstItem.type === 'time') { nextContext.currentPhase = 'Esegui'; }
-                  else { const tempo = firstItem.tempo || {}; nextContext.currentPhase = Object.keys(tempo)[0] || 'up'; }
+                  if (firstItem.type === 'rest') {
+                      nextState = 'rest';
+                  } else {
+                      nextState = 'announcing';
+                      if (firstItem.type === 'time') { nextContext.currentPhase = 'Esegui'; }
+                      else { const tempo = firstItem.tempo || {}; nextContext.currentPhase = Object.keys(tempo)[0] || 'up'; }
+                  }
                   break;
 
                 case 'announcing':
@@ -625,131 +602,6 @@ patches:
       }
       const store = createStore();
       export default store;
-  - file: src/ui/Modal.js
-    content: |
-      import store from '../modules/store.js';
-      import { render as renderWorkoutEditor } from '../views/WorkoutEditorView.js';
-      import { render as renderExerciseLibrary } from '../views/ExerciseLibraryView.js';
-
-      export function init(element) {
-          let previousItemCount = 0;
-          let draggedItemId = null;
-
-          element.addEventListener('click', (event) => {
-              if (event.target === element) { store.dispatch({ type: 'CLOSE_MODAL' }); return; }
-              const removeBtn = event.target.closest('.remove-item-btn');
-              if (removeBtn) { const { itemId } = removeBtn.dataset; const { date } = store.getState().modalContext; store.dispatch({ type: 'REMOVE_WORKOUT_ITEM', payload: { date, itemId } }); return; }
-              const addRestBtn = event.target.closest('.add-rest-btn');
-              if (addRestBtn) { const { date } = store.getState().modalContext; store.dispatch({ type: 'ADD_REST_ITEM', payload: { date } }); return; }
-              const addExerciseBtn = event.target.closest('.add-exercise-btn');
-              if (addExerciseBtn) { const { date } = store.getState().modalContext; store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'CHOOSE_EXERCISE', date } }); return; }
-              const addToWorkoutBtn = event.target.closest('.add-to-workout-btn');
-              if (addToWorkoutBtn) { const { exerciseId } = addToWorkoutBtn.dataset; const { date } = store.getState().modalContext; store.dispatch({ type: 'ADD_EXERCISE_ITEM', payload: { date, exerciseId } }); return; }
-          });
-
-          element.addEventListener('change', (event) => {
-              const restInput = event.target.closest('.rest-duration-input');
-              if (restInput) { const { itemId } = restInput.dataset; const { date } = store.getState().modalContext; const newDuration = parseInt(restInput.value, 10); if (itemId && date && !isNaN(newDuration)) { store.dispatch({ type: 'UPDATE_REST_DURATION', payload: { date, itemId, newDuration } }); } }
-          });
-
-          // Drag and Drop listeners
-          element.addEventListener('dragstart', (event) => {
-              const target = event.target.closest('.workout-item');
-              if (!target) return;
-              draggedItemId = target.dataset.itemId;
-              event.dataTransfer.effectAllowed = 'move';
-              event.dataTransfer.setData('text/plain', draggedItemId);
-              setTimeout(() => target.classList.add('dragging'), 0);
-          });
-
-          element.addEventListener('dragend', (event) => {
-              draggedItemId = null;
-              const draggingElement = element.querySelector('.workout-item.dragging');
-              if (draggingElement) {
-                  draggingElement.classList.remove('dragging');
-              }
-          });
-
-          element.addEventListener('dragover', (event) => {
-              event.preventDefault();
-              const target = event.target.closest('.workout-item');
-              if (target && target.dataset.itemId !== draggedItemId) {
-                  const currentlyActive = element.querySelector('.drag-over-target');
-                  if (currentlyActive) currentlyActive.classList.remove('drag-over-target');
-                  target.classList.add('drag-over-target');
-              }
-          });
-
-          element.addEventListener('dragleave', (event) => {
-              const target = event.target.closest('.drag-over-target');
-              if(target) target.classList.remove('drag-over-target');
-          });
-
-          element.addEventListener('drop', (event) => {
-              event.preventDefault();
-              const target = event.target.closest('.workout-item');
-              const currentlyActive = element.querySelector('.drag-over-target');
-              if (currentlyActive) currentlyActive.classList.remove('drag-over-target');
-
-              const targetItemId = target ? target.dataset.itemId : null;
-
-              if (draggedItemId && targetItemId && draggedItemId !== targetItemId) {
-                  const { date } = store.getState().modalContext;
-                  store.dispatch({
-                      type: 'REORDER_WORKOUT_ITEMS',
-                      payload: { date, draggedItemId, targetItemId }
-                  });
-              }
-          });
-
-          function render() {
-              const { isModalOpen, modalContext, workouts } = store.getState();
-              if (isModalOpen) {
-                  const dateKey = `workout-${modalContext.date}`;
-                  const currentItemCount = workouts[dateKey]?.length || 0;
-
-                  element.classList.add('active');
-                  let headerContent = '', bodyContent = '', actionsContent = '';
-
-                  switch (modalContext?.type) {
-                      case 'EDIT_WORKOUT':
-                          headerContent = `<h3>Editor Workout - ${modalContext.date}</h3>`;
-                          bodyContent = renderWorkoutEditor(modalContext);
-                          actionsContent = `<button class="add-exercise-btn">+ Add Exercise</button><button class="add-rest-btn">+ Aggiungi Riposo</button>`;
-                          break;
-                      case 'CHOOSE_EXERCISE':
-                          headerContent = `<h3>Libreria Esercizi</h3>`;
-                          bodyContent = renderExerciseLibrary(modalContext);
-                          break;
-                      default:
-                          headerContent = '<h3>Attenzione</h3>';
-                          bodyContent = '<p>Contenuto della modale non specificato.</p>';
-                  }
-                  element.innerHTML = `
-                      <div class="modal-content">
-                          <div class="modal-header">${headerContent}<button class="modal-close-btn">&times;</button></div>
-                          <div class="modal-body">${bodyContent}</div>
-                          ${actionsContent ? `<footer class="modal-actions">${actionsContent}</footer>` : ''}
-                      </div>
-                  `;
-                  const closeButton = element.querySelector('.modal-close-btn');
-                  if (closeButton) { closeButton.addEventListener('click', () => { store.dispatch({ type: 'CLOSE_MODAL' }); }); }
-
-                  if (currentItemCount > previousItemCount) {
-                      const modalBody = element.querySelector('.modal-body');
-                      if (modalBody) { modalBody.scrollTop = modalBody.scrollHeight; }
-                  }
-                  previousItemCount = currentItemCount;
-
-              } else {
-                  element.classList.remove('active');
-                  element.innerHTML = '';
-                  previousItemCount = 0;
-              }
-          }
-          store.subscribe(render);
-          render();
-      }
   - file: src/views/WorkoutEditorView.js
     content: |
       import store from '../modules/store.js';
@@ -781,6 +633,9 @@ patches:
               }
               return `
                   <li class="workout-item workout-item--${item.type}" draggable="true" data-item-id="${item.id}">
+                      <span class="drag-handle">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"></path></svg>
+                      </span>
                       <div class="item-info">${infoContent}${detailsContent}</div>
                       <button class="remove-item-btn" data-item-id="${item.id}" title="Rimuovi item">&times;</button>
                   </li>`;
@@ -789,4 +644,4 @@ patches:
           return `<div class="workout-editor-content"><ul class="workout-item-list">${itemsHtml}</ul></div>`;
       }
 commands:
-  - "echo 'Drag-and-drop feature implemented and roadmap updated.'"
+  - "echo 'Trainer logic is now more robust and editor UI has been improved with drag handles.'"

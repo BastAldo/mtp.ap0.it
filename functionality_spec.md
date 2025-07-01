@@ -22,7 +22,7 @@ The editor is a two-stage modal system for managing a day's workout routine.
 - **Daily Workout Modal:**
     - Triggered by clicking a day cell.
     - Displays a list of exercises currently scheduled for the selected date.
-    - **Items in this list can be reordered via drag-and-drop.**
+    - **Items in this list feature a visual handle and can be reordered via drag-and-drop.**
     - Allows **removal** of any exercise from the list.
     - Contains an "Add Exercise" button to open the Exercise Library modal.
 - **Exercise Library Modal:**
@@ -39,11 +39,11 @@ The editor is a two-stage modal system for managing a day's workout routine.
 The trainer operates as a state machine. Each exercise consists of a number of **series**. The primary user flow is as follows:
 
 1.  **Ready (`ready`):** The trainer displays the current exercise and series number. It shows "READY" inside the progress ring. It awaits user input to begin.
-2.  **Announcing (`announcing`):** Before every new phase, this 0.75-second state is activated.
-3.  **Preparing (`preparing`):** A 3-second countdown to prepare the user for the first series of an exercise.
+2.  **Preparing (`preparing`):** A 3-second countdown to prepare the user. The logic correctly handles if the first item is a `rest` block.
+3.  **Announcing (`announcing`):** A 0.75-second state that is activated before every new phase.
 4.  **Action (`action`):** The core execution phase for a timed duration.
 5.  **Paused (`paused`):** The user can pause the workout at any time during a countdown state.
-6.  **Rest (`rest`):** This state is **only** activated when the trainer encounters a user-defined rest block in the workout sequence. There are no automatic rests.
+6.  **Rest (`rest`):** This state is **only** activated when the trainer encounters a user-defined rest block in the workout sequence.
 7.  **Advancement:** After completing an item, the system automatically proceeds to the next item in the workout list.
 8.  **Finished (`finished`):** Once all items are complete, the trainer automatically transitions to the Debriefing View.
 9.  **Terminated (`terminate`):** If the user clicks the "Termina" button, the workout is immediately stopped, and the app transitions to the Debriefing View with a partial summary.
@@ -51,8 +51,8 @@ The trainer operates as a state machine. Each exercise consists of a number of *
 ### 2.4. Debriefing View
 - **Activation:** Appears automatically when a workout is completed or manually terminated.
 - **Content:**
-    - **Summary:** Displays a visually styled list representing the entire workout plan. **Completed** items are marked (e.g., green). The **point of termination** is clearly highlighted (e.g., red). **Skipped** items are visually distinct (e.g., greyed out).
-    - **Text Report:** Generates a pre-formatted, multi-line string summarizing the workout, detailing what was completed, where it was stopped, and what was skipped.
+    - **Summary:** Displays a visually styled list representing the entire workout plan. **Completed** items are marked. The **point of termination** is clearly highlighted. **Skipped** items are visually distinct.
+    - **Text Report:** Generates a pre-formatted, multi-line string summarizing the workout.
 - **Actions:**
     - **Copy for Coach:** Copies the text report to the user's clipboard.
     - **Return to Calendar:** Switches the view back to the main Calendar.

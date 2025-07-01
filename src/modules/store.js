@@ -192,10 +192,14 @@ function createStore() {
 
         switch (trainerState) {
           case 'preparing':
-            nextState = 'announcing';
             const firstItem = activeWorkout.items[0];
-            if (firstItem.type === 'time') { nextContext.currentPhase = 'Esegui'; }
-            else { const tempo = firstItem.tempo || {}; nextContext.currentPhase = Object.keys(tempo)[0] || 'up'; }
+            if (firstItem.type === 'rest') {
+                nextState = 'rest';
+            } else {
+                nextState = 'announcing';
+                if (firstItem.type === 'time') { nextContext.currentPhase = 'Esegui'; }
+                else { const tempo = firstItem.tempo || {}; nextContext.currentPhase = Object.keys(tempo)[0] || 'up'; }
+            }
             break;
 
           case 'announcing':
