@@ -4,74 +4,7 @@ import { getExerciseById } from '../modules/exerciseRepository.js';
 let animationFrameId = null;
 let animationStartTime = null;
 
-const PhasedExerciseRunner = {
-    init(element) {
-        this.element = element;
-    },
-    start() {
-        store.dispatch({ type: 'UPDATE_TRAINER_CONTEXT', payload: { currentPhaseIndex: 0 } });
-        this.runNextPhase();
-    },
-    runNextPhase() {
-        const { activeWorkout, trainerContext } = store.getState();
-        const currentExercise = activeWorkout.items[trainerContext.itemIndex];
-        const isTimeBased = currentExercise.type === 'time';
-
-        if (isTimeBased) {
-            store.dispatch({ type: 'UPDATE_TRAINER_CONTEXT', payload: { currentPhase: 'Esegui' } });
-            store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'announcing' });
-            return;
-        }
-
-        const tempo = currentExercise.tempo || { up: 1, hold: 1, down: 2 };
-        const phases = Object.keys(tempo);
-
-        if (trainerContext.currentPhaseIndex >= phases.length) {
-            // Repetition is complete, advance logic and then decide next state
-            store.dispatch({ type: 'ADVANCE_TRAINER_LOGIC' });
-            const newState = store.getState();
-            const newCurrentItem = newState.activeWorkout.items[newState.trainerContext.itemIndex];
-            
-            // Check if we are still on an exercise and not finished
-            if (newState.trainerState !== 'finished' && (newCurrentItem.type === 'exercise' || newCurrentItem.type === 'time')) {
-                store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'rest' });
-            } else if (newState.trainerState !== 'finished') {
-                store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'announcing' });
-            }
-            return;
-        }
-
-        const phaseName = phases[trainerContext.currentPhaseIndex];
-        store.dispatch({ type: 'UPDATE_TRAINER_CONTEXT', payload: { currentPhase: phaseName } });
-        store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'announcing' });
-    },
-    execute() {
-        const { activeWorkout, trainerContext } = store.getState();
-        const currentItem = activeWorkout.items[trainerContext.itemIndex];
-        let duration;
-        let onCompleteCallback;
-
-        if (currentItem.type === 'time') {
-            duration = (currentItem.duration || 10) * 1000;
-            onCompleteCallback = () => {
-                store.dispatch({ type: 'ADVANCE_TRAINER_LOGIC' });
-                store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'rest' });
-            };
-        } else {
-            const tempo = currentItem.tempo || { up: 1, hold: 1, down: 2 };
-            duration = (tempo[trainerContext.currentPhase] || 1) * 1000;
-            onCompleteCallback = () => {
-                store.dispatch({ type: 'UPDATE_TRAINER_CONTEXT', payload: { currentPhaseIndex: trainerContext.currentPhaseIndex + 1 } });
-                this.runNextPhase();
-            };
-        }
-        this.element.dispatchEvent(new CustomEvent('animateRing', { detail: { duration, onComplete: onCompleteCallback } }));
-    }
-};
-
 export function init(element) {
-    PhasedExerciseRunner.init(element);
-    
     element.addEventListener('click', (event) => {
         const mainButton = event.target.closest('.trainer-main-btn');
         if (!mainButton) return;
@@ -134,7 +67,7 @@ export function init(element) {
         animationFrameId = requestAnimationFrame(animationStep);
     });
 
-    function runStateLogic() {
+    function runStateBasedTimer() {
         const { trainerState, trainerContext, activeWorkout } = store.getState();
         
         if (animationFrameId && trainerState !== 'paused') {
@@ -142,41 +75,52 @@ export function init(element) {
             animationFrameId = null;
         }
 
+        const onComplete = () => store.dispatch({ type: 'TIMER_COMPLETE' });
+        const currentItem = activeWorkout.items[trainerContext.itemIndex];
+        let duration = 0;
+
         switch(trainerState) {
             case 'preparing':
-                element.dispatchEvent(new CustomEvent('animateRing', { detail: { duration: 3000, onComplete: () => PhasedExerciseRunner.start() } }));
+                duration = 3000;
                 break;
             case 'announcing':
-                element.dispatchEvent(new CustomEvent('animateRing', { detail: { duration: 750, onComplete: () => store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'action' }) } }));
+                duration = 750;
                 break;
             case 'action':
-                PhasedExerciseRunner.execute();
+                if (currentItem.type === 'time') {
+                    duration = (currentItem.duration || 10) * 1000;
+                } else {
+                    const tempo = currentItem.tempo || {};
+                    duration = (tempo[trainerContext.currentPhase] || 1) * 1000;
+                }
                 break;
             case 'rest': {
-                const currentItem = activeWorkout.items[trainerContext.itemIndex];
                 let restDuration = 60; // Default
                 if (currentItem.type === 'rest') {
                     restDuration = currentItem.duration;
                 } else if (currentItem.exerciseId) {
                     restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60;
                 }
-                element.dispatchEvent(new CustomEvent('animateRing', { detail: { duration: restDuration * 1000, onComplete: () => {
-                    store.dispatch({type: 'SET_TRAINER_STATE', payload: 'announcing'});
-                } } }));
+                duration = restDuration * 1000;
                 break;
             }
+            default:
+                // No timer for states like 'ready', 'paused', 'finished'
+                return;
         }
+        element.dispatchEvent(new CustomEvent('animateRing', { detail: { duration, onComplete } }));
     }
 
     function render() {
         const { activeWorkout, trainerState, trainerContext } = store.getState();
         if (!activeWorkout) { element.innerHTML = '<h2>Nessun workout attivo.</h2>'; return; }
+
         const currentItem = activeWorkout.items[trainerContext.itemIndex];
         const radius = 90;
         const circumference = 2 * Math.PI * radius;
         let phaseText = '', instructionText = '', buttonText = '', timerText = '', phaseClass = '';
         let ringOffset = circumference;
-        const isTimeBasedExercise = currentItem.type === 'time';
+        const isExercise = currentItem.type === 'exercise' || currentItem.type === 'time';
         let currentDuration = 0;
 
         switch (trainerState) {
@@ -188,11 +132,8 @@ export function init(element) {
                 break;
             case 'rest': {
                 let restDuration = 60;
-                if (currentItem.type === 'rest') {
-                    restDuration = currentItem.duration;
-                } else if (currentItem.exerciseId) {
-                    restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60;
-                }
+                if (currentItem.type === 'rest') { restDuration = currentItem.duration; }
+                else if (currentItem.exerciseId) { restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60; }
                 phaseText = 'RIPOSO'; instructionText = 'Recupera'; buttonText = 'PAUSA'; timerText = restDuration; currentDuration = restDuration * 1000;
                 break;
             }
@@ -202,7 +143,7 @@ export function init(element) {
                 break;
             case 'action':
                 phaseText = trainerContext.currentPhase?.toUpperCase() || '';
-                if (isTimeBasedExercise) { currentDuration = currentItem.duration * 1000; }
+                if (currentItem.type === 'time') { currentDuration = currentItem.duration * 1000; }
                 else { const tempo = currentItem.tempo || {}; currentDuration = (tempo[trainerContext.currentPhase] || 1) * 1000; }
                 instructionText = 'Esegui il movimento'; buttonText = 'PAUSA';
                 break;
@@ -210,8 +151,9 @@ export function init(element) {
                 const prevState = trainerContext.stateBeforePause;
                 if(prevState === 'preparing') { phaseText = 'PREPARATI'; }
                 else if(prevState === 'rest') { phaseText = 'RIPOSO'; }
-                else if(prevState === 'announcing') { phaseText = trainerContext.currentPhase?.toUpperCase() || ''; phaseClass = 'is-flashing'; }
-                else { phaseText = trainerContext.currentPhase?.toUpperCase() || ''; }
+                else if(prevState === 'announcing' || prevState === 'action') { phaseText = trainerContext.currentPhase?.toUpperCase() || ''; }
+                if(prevState === 'announcing') { phaseClass = 'is-flashing'; }
+                
                 instructionText = 'Pausa'; buttonText = 'RIPRENDI'; 
                 if(prevState !== 'announcing') { timerText = Math.ceil(trainerContext.remaining/1000); }
                 ringOffset = circumference * (1 - ( (trainerContext.duration - trainerContext.remaining) / trainerContext.duration) );
@@ -224,8 +166,9 @@ export function init(element) {
             default: phaseText = 'IDLE'; instructionText = 'Stato non riconosciuto'; buttonText = 'RESET';
         }
         const headerTitle = currentItem.name || 'Riposo';
-        const seriesText = (isTimeBasedExercise || currentItem.type === 'exercise') ? `SERIE ${trainerContext.currentSeries} / ${currentItem.series || 1}` : '';
-        const repsText = !isTimeBasedExercise ? `REP ${trainerContext.currentRep} / ${currentItem.reps || 1}` : '';
+        const seriesText = isExercise ? `SERIE ${trainerContext.currentSeries} / ${currentItem.series || 1}` : '';
+        const repsText = currentItem.type === 'exercise' ? `REP ${trainerContext.currentRep} / ${currentItem.reps || 1}` : '';
+
         element.innerHTML = `
             <div class="trainer-container">
                 <header class="trainer-header">
@@ -250,8 +193,9 @@ export function init(element) {
                 </footer>
             </div>
         `;
+        
         if (trainerState !== 'paused') {
-          runStateLogic();
+          runStateBasedTimer();
         }
     }
     store.subscribe(render);
