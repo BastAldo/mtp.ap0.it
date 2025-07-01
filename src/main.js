@@ -1,5 +1,6 @@
 import store from './modules/store.js';
 import { init as initCalendarView } from './views/CalendarView.js';
+import { init as initTrainerView } from './views/TrainerView.js';
 import { init as initModal } from './ui/Modal.js';
 import { loadFromStorage, saveToStorage } from './modules/storage.js';
 import { mockWorkouts } from './modules/_mockData.js';
@@ -11,6 +12,7 @@ const views = {
     trainer: document.getElementById('trainer-view'),
     debriefing: document.getElementById('debriefing-view'),
 };
+const initializedViews = new Set();
 
 function initializeApp() {
   let workouts = loadFromStorage(WORKOUTS_STORAGE_KEY);
@@ -21,6 +23,7 @@ function initializeApp() {
   store.dispatch({ type: 'SET_WORKOUTS', payload: workouts });
 
   initCalendarView(views.calendar);
+  initializedViews.add('calendar');
   initModal(document.getElementById('modal-container'));
 }
 
@@ -33,6 +36,15 @@ function handleViewChange() {
     currentActiveView.classList.remove('view--active');
     newActiveViewEl.classList.add('view--active');
     currentActiveView = newActiveViewEl;
+
+    // Inizializza la vista solo la prima volta che viene mostrata
+    if (!initializedViews.has(currentView)) {
+      if (currentView === 'trainer') {
+        initTrainerView(views.trainer);
+      }
+      // Aggiungere qui l'inizializzazione di altre viste future
+      initializedViews.add(currentView);
+    }
   }
 }
 
