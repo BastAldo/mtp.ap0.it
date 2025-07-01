@@ -14,10 +14,15 @@ export function init(element) {
             if (itemId && date) {
                 store.dispatch({ type: 'REMOVE_WORKOUT_ITEM', payload: { date, itemId } });
             }
+            return;
+        }
+        const addRestButton = event.target.closest('.add-rest-btn');
+        if (addRestButton) {
+            const { date } = store.getState().modalContext;
+            store.dispatch({ type: 'ADD_REST_ITEM', payload: { date } });
         }
     });
 
-    // Gestione per l'input inline
     element.addEventListener('change', (event) => {
         const restInput = event.target.closest('.rest-duration-input');
         if (restInput) {

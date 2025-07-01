@@ -1,9 +1,9 @@
-commit_message: "feat(editor): Aggiunge editing inline per riposi e corregge layout"
+commit_message: "feat(editor): Aggiunge funzionalità 'Add Rest' e corregge stile input"
 rationale: |
-  Questo commit implementa due modifiche chiave al Workout Editor come da piano:
+  Come da piano approvato, questo commit accorpa due modifiche:
 
-  1.  **Correzione di Layout:** Il layout degli item di tipo esercizio è stato corretto per mostrare i dettagli (es. "3x10") a destra del nome, invece che sotto, risolvendo un bug di visualizzazione.
-  2.  **Editing Inline:** È stata implementata la funzionalità, prevista dalle specifiche, di modifica inline per la durata dei riposi. Un nuovo'azione (`UPDATE_REST_DURATION`) gestisce la modifica e il salvataggio automatico su `localStorage`.
+  1.  **Fix Estetico:** Vengono rimosse le frecce (spinner) dagli input numerici per un'interfaccia più pulita.
+  2.  **Nuova Funzionalità:** Viene implementata la possibilità di aggiungere un nuovo item "Riposo" al workout tramite un pulsante dedicato. È stata aggiunta la relativa azione `ADD_REST_ITEM` allo store, che si integra con il meccanismo di autosave esistente.
 patches:
   - file: src/modules/store.js
     content: |
@@ -68,6 +68,15 @@ patches:
               state = { ...state, workouts: { ...state.workouts, [dateKey]: newWorkoutDay } };
               break;
             }
+            case 'ADD_REST_ITEM': {
+              const { date } = action.payload;
+              const dateKey = `workout-${date}`;
+              const newRestItem = { id: `rest-${Date.now()}`, type: 'rest', duration: 60 };
+              const currentItems = state.workouts[dateKey] || [];
+              const newWorkoutDay = [...currentItems, newRestItem];
+              state = { ...state, workouts: { ...state.workouts, [dateKey]: newWorkoutDay } };
+              break;
+            }
             default:
               console.warn(`Azione non riconosciuta: ${action.type}`);
               return;
@@ -107,10 +116,15 @@ patches:
                   if (itemId && date) {
                       store.dispatch({ type: 'REMOVE_WORKOUT_ITEM', payload: { date, itemId } });
                   }
+                  return;
+              }
+              const addRestButton = event.target.closest('.add-rest-btn');
+              if (addRestButton) {
+                  const { date } = store.getState().modalContext;
+                  store.dispatch({ type: 'ADD_REST_ITEM', payload: { date } });
               }
           });
 
-          // Gestione per l'input inline
           element.addEventListener('change', (event) => {
               const restInput = event.target.closest('.rest-duration-input');
               if (restInput) {
@@ -164,34 +178,42 @@ patches:
           const dateKey = `workout-${context.date}`;
           const workoutItems = workouts[dateKey];
 
-          if (!workoutItems || workoutItems.length === 0) {
-              return '<p>Nessun allenamento programmato per questo giorno.</p>';
+          let listHtml = '<p>Nessun allenamento programmato per questo giorno.</p>';
+
+          if (workoutItems && workoutItems.length > 0) {
+              const itemsHtml = workoutItems.map(item => {
+                  let infoContent = '';
+                  let detailsContent = '';
+
+                  if (item.type === 'exercise') {
+                      infoContent = `<span class="item-name">${item.name}</span>`;
+                      detailsContent = `<span class="item-details">${item.series}x${item.reps}</span>`;
+                  } else if (item.type === 'rest') {
+                      infoContent = `<span class="item-name">Riposo</span>`;
+                      detailsContent = `<input type="number" class="rest-duration-input" value="${item.duration}" data-item-id="${item.id}" /> s`;
+                  }
+
+                  return `
+                      <li class="workout-item workout-item--${item.type}">
+                          <div class="item-info">
+                              ${infoContent}
+                              ${detailsContent}
+                          </div>
+                          <button class="remove-item-btn" data-item-id="${item.id}" title="Rimuovi item">&times;</button>
+                      </li>
+                  `;
+              }).join('');
+              listHtml = `<ul class="workout-item-list">${itemsHtml}</ul>`;
           }
 
-          const itemsHtml = workoutItems.map(item => {
-              let infoContent = '';
-              let detailsContent = '';
-
-              if (item.type === 'exercise') {
-                  infoContent = `<span class="item-name">${item.name}</span>`;
-                  detailsContent = `<span class="item-details">${item.series}x${item.reps}</span>`;
-              } else if (item.type === 'rest') {
-                  infoContent = `<span class="item-name">Riposo</span>`;
-                  detailsContent = `<input type="number" class="rest-duration-input" value="${item.duration}" data-item-id="${item.id}" /> s`;
-              }
-
-              return `
-                  <li class="workout-item workout-item--${item.type}">
-                      <div class="item-info">
-                          ${infoContent}
-                          ${detailsContent}
-                      </div>
-                      <button class="remove-item-btn" data-item-id="${item.id}" title="Rimuovi item">&times;</button>
-                  </li>
-              `;
-          }).join('');
-
-          return `<ul class="workout-item-list">${itemsHtml}</ul>`;
+          return `
+              <div class="workout-editor-content">
+                  ${listHtml}
+              </div>
+              <footer class="modal-actions">
+                  <button class="add-rest-btn">+ Aggiungi Riposo</button>
+              </footer>
+          `;
       }
   - file: assets/css/style.css
     content: |
@@ -234,6 +256,9 @@ patches:
       .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; }
       .modal-header h3 { color: var(--primary-color); }
       .modal-close-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; cursor: pointer; }
+      .modal-actions { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 1rem; }
+      .add-rest-btn { background-color: transparent; border: 1px dashed var(--secondary-color); color: var(--secondary-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+      .add-rest-btn:hover { background-color: var(--secondary-color); color: var(--card-color); }
 
       /* --- WORKOUT EDITOR STYLES --- */
       .workout-item-list { list-style: none; padding: 0; margin: 0; }
@@ -243,7 +268,9 @@ patches:
       .item-info .item-name { font-weight: bold; }
       .item-info .item-details { color: var(--secondary-color); }
       .workout-item--rest .item-info .item-name { color: var(--text-color-muted); font-style: italic; }
-      .rest-duration-input { background-color: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 4px; padding: 0.25rem; width: 60px; text-align: center; }
+      /* Hide number input spinners */
+      .rest-duration-input { -moz-appearance: textfield; background-color: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 4px; padding: 0.25rem; width: 60px; text-align: center; }
+      .rest-duration-input::-webkit-outer-spin-button, .rest-duration-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
       .remove-item-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; font-weight: bold; cursor: pointer; padding: 0 0.5rem; border-radius: 50%; }
       .remove-item-btn:hover { color: var(--danger-color); background-color: rgba(239, 83, 80, 0.1); }
 

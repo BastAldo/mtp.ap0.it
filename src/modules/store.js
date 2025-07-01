@@ -59,6 +59,15 @@ function createStore() {
         state = { ...state, workouts: { ...state.workouts, [dateKey]: newWorkoutDay } };
         break;
       }
+      case 'ADD_REST_ITEM': {
+        const { date } = action.payload;
+        const dateKey = `workout-${date}`;
+        const newRestItem = { id: `rest-${Date.now()}`, type: 'rest', duration: 60 };
+        const currentItems = state.workouts[dateKey] || [];
+        const newWorkoutDay = [...currentItems, newRestItem];
+        state = { ...state, workouts: { ...state.workouts, [dateKey]: newWorkoutDay } };
+        break;
+      }
       default:
         console.warn(`Azione non riconosciuta: ${action.type}`);
         return;
