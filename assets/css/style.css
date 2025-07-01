@@ -1,10 +1,31 @@
-/* ... (prime parti invariate) ... */
-:root { --bg-color: #1a1a1d; --card-color: #2c2c34; --primary-color: #9575cd; --secondary-color: #4db6ac; --text-color: #f4f4f9; --text-color-muted: #aaa; --border-color: #40404a; --danger-color: #ef5350; }
+/* --- GLOBAL STYLES & MOBILE FIRST --- */
+:root {
+    --bg-color: #1a1a1d;
+    --card-color: #2c2c34;
+    --primary-color: #9575cd;
+    --secondary-color: #4db6ac;
+    --text-color: #f4f4f9;
+    --text-color-muted: #aaa;
+    --border-color: #40404a;
+    --danger-color: #ef5350;
+}
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; background-color: var(--bg-color); color: var(--text-color); }
+body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary-color) var(--bg-color);
+}
+/* Custom Scrollbar for Webkit Browsers */
+body::-webkit-scrollbar { width: 8px; }
+body::-webkit-scrollbar-track { background: var(--bg-color); }
+body::-webkit-scrollbar-thumb { background-color: var(--primary-color); border-radius: 10px; border: 2px solid var(--bg-color); }
 #app-container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
 .view { display: none; width: 100%; }
 .view--active { display: block; }
+
+/* --- CALENDAR VIEW STYLES --- */
 .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
 .calendar-header h2 { font-size: 1.25rem; text-align: center; }
 .calendar-header button { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: background-color 0.2s; }
@@ -17,17 +38,22 @@ body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Ro
 .exercise-count { font-size: 0.9rem; color: var(--secondary-color); }
 .start-btn { background-color: var(--secondary-color); color: var(--bg-color); border: none; padding: 0.6rem; border-radius: 6px; cursor: pointer; font-weight: bold; text-transform: uppercase; width: 100%; margin-top: 1rem; transition: opacity 0.2s; pointer-events: all !important; }
 .start-btn:hover { opacity: 0.85; }
+
+/* --- MODAL STYLES --- */
 #modal-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; z-index: 1000; }
 #modal-container.active { opacity: 1; pointer-events: all; }
-.modal-content { background-color: var(--card-color); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color); min-width: 300px; max-width: 90%; transform: scale(0.95); transition: transform 0.3s ease; }
+.modal-content { background-color: var(--card-color); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color); min-width: 300px; max-width: 90%; transform: scale(0.95); transition: transform 0.3s ease; display: flex; flex-direction: column; max-height: 80vh; }
 #modal-container.active .modal-content { transform: scale(1); }
 .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; }
 .modal-header h3 { color: var(--primary-color); }
 .modal-close-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; cursor: pointer; }
+.modal-body { overflow-y: auto; }
 .modal-actions { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 1rem; }
 .add-rest-btn, .add-exercise-btn { background-color: transparent; border: 1px solid var(--secondary-color); color: var(--secondary-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
 .add-rest-btn:hover, .add-exercise-btn:hover { background-color: var(--secondary-color); color: var(--card-color); }
-.workout-item-list { list-style: none; padding: 0; margin: 0; max-height: 40vh; overflow-y: auto; }
+
+/* --- WORKOUT EDITOR STYLES --- */
+.workout-item-list, .exercise-library-list { list-style: none; padding: 0; margin: 0; }
 .workout-item { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0.5rem; border-bottom: 1px solid var(--border-color); }
 .workout-item:last-child { border-bottom: none; }
 .item-info { display: flex; align-items: baseline; gap: 0.75rem; flex-grow: 1; }
@@ -38,10 +64,11 @@ body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Ro
 .rest-duration-input::-webkit-outer-spin-button, .rest-duration-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .remove-item-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; font-weight: bold; cursor: pointer; padding: 0 0.5rem; border-radius: 50%; }
 .remove-item-btn:hover { color: var(--danger-color); background-color: rgba(239, 83, 80, 0.1); }
-.exercise-library-list { list-style: none; padding: 0; margin: 0; max-height: 40vh; overflow-y: auto; }
 .exercise-library-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0.5rem; border-bottom: 1px solid var(--border-color); }
 .exercise-library-item:last-child { border-bottom: none; }
 .add-to-workout-btn { background-color: var(--primary-color); color: var(--text-color); border: none; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; }
+
+/* --- TABLET/DESKTOP OVERRIDES --- */
 @media (min-width: 768px) {
     #app-container { padding: 2rem; }
     .calendar-grid { grid-template-columns: repeat(7, 1fr); gap: 1rem; }

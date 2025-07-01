@@ -1,24 +1,13 @@
 import store from '../modules/store.js';
 
-// --- UTILITIES ---
-function getWeekStartDate(date) {
-    const d = new Date(date);
-    const day = d.getDay(); // Domenica = 0, Lunedì = 1, ...
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adegua per la domenica
-    return new Date(d.setDate(diff));
-}
-
-function formatShortDate(date) {
-  return date.toLocaleDateString('it-IT', { day: 'numeric', month: 'long' });
-}
-
 function toISODateString(date) {
     return date.getFullYear() + '-' +
            ('0' + (date.getMonth() + 1)).slice(-2) + '-' +
            ('0' + date.getDate()).slice(-2);
 }
+function getWeekStartDate(date) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(d.setDate(diff)); }
+function formatShortDate(date) { return date.toLocaleDateString('it-IT', { day: 'numeric', month: 'long' }); }
 
-// --- MODULE ---
 export function init(element) {
   element.innerHTML = `
     <header class="calendar-header">
@@ -37,14 +26,19 @@ export function init(element) {
   prevBtn.addEventListener('click', () => store.dispatch({ type: 'PREV_WEEK' }));
   nextBtn.addEventListener('click', () => store.dispatch({ type: 'NEXT_WEEK' }));
 
-  // Delegazione degli eventi
   gridContainer.addEventListener('click', (event) => {
     const dayCell = event.target.closest('.day-cell');
-    // Assicurati che il click non sia sul pulsante START
-    if (dayCell && event.target.tagName !== 'BUTTON') {
+    if (!dayCell) return;
+
+    const startButton = event.target.closest('.start-btn');
+    if (startButton) {
       const date = dayCell.dataset.date;
-      store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'EDIT_WORKOUT', date } });
+      store.dispatch({ type: 'START_WORKOUT', payload: { date } });
+      return;
     }
+
+    const date = dayCell.dataset.date;
+    store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'EDIT_WORKOUT', date } });
   });
 
   function render() {
@@ -63,7 +57,7 @@ export function init(element) {
 
       const dayCell = document.createElement('div');
       dayCell.className = 'day-cell';
-      dayCell.dataset.date = isoDate; // Aggiungiamo la data come data-attribute
+      dayCell.dataset.date = isoDate;
 
       let bodyContent = '';
       if (workoutForDay?.length > 0) {
