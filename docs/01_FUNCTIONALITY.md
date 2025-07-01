@@ -41,12 +41,13 @@ The trainer operates as a state machine. The primary user flow is as follows:
 2.  **Preparing (`preparing`):** A 3-second countdown that runs **only once** at the very beginning of the workout.
 3.  **Announcing (`announcing`):** A 0.75-second state that displays the name of the upcoming phase (e.g., "UP", "REST") to alert the user.
 4.  **Action (`action`):** The core execution phase where the user performs the movement for a timed duration.
-5.  **Rest (`rest`):** A timed countdown for rest periods between series or exercises.
+5.  **Rest (`rest`):** A timed countdown for rest. This state is **only** activated when the trainer encounters a user-defined rest block in the workout sequence. There are no automatic rests between series or exercises.
 6.  **Paused (`paused`):** The user can pause the workout at any time during `preparing`, `announcing`, `action`, or `rest`.
 7.  **Advancement Logic:**
-    - After an `action` phase (e.g., 'down'), the logic checks if there are more phases in the rep (e.g., 'up', 'hold'). If not, it advances the repetition counter.
-    - If the repetitions for a series are complete, it transitions to a `rest` state.
-    - If the series for an exercise are complete, it moves to the next item in the workout list (which could be another exercise or a rest period).
+    - After an `action` phase, the logic checks for more phases, repetitions, or series within the same exercise.
+    - Once an entire exercise item is complete (all series and reps), the trainer immediately advances to the next item in the workout list.
+    - If the next item is an exercise, it begins the `announcing` phase for it.
+    - If the next item is a rest block, it enters the `rest` state.
 8.  **Finished (`finished`):** Once all items in the routine are complete, the trainer automatically transitions to the Debriefing View.
 
 ### 2.4. Debriefing View

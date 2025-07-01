@@ -43,8 +43,8 @@ The trainer operates as a state machine. Each exercise consists of a number of *
     - For **`reps`**-based exercises, the trainer automatically cycles through timed phases as defined by the exercise's `tempo` object (e.g., `up`, `hold`, `down`), each with its own countdown and progress ring animation.
     - For **`time`**-based exercises, a single countdown for the specified `duration` is run.
 5.  **Paused (`paused`):** The user can pause the workout at any time during a countdown state. The timer and the progress ring animation stop. The user must click "RESUME" to continue.
-6.  **Rest (`rest`):** After a set is completed, the trainer enters a rest period. A countdown for the specified `rest` duration is shown, and the progress ring animates accordingly.
-7.  **Advancement:** After a rest period, the system automatically determines whether to proceed to the next series of the same exercise or to the next exercise in the routine, starting again from the `Ready` (or `Announcing`) state.
+6.  **Rest (`rest`):** This state is **only** activated when the trainer encounters a user-defined rest block in the workout sequence. There are no automatic rests between series or exercises. A countdown for the specified `rest` duration is shown, and the progress ring animates accordingly.
+7.  **Advancement:** After completing all series/reps of an exercise, the system automatically proceeds to the next item in the workout list. If the next item is another exercise, it begins immediately. If it is an explicit rest block, the `rest` state is triggered.
 8.  **Finished (`finished`):** Once all exercises and series are complete, the trainer automatically transitions to the Debriefing View.
 
 ### 2.4. Debriefing View
