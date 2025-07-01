@@ -8,8 +8,8 @@
 - [x] preparing
 - [x] announcing
 - [x] action
-- [ ] **rest <-- PROSSIMO STEP**
-- [ ] paused
+- [x] rest
+- [ ] **paused <-- PROSSIMO STEP**
 - [ ] finished
 
 ### Altre Funzionalità:

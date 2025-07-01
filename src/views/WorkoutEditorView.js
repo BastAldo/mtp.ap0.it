@@ -11,15 +11,19 @@ export function render(context) {
 
     const itemsHtml = workoutItems.map(item => {
         let infoContent = '', detailsContent = '';
-        if (item.type === 'exercise') {
-            infoContent = `<span class="item-name">${item.name}</span>`;
-            detailsContent = `<span class="item-details">${item.series}x${item.reps}</span>`;
-        } else if (item.type === 'time') {
-            infoContent = `<span class="item-name">${item.name}</span>`;
-            detailsContent = `<span class="item-details">${item.series || 1}x${item.duration}s</span>`;
-        } else if (item.type === 'rest') {
-            infoContent = `<span class="item-name">Riposo</span>`;
-            detailsContent = `<input type="number" class="rest-duration-input" value="${item.duration}" data-item-id="${item.id}" /> s`;
+        switch (item.type) {
+            case 'exercise':
+                infoContent = `<span class="item-name">${item.name}</span>`;
+                detailsContent = `<span class="item-details">${item.series || 1}x${item.reps}</span>`;
+                break;
+            case 'time':
+                infoContent = `<span class="item-name">${item.name}</span>`;
+                detailsContent = `<span class="item-details">${item.series || 1}x${item.duration}s</span>`;
+                break;
+            case 'rest':
+                infoContent = `<span class="item-name">Riposo</span>`;
+                detailsContent = `<input type="number" class="rest-duration-input" value="${item.duration}" data-item-id="${item.id}" /> s`;
+                break;
         }
         return `
             <li class="workout-item workout-item--${item.type}">
