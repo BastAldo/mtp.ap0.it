@@ -9,9 +9,7 @@ export function render(context) {
 
     if (workoutItems && workoutItems.length > 0) {
         const itemsHtml = workoutItems.map(item => {
-            let infoContent = '';
-            let detailsContent = '';
-
+            let infoContent = '', detailsContent = '';
             if (item.type === 'exercise') {
                 infoContent = `<span class="item-name">${item.name}</span>`;
                 detailsContent = `<span class="item-details">${item.series}x${item.reps}</span>`;
@@ -19,13 +17,9 @@ export function render(context) {
                 infoContent = `<span class="item-name">Riposo</span>`;
                 detailsContent = `<input type="number" class="rest-duration-input" value="${item.duration}" data-item-id="${item.id}" /> s`;
             }
-
             return `
                 <li class="workout-item workout-item--${item.type}">
-                    <div class="item-info">
-                        ${infoContent}
-                        ${detailsContent}
-                    </div>
+                    <div class="item-info">${infoContent}${detailsContent}</div>
                     <button class="remove-item-btn" data-item-id="${item.id}" title="Rimuovi item">&times;</button>
                 </li>
             `;
@@ -34,10 +28,9 @@ export function render(context) {
     }
 
     return `
-        <div class="workout-editor-content">
-            ${listHtml}
-        </div>
+        <div class="workout-editor-content">${listHtml}</div>
         <footer class="modal-actions">
+            <button class="add-exercise-btn">+ Add Exercise</button>
             <button class="add-rest-btn">+ Aggiungi Riposo</button>
         </footer>
     `;

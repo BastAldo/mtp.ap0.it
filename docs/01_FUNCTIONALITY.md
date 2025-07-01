@@ -42,7 +42,7 @@ The editor is a modal system for managing a day's workout routine. It allows for
     -   Contains an "Add Exercise" button to open the Exercise Library modal and an "Add Rest" button to insert a new rest period.
 -   **Exercise Library Modal:**
     -   Triggered by the "Add Exercise" button.
-    -   Displays a complete list of all available exercises.
+    -   Displays a list of all **available exercises** from the application's library.
 
 ```plaintext
 // Stage 1: Daily Workout Modal with an editable Rest item.
@@ -53,11 +53,11 @@ The editor is a modal system for managing a day's workout routine. It allows for
 | - Rest: [ 60 ] seconds         [Remove]  |
 | - Push-ups (3x12)              [Remove]  |
 |                                          |
-|           [Add Exercise] [Add Rest]      |
+|    [Add Exercise] [+ Aggiungi Riposo]    |
 +------------------------------------------+
 
 // Stage 2: User clicks [Add Exercise] to open the library.
-// Clicking [Add Rest] directly adds a new rest item to the list above.
+// Clicking [+ Aggiungi Riposo] directly adds a new rest item to the list above.
 +----------------------------------+
 | EXERCISE LIBRARY                 |
 |----------------------------------|
