@@ -1,8 +1,10 @@
-commit_message: "fix(trainer): Remove automatic rest between time-based exercise series"
+commit_message: "fix(trainer): Restore SET_TRAINER_STATE action handler"
 rationale: |
-  This commit fixes a bug where an automatic rest period was still being triggered between series of time-based exercises, even after the logic was updated to make rests explicit.
+  This commit fixes a critical regression bug introduced during a previous refactoring. The `SET_TRAINER_STATE` action handler was accidentally removed from the store's dispatcher.
 
-  The `TIMER_COMPLETE` action handler in `store.js` has been corrected. Now, when a series of a time-based exercise is completed, the state machine transitions directly to `announcing` for the next series, bypassing the `rest` state entirely. This ensures that both repetition-based and time-based exercises behave consistently, with rest periods only occurring when explicitly added by the user.
+  This prevented the trainer from starting, as the view's request to change the state from 'ready' to 'preparing' was being ignored.
+
+  By re-introducing the `case 'SET_TRAINER_STATE'`, the store can once again handle direct state changes, and the "INIZIA" button now functions correctly.
 patches:
   - file: src/modules/store.js
     content: |
@@ -116,6 +118,10 @@ patches:
                 trainerState: 'ready',
                 trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 }
               };
+              break;
+            }
+            case 'SET_TRAINER_STATE': {
+              newState = { ...state, trainerState: action.payload };
               break;
             }
             case 'PAUSE_TRAINER': {
@@ -239,4 +245,4 @@ patches:
       const store = createStore();
       export default store;
 commands:
- - "echo 'Bug fix applicato. I riposi automatici sono stati rimossi anche dagli esercizi a tempo.'"
+ - "echo 'Bug fix applicato. Il pulsante INIZIA ora funziona correttamente.'"

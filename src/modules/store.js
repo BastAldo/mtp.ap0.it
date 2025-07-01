@@ -110,6 +110,10 @@ function createStore() {
         };
         break;
       }
+      case 'SET_TRAINER_STATE': {
+        newState = { ...state, trainerState: action.payload };
+        break;
+      }
       case 'PAUSE_TRAINER': {
         if (['paused', 'ready', 'finished'].includes(state.trainerState)) break;
         const { remaining, duration } = action.payload;
