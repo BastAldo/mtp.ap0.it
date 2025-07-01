@@ -1,210 +1,13 @@
-commit_message: "refactor: Centralizza logica trainer e implementa logger schematico"
+commit_message: "fix: Risolve ReferenceError in TrainerView"
 rationale: |
-  Questo commit risolve un bug critico di loop nel trainer e migliora drasticamente il debugging.
+  Questo commit corregge un errore critico (`ReferenceError: getExerciseById is not defined`) che si verificava nel file `src/views/TrainerView.js`.
 
-  1.  **Correzione del Loop**: La logica di avanzamento è stata centralizzata e semplificata. Il `PhasedExerciseRunner` in `TrainerView.js` ora gestisce il flusso tra le fasi, mentre lo store (`ADVANCE_TRAINER_LOGIC`) si occupa solo di incrementare i contatori al termine di una ripetizione o serie. Questo elimina le chiamate ricorsive e corregge il flusso di stato.
-
-  2.  **Logger Schematico**: È stato implementato un nuovo logger custom in `store.js`. Invece di loggare oggetti complessi, ora stampa una stringa formattata e concisa per ogni azione, rendendo il debug del flusso di stato immediato e intuitivo.
+  L'errore era causato dalla mancanza dell'importazione della funzione `getExerciseById` dal modulo `exerciseRepository.js`. L'aggiunta della dichiarazione di import risolve il crash che si verificava durante la transizione allo stato di riposo e ripristina il corretto funzionamento del trainer.
 patches:
-  - file: src/modules/store.js
-    content: |
-      import { saveToStorage } from './storage.js';
-      import { getExerciseById } from './exerciseRepository.js';
-
-      const WORKOUTS_STORAGE_KEY = 'workouts';
-
-      const cloneWorkouts = (workouts) => JSON.parse(JSON.stringify(workouts));
-
-      function createStore() {
-        let state = {
-          currentView: 'calendar',
-          focusedDate: new Date(),
-          workouts: {},
-          isModalOpen: false,
-          modalContext: null,
-          activeWorkout: null,
-          trainerState: 'idle',
-          trainerContext: {},
-        };
-
-        const subscribers = new Set();
-        function notify() { subscribers.forEach(callback => callback()); }
-
-        // Custom Logger Function
-        function logState(actionType, state) {
-            const { activeWorkout, trainerState, trainerContext } = state;
-            if (!activeWorkout) return;
-
-            const currentItem = activeWorkout.items[trainerContext.itemIndex];
-            const exerciseName = currentItem?.name || 'Riposo';
-            const series = `${trainerContext.currentSeries || '-'}/${currentItem?.series || '-'}`;
-            const reps = `${trainerContext.currentRep || '-'}/${currentItem?.reps || '-'}`;
-            
-            let status = trainerState.toUpperCase();
-            if (trainerState === 'announcing' || trainerState === 'action') {
-                status += ` (${trainerContext.currentPhase || 'N/A'})`;
-            }
-
-            const logString = `Esercizio: ${exerciseName} | Serie: ${series} | Rep: ${reps} | Stato: ${status}`;
-            
-            console.log(`%c[${actionType}]`, 'color: #88aaff; font-weight: bold;', logString);
-        }
-
-        function dispatch(action) {
-          const oldState = { ...state };
-          let newState = { ...state };
-
-          switch (action.type) {
-            case 'CHANGE_VIEW': newState = { ...state, currentView: action.payload }; break;
-            case 'PREV_WEEK': { const d=new Date(state.focusedDate); d.setDate(d.getDate()-7); newState={...state, focusedDate:d}; break; }
-            case 'NEXT_WEEK': { const d=new Date(state.focusedDate); d.setDate(d.getDate()+7); newState={...state, focusedDate:d}; break; }
-            case 'SET_WORKOUTS': newState = { ...state, workouts: action.payload }; break;
-            case 'OPEN_MODAL': newState = { ...state, isModalOpen: true, modalContext: action.payload }; break;
-            case 'CLOSE_MODAL': newState = { ...state, isModalOpen: false, modalContext: null }; break;
-            case 'ADD_EXERCISE_ITEM': {
-                const { date, exerciseId } = action.payload;
-                const dateKey = `workout-${date}`;
-                const exercise = getExerciseById(exerciseId);
-                if (!exercise) break;
-                const newItem = { ...exercise, id: `item-${Date.now()}`, type: exercise.type || 'exercise', exerciseId: exercise.id };
-                const newWorkouts = cloneWorkouts(state.workouts);
-                const dayWorkout = newWorkouts[dateKey] || [];
-                dayWorkout.push(newItem);
-                newWorkouts[dateKey] = dayWorkout;
-                newState = { ...state, workouts: newWorkouts, modalContext: { type: 'EDIT_WORKOUT', date } };
-                break;
-            }
-            case 'ADD_REST_ITEM': {
-                const { date } = action.payload;
-                const dateKey = `workout-${date}`;
-                const newItem = { id: `item-${Date.now()}`, type: 'rest', duration: 60 };
-                const newWorkouts = cloneWorkouts(state.workouts);
-                const dayWorkout = newWorkouts[dateKey] || [];
-                dayWorkout.push(newItem);
-                newWorkouts[dateKey] = dayWorkout;
-                newState = { ...state, workouts: newWorkouts };
-                break;
-            }
-            case 'REMOVE_WORKOUT_ITEM': {
-                const { date, itemId } = action.payload;
-                const dateKey = `workout-${date}`;
-                const newWorkouts = cloneWorkouts(state.workouts);
-                newWorkouts[dateKey] = (newWorkouts[dateKey] || []).filter(item => item.id !== itemId);
-                newState = { ...state, workouts: newWorkouts };
-                break;
-            }
-            case 'UPDATE_REST_DURATION': {
-                const { date, itemId, newDuration } = action.payload;
-                const dateKey = `workout-${date}`;
-                const newWorkouts = cloneWorkouts(state.workouts);
-                const dayWorkout = newWorkouts[dateKey] || [];
-                const itemIndex = dayWorkout.findIndex(item => item.id === itemId);
-                if (itemIndex > -1 && dayWorkout[itemIndex].type === 'rest') {
-                    dayWorkout[itemIndex].duration = newDuration;
-                    newWorkouts[dateKey] = dayWorkout;
-                    newState = { ...state, workouts: newWorkouts };
-                }
-                break;
-            }
-            case 'START_WORKOUT': {
-              const { date } = action.payload;
-              const dateKey = `workout-${date}`;
-              const workoutItems = state.workouts[dateKey];
-              if (!workoutItems || workoutItems.length === 0) break;
-              newState = {
-                ...state,
-                currentView: 'trainer',
-                activeWorkout: { date, items: workoutItems },
-                trainerState: 'ready',
-                trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 }
-              };
-              break;
-            }
-            case 'SET_TRAINER_STATE': {
-              newState = { ...state, trainerState: action.payload };
-              break;
-            }
-            case 'PAUSE_TRAINER': {
-              if (['paused', 'ready', 'finished'].includes(state.trainerState)) break;
-              const { remaining, duration } = action.payload;
-              newState = {
-                ...state,
-                trainerState: 'paused',
-                trainerContext: { ...state.trainerContext, remaining, duration, stateBeforePause: state.trainerState },
-              };
-              break;
-            }
-            case 'RESUME_TRAINER': {
-              if (state.trainerState !== 'paused') break;
-              newState = { ...state, trainerState: state.trainerContext.stateBeforePause };
-              break;
-            }
-            case 'UPDATE_TRAINER_CONTEXT': {
-              newState = { ...state, trainerContext: { ...state.trainerContext, ...action.payload }};
-              break;
-            }
-            case 'ADVANCE_TRAINER_LOGIC': {
-              const { activeWorkout, trainerContext } = state;
-              const currentItem = activeWorkout.items[trainerContext.itemIndex];
-              let nextContext = { ...trainerContext };
-
-              const advanceToNextItem = () => {
-                  if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
-                      const nextItemIndex = trainerContext.itemIndex + 1;
-                      const nextItem = activeWorkout.items[nextItemIndex];
-                      return { ...nextContext, itemIndex: nextItemIndex, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 };
-                  }
-                  return null; // Signals workout is finished
-              };
-
-              if (currentItem.type === 'exercise') {
-                  if (nextContext.currentRep < currentItem.reps) {
-                      nextContext.currentRep++;
-                  } else if (nextContext.currentSeries < currentItem.series) {
-                      nextContext.currentSeries++;
-                      nextContext.currentRep = 1;
-                  } else {
-                      const newContext = advanceToNextItem();
-                      if (newContext) nextContext = newContext; else return { ...state, trainerState: 'finished' };
-                  }
-              } else if (currentItem.type === 'time') {
-                  if (nextContext.currentSeries < currentItem.series) {
-                      nextContext.currentSeries++;
-                  } else {
-                      const newContext = advanceToNextItem();
-                      if (newContext) nextContext = newContext; else return { ...state, trainerState: 'finished' };
-                  }
-              } else if (currentItem.type === 'rest') {
-                  const newContext = advanceToNextItem();
-                  if (newContext) nextContext = newContext; else return { ...state, trainerState: 'finished' };
-              }
-              
-              newState = { ...state, trainerContext: nextContext };
-              break;
-            }
-            default:
-              return;
-          }
-          state = newState;
-          if (state !== oldState) {
-            logState(action.type, state);
-            if (state.workouts !== oldState.workouts) {
-              saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
-            }
-            notify();
-          }
-        }
-        return {
-          getState: () => ({ ...state }),
-          subscribe: (callback) => { subscribers.add(callback); return () => subscribers.delete(callback); },
-          dispatch,
-        };
-      }
-      const store = createStore();
-      export default store;
   - file: src/views/TrainerView.js
     content: |
       import store from '../modules/store.js';
+      import { getExerciseById } from '../modules/exerciseRepository.js';
 
       let animationFrameId = null;
       let animationStartTime = null;
@@ -237,9 +40,10 @@ patches:
                   const newState = store.getState();
                   const newCurrentItem = newState.activeWorkout.items[newState.trainerContext.itemIndex];
                   
-                  if (newCurrentItem.type === 'exercise' && newCurrentItem.reps > 1) {
+                  // Check if we are still on an exercise and not finished
+                  if (newState.trainerState !== 'finished' && (newCurrentItem.type === 'exercise' || newCurrentItem.type === 'time')) {
                       store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'rest' });
-                  } else {
+                  } else if (newState.trainerState !== 'finished') {
                       store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'announcing' });
                   }
                   return;
@@ -392,8 +196,11 @@ patches:
                       break;
                   case 'rest': {
                       let restDuration = 60;
-                      if (currentItem.type === 'rest') restDuration = currentItem.duration;
-                      else if (currentItem.exerciseId) restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60;
+                      if (currentItem.type === 'rest') {
+                          restDuration = currentItem.duration;
+                      } else if (currentItem.exerciseId) {
+                          restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60;
+                      }
                       phaseText = 'RIPOSO'; instructionText = 'Recupera'; buttonText = 'PAUSA'; timerText = restDuration; currentDuration = restDuration * 1000;
                       break;
                   }
@@ -459,4 +266,4 @@ patches:
           render();
       }
 commands:
-  - "echo 'Refactor della logica del trainer completato. Il flusso è stato corretto e il logging migliorato.'"
+  - "echo 'ReferenceError corretto. Il trainer ora dovrebbe funzionare come previsto.'"

@@ -1,4 +1,5 @@
 import store from '../modules/store.js';
+import { getExerciseById } from '../modules/exerciseRepository.js';
 
 let animationFrameId = null;
 let animationStartTime = null;
@@ -31,9 +32,10 @@ const PhasedExerciseRunner = {
             const newState = store.getState();
             const newCurrentItem = newState.activeWorkout.items[newState.trainerContext.itemIndex];
             
-            if (newCurrentItem.type === 'exercise' && newCurrentItem.reps > 1) {
+            // Check if we are still on an exercise and not finished
+            if (newState.trainerState !== 'finished' && (newCurrentItem.type === 'exercise' || newCurrentItem.type === 'time')) {
                 store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'rest' });
-            } else {
+            } else if (newState.trainerState !== 'finished') {
                 store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'announcing' });
             }
             return;
@@ -186,8 +188,11 @@ export function init(element) {
                 break;
             case 'rest': {
                 let restDuration = 60;
-                if (currentItem.type === 'rest') restDuration = currentItem.duration;
-                else if (currentItem.exerciseId) restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60;
+                if (currentItem.type === 'rest') {
+                    restDuration = currentItem.duration;
+                } else if (currentItem.exerciseId) {
+                    restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60;
+                }
                 phaseText = 'RIPOSO'; instructionText = 'Recupera'; buttonText = 'PAUSA'; timerText = restDuration; currentDuration = restDuration * 1000;
                 break;
             }
