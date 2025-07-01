@@ -21,8 +21,6 @@ const PhasedExerciseRunner = {
         const isTimeBased = currentExercise.type === 'time';
 
         if (isTimeBased) {
-            // Per gli esercizi a tempo, la fase è unica ('action').
-            // Impostiamo un nome generico per coerenza.
             store.dispatch({ type: 'UPDATE_TRAINER_CONTEXT', payload: { currentPhase: 'Esegui' } });
             store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'announcing' });
             return;
@@ -77,7 +75,8 @@ export function init(element) {
                 break;
             case 'preparing':
             case 'action':
-            case 'rest': {
+            case 'rest':
+            case 'announcing': { // Added 'announcing' to pausable states
                 if (animationFrameId) cancelAnimationFrame(animationFrameId);
                 const elapsed = performance.now() - animationStartTime;
                 const remaining = mainButton.dataset.duration - elapsed;
@@ -107,7 +106,14 @@ export function init(element) {
             const elapsed = timestamp - startTime;
             const progress = Math.min(1, elapsed / duration);
             ringEl.style.strokeDashoffset = circumference * (1 - progress);
-            timerEl.textContent = Math.ceil((duration - elapsed) / 1000);
+            
+            // For announcing state, don't show a timer number
+            if (store.getState().trainerState !== 'announcing') {
+              timerEl.textContent = Math.ceil((duration - elapsed) / 1000);
+            } else {
+              timerEl.textContent = '';
+            }
+
             if (elapsed < duration) {
                 animationFrameId = requestAnimationFrame(animationStep);
             } else {
@@ -128,18 +134,17 @@ export function init(element) {
         }
 
         if (trainerState === 'preparing') {
-            // FIX: Changed onComplete from advanceTrainer to the correct PhasedExerciseRunner.start
             element.dispatchEvent(new CustomEvent('animateRing', { detail: { duration: 3000, onComplete: () => PhasedExerciseRunner.start() } }));
         } else if (trainerState === 'announcing') {
-            setTimeout(() => store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'action' }), 750);
+            // FIX: Refactored from setTimeout to animateRing for unified pause logic
+            element.dispatchEvent(new CustomEvent('animateRing', { detail: { duration: 750, onComplete: () => store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'action' }) } }));
         } else if (trainerState === 'action') {
             PhasedExerciseRunner.execute();
         } else if (trainerState === 'rest') {
             const duration = (trainerContext.restDuration || 60) * 1000;
             element.dispatchEvent(new CustomEvent('animateRing', { detail: { duration, onComplete: advanceTrainer } }));
         } else if (trainerState === 'paused') {
-            // When paused, we don't start a new animation, just freeze the current one.
-            // The rendering is handled by the render() function.
+            // Logic is handled by render() and the click event
         }
     }
 
@@ -166,7 +171,7 @@ export function init(element) {
                 break;
             case 'announcing':
                 phaseText = trainerContext.currentPhase?.toUpperCase() || '';
-                instructionText = `Prossima fase: ${phaseText}`; buttonText = 'PAUSA'; phaseClass = 'is-flashing';
+                instructionText = `Prossima fase: ${phaseText}`; buttonText = 'PAUSA'; phaseClass = 'is-flashing'; currentDuration = 750;
                 break;
             case 'action':
                 phaseText = trainerContext.currentPhase?.toUpperCase() || '';
@@ -178,8 +183,10 @@ export function init(element) {
                 const prevState = trainerContext.stateBeforePause;
                 if(prevState === 'preparing') { phaseText = 'PREPARATI'; }
                 else if(prevState === 'rest') { phaseText = 'RIPOSO'; }
+                else if(prevState === 'announcing') { phaseText = trainerContext.currentPhase?.toUpperCase() || ''; phaseClass = 'is-flashing'; }
                 else { phaseText = trainerContext.currentPhase?.toUpperCase() || ''; }
-                instructionText = 'Pausa'; buttonText = 'RIPRENDI'; timerText = Math.ceil(trainerContext.remaining/1000);
+                instructionText = 'Pausa'; buttonText = 'RIPRENDI'; 
+                if(prevState !== 'announcing') { timerText = Math.ceil(trainerContext.remaining/1000); }
                 ringOffset = circumference * (1 - ( (trainerContext.duration - trainerContext.remaining) / trainerContext.duration) );
                 currentDuration = trainerContext.duration;
                 break;
@@ -215,8 +222,6 @@ export function init(element) {
                 </footer>
             </div>
         `;
-        // Only run state logic if it's not a re-render from the store
-        // and the state is not paused.
         if (trainerState !== 'paused') {
           runStateLogic();
         }
