@@ -10,21 +10,23 @@ export function render(context) {
     }
 
     const itemsHtml = workoutItems.map(item => {
-        let content = '';
+        let infoContent = '';
+        let detailsContent = '';
+
         if (item.type === 'exercise') {
-            content = `
-                <span class="item-name">${item.name}</span>
-                <span class="item-details">${item.series}x${item.reps}</span>
-            `;
+            infoContent = `<span class="item-name">${item.name}</span>`;
+            detailsContent = `<span class="item-details">${item.series}x${item.reps}</span>`;
         } else if (item.type === 'rest') {
-            content = `
-                <span class="item-name">Riposo</span>
-                <span class="item-details">${item.duration}s</span>
-            `;
+            infoContent = `<span class="item-name">Riposo</span>`;
+            detailsContent = `<input type="number" class="rest-duration-input" value="${item.duration}" data-item-id="${item.id}" /> s`;
         }
+
         return `
             <li class="workout-item workout-item--${item.type}">
-                <div class="item-info">${content}</div>
+                <div class="item-info">
+                    ${infoContent}
+                    ${detailsContent}
+                </div>
                 <button class="remove-item-btn" data-item-id="${item.id}" title="Rimuovi item">&times;</button>
             </li>
         `;

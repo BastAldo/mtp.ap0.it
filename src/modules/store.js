@@ -44,12 +44,19 @@ function createStore() {
       case 'REMOVE_WORKOUT_ITEM': {
         const { date, itemId } = action.payload;
         const dateKey = `workout-${date}`;
-        const workoutDay = state.workouts[dateKey];
-        if (!workoutDay) break;
-
-        const newWorkoutDay = workoutDay.filter(item => item.id !== itemId);
-        const newWorkouts = { ...state.workouts, [dateKey]: newWorkoutDay };
-        state = { ...state, workouts: newWorkouts };
+        if (!state.workouts[dateKey]) break;
+        const newWorkoutDay = state.workouts[dateKey].filter(item => item.id !== itemId);
+        state = { ...state, workouts: { ...state.workouts, [dateKey]: newWorkoutDay } };
+        break;
+      }
+      case 'UPDATE_REST_DURATION': {
+        const { date, itemId, newDuration } = action.payload;
+        const dateKey = `workout-${date}`;
+        if (!state.workouts[dateKey]) break;
+        const newWorkoutDay = state.workouts[dateKey].map(item =>
+          item.id === itemId ? { ...item, duration: newDuration } : item
+        );
+        state = { ...state, workouts: { ...state.workouts, [dateKey]: newWorkoutDay } };
         break;
       }
       default:
@@ -58,7 +65,6 @@ function createStore() {
     }
     if (state !== oldState) {
       console.log(`Action: ${action.type}`, action.payload);
-      // Autosave: se i workout sono cambiati, salvali.
       if (state.workouts !== oldState.workouts) {
         saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
         console.log('Workouts salvati in localStorage.');

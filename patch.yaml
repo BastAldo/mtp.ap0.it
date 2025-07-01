@@ -1,11 +1,9 @@
-commit_message: "feat(editor): Implementa la rimozione di item dal workout"
+commit_message: "feat(editor): Aggiunge editing inline per riposi e corregge layout"
 rationale: |
-  Questo commit aggiunge la funzionalità di rimozione degli elementi (esercizi o riposi) dal Workout Editor, come da piano d'azione approvato.
+  Questo commit implementa due modifiche chiave al Workout Editor come da piano:
 
-  - È stata introdotta una nuova azione `REMOVE_WORKOUT_ITEM` nello store per gestire la logica di rimozione in modo immutabile.
-  - È stato implementato un meccanismo di "autosave": dopo ogni azione che modifica i `workouts`, lo stato aggiornato viene automaticamente salvato in `localStorage`. Questo centralizza la logica di persistenza e garantisce la coerenza dei dati.
-  - La vista dell'editor (`WorkoutEditorView`) ora renderizza un pulsante di rimozione per ogni item.
-  - Il componente `Modal` è stato aggiornato per gestire i click su questi nuovi pulsanti, inviando l'azione corretta allo store.
+  1.  **Correzione di Layout:** Il layout degli item di tipo esercizio è stato corretto per mostrare i dettagli (es. "3x10") a destra del nome, invece che sotto, risolvendo un bug di visualizzazione.
+  2.  **Editing Inline:** È stata implementata la funzionalità, prevista dalle specifiche, di modifica inline per la durata dei riposi. Un nuovo'azione (`UPDATE_REST_DURATION`) gestisce la modifica e il salvataggio automatico su `localStorage`.
 patches:
   - file: src/modules/store.js
     content: |
@@ -55,12 +53,19 @@ patches:
             case 'REMOVE_WORKOUT_ITEM': {
               const { date, itemId } = action.payload;
               const dateKey = `workout-${date}`;
-              const workoutDay = state.workouts[dateKey];
-              if (!workoutDay) break;
-
-              const newWorkoutDay = workoutDay.filter(item => item.id !== itemId);
-              const newWorkouts = { ...state.workouts, [dateKey]: newWorkoutDay };
-              state = { ...state, workouts: newWorkouts };
+              if (!state.workouts[dateKey]) break;
+              const newWorkoutDay = state.workouts[dateKey].filter(item => item.id !== itemId);
+              state = { ...state, workouts: { ...state.workouts, [dateKey]: newWorkoutDay } };
+              break;
+            }
+            case 'UPDATE_REST_DURATION': {
+              const { date, itemId, newDuration } = action.payload;
+              const dateKey = `workout-${date}`;
+              if (!state.workouts[dateKey]) break;
+              const newWorkoutDay = state.workouts[dateKey].map(item =>
+                item.id === itemId ? { ...item, duration: newDuration } : item
+              );
+              state = { ...state, workouts: { ...state.workouts, [dateKey]: newWorkoutDay } };
               break;
             }
             default:
@@ -69,7 +74,6 @@ patches:
           }
           if (state !== oldState) {
             console.log(`Action: ${action.type}`, action.payload);
-            // Autosave: se i workout sono cambiati, salvali.
             if (state.workouts !== oldState.workouts) {
               saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
               console.log('Workouts salvati in localStorage.');
@@ -92,12 +96,10 @@ patches:
 
       export function init(element) {
           element.addEventListener('click', (event) => {
-              // Chiude se si clicca sull'overlay
               if (event.target === element) {
                   store.dispatch({ type: 'CLOSE_MODAL' });
                   return;
               }
-              // Gestisce il click sul pulsante Rimuovi item
               const removeButton = event.target.closest('.remove-item-btn');
               if (removeButton) {
                   const { itemId } = removeButton.dataset;
@@ -108,13 +110,24 @@ patches:
               }
           });
 
+          // Gestione per l'input inline
+          element.addEventListener('change', (event) => {
+              const restInput = event.target.closest('.rest-duration-input');
+              if (restInput) {
+                  const { itemId } = restInput.dataset;
+                  const { date } = store.getState().modalContext;
+                  const newDuration = parseInt(restInput.value, 10);
+                  if (itemId && date && !isNaN(newDuration)) {
+                      store.dispatch({ type: 'UPDATE_REST_DURATION', payload: { date, itemId, newDuration } });
+                  }
+              }
+          });
+
           function render() {
               const { isModalOpen, modalContext } = store.getState();
               if (isModalOpen) {
                   element.classList.add('active');
-                  let headerContent = '';
-                  let bodyContent = '';
-
+                  let headerContent = '', bodyContent = '';
                   switch (modalContext?.type) {
                       case 'EDIT_WORKOUT':
                           headerContent = `<h3>Editor Workout - ${modalContext.date}</h3>`;
@@ -124,24 +137,15 @@ patches:
                           headerContent = '<h3>Attenzione</h3>';
                           bodyContent = '<p>Contenuto della modale non specificato.</p>';
                   }
-
                   element.innerHTML = `
                       <div class="modal-content">
-                          <div class="modal-header">
-                              ${headerContent}
-                              <button class="modal-close-btn">&times;</button>
-                          </div>
-                          <div class="modal-body">
-                              ${bodyContent}
-                          </div>
+                          <div class="modal-header">${headerContent}<button class="modal-close-btn">&times;</button></div>
+                          <div class="modal-body">${bodyContent}</div>
                       </div>
                   `;
-
                   const closeButton = element.querySelector('.modal-close-btn');
                   if (closeButton) {
-                      closeButton.addEventListener('click', () => {
-                          store.dispatch({ type: 'CLOSE_MODAL' });
-                      });
+                      closeButton.addEventListener('click', () => { store.dispatch({ type: 'CLOSE_MODAL' }); });
                   }
               } else {
                   element.classList.remove('active');
@@ -165,21 +169,23 @@ patches:
           }
 
           const itemsHtml = workoutItems.map(item => {
-              let content = '';
+              let infoContent = '';
+              let detailsContent = '';
+
               if (item.type === 'exercise') {
-                  content = `
-                      <span class="item-name">${item.name}</span>
-                      <span class="item-details">${item.series}x${item.reps}</span>
-                  `;
+                  infoContent = `<span class="item-name">${item.name}</span>`;
+                  detailsContent = `<span class="item-details">${item.series}x${item.reps}</span>`;
               } else if (item.type === 'rest') {
-                  content = `
-                      <span class="item-name">Riposo</span>
-                      <span class="item-details">${item.duration}s</span>
-                  `;
+                  infoContent = `<span class="item-name">Riposo</span>`;
+                  detailsContent = `<input type="number" class="rest-duration-input" value="${item.duration}" data-item-id="${item.id}" /> s`;
               }
+
               return `
                   <li class="workout-item workout-item--${item.type}">
-                      <div class="item-info">${content}</div>
+                      <div class="item-info">
+                          ${infoContent}
+                          ${detailsContent}
+                      </div>
                       <button class="remove-item-btn" data-item-id="${item.id}" title="Rimuovi item">&times;</button>
                   </li>
               `;
@@ -233,10 +239,11 @@ patches:
       .workout-item-list { list-style: none; padding: 0; margin: 0; }
       .workout-item { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0.5rem; border-bottom: 1px solid var(--border-color); }
       .workout-item:last-child { border-bottom: none; }
-      .item-info { display: flex; flex-direction: column; }
+      .item-info { display: flex; align-items: baseline; gap: 0.75rem; flex-grow: 1; }
       .item-info .item-name { font-weight: bold; }
-      .item-info .item-details { color: var(--secondary-color); font-size: 0.9em; }
+      .item-info .item-details { color: var(--secondary-color); }
       .workout-item--rest .item-info .item-name { color: var(--text-color-muted); font-style: italic; }
+      .rest-duration-input { background-color: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 4px; padding: 0.25rem; width: 60px; text-align: center; }
       .remove-item-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; font-weight: bold; cursor: pointer; padding: 0 0.5rem; border-radius: 50%; }
       .remove-item-btn:hover { color: var(--danger-color); background-color: rgba(239, 83, 80, 0.1); }
 
