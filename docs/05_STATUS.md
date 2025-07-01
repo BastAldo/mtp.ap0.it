@@ -7,8 +7,8 @@
 - [x] ready
 - [x] preparing
 - [x] announcing
-- [ ] **action <-- PROSSIMO STEP**
-- [ ] rest
+- [x] action
+- [ ] **rest <-- PROSSIMO STEP**
 - [ ] paused
 - [ ] finished
 

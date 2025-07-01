@@ -41,12 +41,7 @@ function createStore() {
           currentView: 'trainer',
           activeWorkout: { date, items: workoutItems },
           trainerState: 'ready',
-          trainerContext: {
-            itemIndex: 0,
-            currentSeries: 1,
-            currentRep: 1,
-            currentPhase: null
-          }
+          trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1 }
         };
         break;
       }
@@ -56,6 +51,44 @@ function createStore() {
       }
       case 'UPDATE_TRAINER_CONTEXT': {
         state = { ...state, trainerContext: { ...state.trainerContext, ...action.payload }};
+        break;
+      }
+      case 'ADVANCE_TRAINER_LOGIC': {
+        const { activeWorkout, trainerContext } = state;
+        const currentItem = activeWorkout.items[trainerContext.itemIndex];
+        const maxReps = currentItem.reps || 1;
+        const maxSeries = currentItem.series || 1;
+
+        let nextContext = { ...trainerContext };
+        let nextState = state.trainerState;
+
+        if (nextContext.currentRep < maxReps) {
+          // Prossima ripetizione
+          nextContext.currentRep++;
+          nextState = 'ready'; // Pronto per la prossima ripetizione
+        } else if (nextContext.currentSeries < maxSeries) {
+          // Prossima serie
+          nextContext.currentSeries++;
+          nextContext.currentRep = 1;
+          nextState = 'rest'; // Inizia il riposo tra le serie
+        } else {
+          // Prossimo item nel workout
+          if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
+            nextContext.itemIndex++;
+            const nextItem = activeWorkout.items[nextContext.itemIndex];
+            if(nextItem.type === 'exercise') {
+              nextContext.currentSeries = 1;
+              nextContext.currentRep = 1;
+              nextState = 'ready'; // Pronto per il prossimo esercizio
+            } else {
+              nextState = 'rest'; // Inizia un item di riposo
+            }
+          } else {
+            // Workout finito
+            nextState = 'finished'; // TODO: Implementare stato finished
+          }
+        }
+        state = { ...state, trainerState: nextState, trainerContext: nextContext };
         break;
       }
       default:
