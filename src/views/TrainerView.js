@@ -16,7 +16,7 @@ const PhasedExerciseRunner = {
     runNextPhase() {
         const { activeWorkout, trainerContext } = store.getState();
         const currentExercise = activeWorkout.items[trainerContext.itemIndex];
-        const phases = currentExercise.tempo || ['down', 'hold', 'up'];
+        const phases = Object.keys(currentExercise.tempo || { up: 1, hold: 1, down: 1 });
         const currentPhaseIndex = trainerContext.currentPhaseIndex;
 
         if (currentPhaseIndex >= phases.length) {
@@ -30,10 +30,10 @@ const PhasedExerciseRunner = {
     },
 
     execute() {
-        const { trainerContext } = store.getState();
+        const { activeWorkout, trainerContext } = store.getState();
+        const currentExercise = activeWorkout.items[trainerContext.itemIndex];
         const phaseName = trainerContext.currentPhase;
-        const durationMap = { 'up': 1.5, 'hold': 1, 'down': 2 };
-        const duration = (durationMap[phaseName] || 1) * 1000;
+        const duration = (currentExercise.tempo[phaseName] || 1) * 1000;
         let elapsed = 0;
         const interval = 50;
 
@@ -51,7 +51,7 @@ const PhasedExerciseRunner = {
 
             if (elapsed >= duration) {
                 clearInterval(stateTimer);
-                ringEl.style.strokeDashoffset = 0; // Forza il completamento
+                ringEl.style.strokeDashoffset = 0;
                 store.dispatch({ type: 'UPDATE_TRAINER_CONTEXT', payload: { currentPhaseIndex: trainerContext.currentPhaseIndex + 1 } });
                 this.runNextPhase();
             }
@@ -76,15 +76,13 @@ export function init(element) {
 
         const timerEl = element.querySelector('.progress-ring__timer');
         const ringEl = element.querySelector('.progress-ring__foreground');
-        if (!ringEl) return; // Guardia per evitare errori se l'elemento non è ancora renderizzato
+        if (!ringEl) return;
         const radius = ringEl.r.baseVal.value;
         const circumference = 2 * Math.PI * radius;
 
-        if (trainerState === 'preparing') {
-            const duration = 3000;
+        const animateRing = (duration) => {
             let elapsed = 0;
             const interval = 50;
-            if (timerEl) timerEl.textContent = '3';
             ringEl.style.strokeDashoffset = circumference;
             stateTimer = setInterval(() => {
                 elapsed += interval;
@@ -94,26 +92,27 @@ export function init(element) {
                 if (timerEl) timerEl.textContent = Math.ceil((duration - elapsed) / 1000);
                 if (elapsed >= duration) {
                     clearInterval(stateTimer);
-                    ringEl.style.strokeDashoffset = 0; // Forza il completamento
-                    PhasedExerciseRunner.start(element);
+                    ringEl.style.strokeDashoffset = 0;
+                    if (trainerState === 'preparing') {
+                      PhasedExerciseRunner.start(element);
+                    } else if (trainerState === 'rest') {
+                      advanceTrainer();
+                    }
                 }
             }, interval);
+        };
+
+        if (trainerState === 'preparing') {
+            if (timerEl) timerEl.textContent = '3';
+            animateRing(3000);
         } else if (trainerState === 'announcing') {
             stateTimer = setTimeout(() => store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'action' }), 750);
         } else if (trainerState === 'action') {
             PhasedExerciseRunner.execute();
         } else if (trainerState === 'rest') {
             const restDuration = trainerContext.restDuration || 60;
-            let timeLeft = restDuration;
-            if (timerEl) timerEl.textContent = timeLeft;
-            stateTimer = setInterval(() => {
-                timeLeft--;
-                if (timerEl) timerEl.textContent = timeLeft;
-                if (timeLeft <= 0) {
-                    clearInterval(stateTimer);
-                    advanceTrainer();
-                }
-            }, 1000);
+            if (timerEl) timerEl.textContent = restDuration;
+            animateRing(restDuration * 1000);
         }
     }
 
@@ -142,6 +141,7 @@ export function init(element) {
             case 'rest':
                 phaseText = 'RIPOSO'; instructionText = 'Recupera per la prossima serie'; buttonText = 'PAUSA';
                 timerText = trainerContext.restDuration || 60;
+                ringOffset = circumference;
                 break;
             case 'announcing':
                 phaseText = trainerContext.currentPhase?.toUpperCase() || '';

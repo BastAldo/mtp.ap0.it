@@ -1,10 +1,11 @@
-commit_message: "refactor(trainer): Automatizza flusso ripetizioni e corregge UI"
+commit_message: "fix(trainer): Migliora animazioni, stile e aggiunge dati di test"
 rationale: |
-  Questo commit migliora significativamente l'esperienza utente del trainer basandosi sul feedback ricevuto.
+  Questo commit risolve diversi problemi di usabilità e visualizzazione nella Trainer View, basandosi sul feedback dettagliato dell'utente.
 
-  1.  **Flusso Automatico**: Le ripetizioni e le serie ora avanzano automaticamente senza richiedere input dall'utente dopo l'avvio iniziale. Lo stato 'ready' è stato rimosso dal ciclo principale per creare un flusso continuo, come richiesto.
-  2.  **Correzione UI**: La dimensione del font per il testo di fase (es. 'PREPARATI') è stata aggiustata per evitare che sbordi dal contenitore.
-  3.  **Affidabilità Animazione**: L'animazione dell'anello di progresso è stata resa più robusta. Ora si completa visivamente al 100% in ogni stato temporizzato ('preparing' e 'action') prima di passare alla fase successiva, risolvendo il problema del cerchio incompleto.
+  1.  **Risoluzione Conflitto Animazione**: È stata rimossa la transizione CSS (`transition: stroke-dashoffset`) che entrava in conflitto con gli aggiornamenti JavaScript, causando l'effetto dell'anello incompleto. L'animazione è ora gestita interamente da JavaScript, garantendo un movimento preciso e un completamento visivo del 100%.
+  2.  **Aggiunta Dati di Test Rapidi**: È stato creato un 'Esercizio di Test' con cicli molto brevi (2 serie, 2 ripetizioni, 3s di riposo) e aggiunto al workout di default. Questo accelera drasticamente il processo di test del flusso del trainer.
+  3.  **Animazione Stato di Riposo**: L'anello di progresso ora si anima correttamente anche durante lo stato di riposo, creando un'esperienza visiva coerente in tutte le fasi temporizzate.
+  4.  **Correzione Stile**: La dimensione del font per il testo di fase (es. 'PREPARATI') è stata ulteriormente ridotta per garantire che non tocchi i bordi del cerchio, migliorando l'estetica.
 patches:
   - file: assets/css/style.css
     content: |
@@ -94,11 +95,10 @@ patches:
       .trainer-header p { color: var(--text-color-muted); }
       .progress-ring { position: relative; width: 250px; height: 250px; margin: 2rem 0; }
       .progress-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-      .progress-ring circle { transition: stroke-dashoffset 0.3s; }
       .progress-ring__background { stroke: var(--card-color); fill: transparent; }
       .progress-ring__foreground { stroke: var(--secondary-color); fill: transparent; }
       .progress-ring__text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
-      .progress-ring__phase { font-size: 1.8rem; font-weight: bold; text-transform: uppercase; }
+      .progress-ring__phase { font-size: 1.6rem; font-weight: bold; text-transform: uppercase; }
       .progress-ring__timer { font-size: 3rem; color: var(--text-color); }
       .trainer-footer { margin-top: 1rem; }
       .trainer-footer p { font-size: 1.2rem; min-height: 2em; }
@@ -111,122 +111,65 @@ patches:
           .modal-content { max-width: 600px; height: auto; max-height: 80vh; }
           .progress-ring { width: 300px; height: 300px; }
       }
-  - file: src/modules/store.js
+  - file: src/data/_staticExercises.js
     content: |
-      import { saveToStorage } from './storage.js';
-      import { getExerciseById } from './exerciseRepository.js';
+      // --- Libreria Statica degli Esercizi ---
+      // Questa è una delle fonti dati per l'ExerciseRepository.
 
-      const WORKOUTS_STORAGE_KEY = 'workouts';
+      export const staticExercises = [
+        { id: 'test-exercise', name: 'Esercizio di Test', series: 2, reps: 2, tempo: { up: 1, hold: 1, down: 1 }, defaultRest: 3 },
+        { id: 'bench-press', name: 'Bench Press', series: 3, reps: 8, defaultRest: 90 },
+        { id: 'deadlift', name: 'Deadlift', series: 3, reps: 5, defaultRest: 120 },
+        { id: 'squat', name: 'Squat', series: 3, reps: 10, defaultRest: 90 },
+        { id: 'overhead-press', name: 'Overhead Press', series: 4, reps: 8, defaultRest: 75 },
+        { id: 'pull-ups', name: 'Pull-ups', series: 3, reps: 'max', defaultRest: 60 },
+        { id: 'push-ups', name: 'Push-ups', series: 3, reps: 12, defaultRest: 60 },
+        { id: 'dips', name: 'Dips', series: 3, reps: 10, defaultRest: 60 },
+        { id: 'plank', name: 'Plank', series: 3, duration: 60, type: 'time', defaultRest: 45 }, // Esempio esercizio a tempo
+      ];
+  - file: src/modules/_mockData.js
+    content: |
+      // --- Dati di Sviluppo Fittizi ---
+      // Questi dati vengono usati per popolare localStorage al primo avvio.
 
-      function createStore() {
-        let state = {
-          currentView: 'calendar',
-          focusedDate: new Date(),
-          workouts: {},
-          isModalOpen: false,
-          modalContext: null,
-          activeWorkout: null,
-          trainerState: 'idle', // idle, ready, preparing, announcing, action, rest, paused, finished
-          trainerContext: {}, // Contesto dinamico del trainer (serie, rep, fase corrente)
-        };
+      // Nota: la data corrente è 30 Giugno 2025.
+      // Questo allenamento è per Martedì 1 Luglio 2025.
+      const MOCK_DATE_KEY = 'workout-2025-07-01';
 
-        const subscribers = new Set();
-        function notify() { subscribers.forEach(callback => callback()); }
-
-        function dispatch(action) {
-          const oldState = state;
-          switch (action.type) {
-            case 'CHANGE_VIEW': state = { ...state, currentView: action.payload }; break;
-            case 'PREV_WEEK': { const d=new Date(state.focusedDate); d.setDate(d.getDate()-7); state={...state, focusedDate:d}; break; }
-            case 'NEXT_WEEK': { const d=new Date(state.focusedDate); d.setDate(d.getDate()+7); state={...state, focusedDate:d}; break; }
-            case 'SET_WORKOUTS': state = { ...state, workouts: action.payload }; break;
-            case 'OPEN_MODAL': state = { ...state, isModalOpen: true, modalContext: action.payload }; break;
-            case 'CLOSE_MODAL': state = { ...state, isModalOpen: false, modalContext: null }; break;
-            case 'REMOVE_WORKOUT_ITEM': { /* ... (invariato) ... */ break; }
-            case 'UPDATE_REST_DURATION': { /* ... (invariato) ... */ break; }
-            case 'ADD_REST_ITEM': { /* ... (invariato) ... */ break; }
-            case 'ADD_EXERCISE_ITEM': { /* ... (invariato) ... */ break; }
-            case 'START_WORKOUT': {
-              const { date } = action.payload;
-              const dateKey = `workout-${date}`;
-              const workoutItems = state.workouts[dateKey];
-              if (!workoutItems || workoutItems.length === 0) break;
-              state = {
-                ...state,
-                currentView: 'trainer',
-                activeWorkout: { date, items: workoutItems },
-                trainerState: 'ready',
-                trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1 }
-              };
-              break;
-            }
-            case 'SET_TRAINER_STATE': {
-              state = { ...state, trainerState: action.payload };
-              break;
-            }
-            case 'UPDATE_TRAINER_CONTEXT': {
-              state = { ...state, trainerContext: { ...state.trainerContext, ...action.payload }};
-              break;
-            }
-            case 'ADVANCE_TRAINER_LOGIC': {
-              const { activeWorkout, trainerContext } = state;
-              const currentItem = activeWorkout.items[trainerContext.itemIndex];
-              const maxReps = currentItem.reps || 1;
-              const maxSeries = currentItem.series || 1;
-
-              let nextContext = { ...trainerContext };
-              let nextState = state.trainerState;
-
-              if (nextContext.currentRep < maxReps) {
-                nextContext.currentRep++;
-                // Passa direttamente alla prossima ripetizione senza tornare a 'ready'
-                nextState = 'preparing'; // Inizia subito la preparazione per la prossima rep
-              } else if (nextContext.currentSeries < maxSeries) {
-                nextContext.currentSeries++;
-                nextContext.currentRep = 1;
-                const exerciseDef = getExerciseById(currentItem.exerciseId);
-                nextContext.restDuration = exerciseDef?.defaultRest || 60;
-                nextState = 'rest';
-              } else {
-                if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
-                  nextContext.itemIndex++;
-                  const nextItem = activeWorkout.items[nextContext.itemIndex];
-                  if(nextItem.type === 'exercise') {
-                    nextContext.currentSeries = 1;
-                    nextContext.currentRep = 1;
-                    nextState = 'preparing'; // Prepara il prossimo esercizio
-                  } else {
-                    nextContext.restDuration = nextItem.duration;
-                    nextState = 'rest'; // Esegui un item di riposo
-                  }
-                } else {
-                  nextState = 'finished';
-                }
-              }
-              state = { ...state, trainerState: nextState, trainerContext: nextContext };
-              break;
-            }
-            default:
-              console.warn(`Azione non riconosciuta: ${action.type}`);
-              return;
+      export const mockWorkouts = {
+        [MOCK_DATE_KEY]: [
+          {
+            id: 'test-ex-1',
+            type: 'exercise',
+            exerciseId: 'test-exercise',
+            name: 'Esercizio di Test',
+            series: 2,
+            reps: 2,
+            tempo: { up: 1, hold: 1, down: 1 }
+          },
+          {
+            id: 'squat-1',
+            type: 'exercise',
+            exerciseId: 'squat',
+            name: 'Squat',
+            series: 3,
+            reps: 10
+          },
+          {
+            id: 'rest-1',
+            type: 'rest',
+            duration: 90 // secondi
+          },
+          {
+            id: 'pushups-1',
+            type: 'exercise',
+            exerciseId: 'push-ups',
+            name: 'Push-ups',
+            series: 3,
+            reps: 12
           }
-          if (state !== oldState) {
-            console.log(`Action: ${action.type}`, action.payload);
-            if (state.workouts !== oldState.workouts) {
-              saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
-              console.log('Workouts salvati in localStorage.');
-            }
-            notify();
-          }
-        }
-        return {
-          getState: () => ({ ...state }),
-          subscribe: (callback) => { subscribers.add(callback); return () => subscribers.delete(callback); },
-          dispatch,
-        };
-      }
-      const store = createStore();
-      export default store;
+        ]
+      };
   - file: src/views/TrainerView.js
     content: |
       import store from '../modules/store.js';
@@ -247,7 +190,7 @@ patches:
           runNextPhase() {
               const { activeWorkout, trainerContext } = store.getState();
               const currentExercise = activeWorkout.items[trainerContext.itemIndex];
-              const phases = currentExercise.tempo || ['down', 'hold', 'up'];
+              const phases = Object.keys(currentExercise.tempo || { up: 1, hold: 1, down: 1 });
               const currentPhaseIndex = trainerContext.currentPhaseIndex;
 
               if (currentPhaseIndex >= phases.length) {
@@ -261,10 +204,10 @@ patches:
           },
 
           execute() {
-              const { trainerContext } = store.getState();
+              const { activeWorkout, trainerContext } = store.getState();
+              const currentExercise = activeWorkout.items[trainerContext.itemIndex];
               const phaseName = trainerContext.currentPhase;
-              const durationMap = { 'up': 1.5, 'hold': 1, 'down': 2 };
-              const duration = (durationMap[phaseName] || 1) * 1000;
+              const duration = (currentExercise.tempo[phaseName] || 1) * 1000;
               let elapsed = 0;
               const interval = 50;
 
@@ -282,7 +225,7 @@ patches:
 
                   if (elapsed >= duration) {
                       clearInterval(stateTimer);
-                      ringEl.style.strokeDashoffset = 0; // Forza il completamento
+                      ringEl.style.strokeDashoffset = 0;
                       store.dispatch({ type: 'UPDATE_TRAINER_CONTEXT', payload: { currentPhaseIndex: trainerContext.currentPhaseIndex + 1 } });
                       this.runNextPhase();
                   }
@@ -307,15 +250,13 @@ patches:
 
               const timerEl = element.querySelector('.progress-ring__timer');
               const ringEl = element.querySelector('.progress-ring__foreground');
-              if (!ringEl) return; // Guardia per evitare errori se l'elemento non è ancora renderizzato
+              if (!ringEl) return;
               const radius = ringEl.r.baseVal.value;
               const circumference = 2 * Math.PI * radius;
 
-              if (trainerState === 'preparing') {
-                  const duration = 3000;
+              const animateRing = (duration) => {
                   let elapsed = 0;
                   const interval = 50;
-                  if (timerEl) timerEl.textContent = '3';
                   ringEl.style.strokeDashoffset = circumference;
                   stateTimer = setInterval(() => {
                       elapsed += interval;
@@ -325,26 +266,27 @@ patches:
                       if (timerEl) timerEl.textContent = Math.ceil((duration - elapsed) / 1000);
                       if (elapsed >= duration) {
                           clearInterval(stateTimer);
-                          ringEl.style.strokeDashoffset = 0; // Forza il completamento
-                          PhasedExerciseRunner.start(element);
+                          ringEl.style.strokeDashoffset = 0;
+                          if (trainerState === 'preparing') {
+                            PhasedExerciseRunner.start(element);
+                          } else if (trainerState === 'rest') {
+                            advanceTrainer();
+                          }
                       }
                   }, interval);
+              };
+
+              if (trainerState === 'preparing') {
+                  if (timerEl) timerEl.textContent = '3';
+                  animateRing(3000);
               } else if (trainerState === 'announcing') {
                   stateTimer = setTimeout(() => store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'action' }), 750);
               } else if (trainerState === 'action') {
                   PhasedExerciseRunner.execute();
               } else if (trainerState === 'rest') {
                   const restDuration = trainerContext.restDuration || 60;
-                  let timeLeft = restDuration;
-                  if (timerEl) timerEl.textContent = timeLeft;
-                  stateTimer = setInterval(() => {
-                      timeLeft--;
-                      if (timerEl) timerEl.textContent = timeLeft;
-                      if (timeLeft <= 0) {
-                          clearInterval(stateTimer);
-                          advanceTrainer();
-                      }
-                  }, 1000);
+                  if (timerEl) timerEl.textContent = restDuration;
+                  animateRing(restDuration * 1000);
               }
           }
 
@@ -373,6 +315,7 @@ patches:
                   case 'rest':
                       phaseText = 'RIPOSO'; instructionText = 'Recupera per la prossima serie'; buttonText = 'PAUSA';
                       timerText = trainerContext.restDuration || 60;
+                      ringOffset = circumference;
                       break;
                   case 'announcing':
                       phaseText = trainerContext.currentPhase?.toUpperCase() || '';
@@ -427,4 +370,4 @@ patches:
           render();
       }
 commands:
-  - "echo 'Refactoring completato. Ora il flusso delle ripetizioni è automatico.'"
+  - "echo 'Patch applicata. Il problema dell-anello dovrebbe essere risolto.'"
