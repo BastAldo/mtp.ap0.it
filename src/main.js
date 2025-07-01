@@ -1,6 +1,7 @@
 import store from './modules/store.js';
 import { init as initCalendarView } from './views/CalendarView.js';
 import { init as initTrainerView } from './views/TrainerView.js';
+import { init as initDebriefingView } from './views/DebriefingView.js';
 import { init as initModal } from './ui/Modal.js';
 import { loadFromStorage, saveToStorage } from './modules/storage.js';
 import { mockWorkouts } from './modules/_mockData.js';
@@ -41,6 +42,8 @@ function handleViewChange() {
     if (!initializedViews.has(currentView)) {
       if (currentView === 'trainer') {
         initTrainerView(views.trainer);
+      } else if (currentView === 'debriefing') {
+        initDebriefingView(views.debriefing);
       }
       // Aggiungere qui l'inizializzazione di altre viste future
       initializedViews.add(currentView);

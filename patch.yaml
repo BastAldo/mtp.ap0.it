@@ -1,11 +1,70 @@
-commit_message: "fix(trainer): Restore SET_TRAINER_STATE action handler"
+commit_message: "feat(debriefing): Add DebriefingView structure and navigation"
 rationale: |
-  This commit fixes a critical regression bug introduced during a previous refactoring. The `SET_TRAINER_STATE` action handler was accidentally removed from the store's dispatcher.
+  This commit introduces the foundational structure for the Debriefing View, fulfilling the next logical step after stabilizing the Trainer.
 
-  This prevented the trainer from starting, as the view's request to change the state from 'ready' to 'preparing' was being ignored.
-
-  By re-introducing the `case 'SET_TRAINER_STATE'`, the store can once again handle direct state changes, and the "INIZIA" button now functions correctly.
+  1.  **New View File**: A new file, `src/views/DebriefingView.js`, has been created to encapsulate the view's logic, following the project's established pattern.
+  2.  **Navigation Logic**: The system now correctly navigates from the completed Trainer view to the new Debriefing view. This is achieved by adding a `FINISH_WORKOUT` action, which is dispatched from the `TrainerView` and handled by the `store` to change the active view.
+  3.  **View Initialization**: `main.js` has been updated to lazy-load and initialize the `DebriefingView` upon its first activation.
+  4.  **Basic Layout**: The Debriefing view renders a basic layout with a title and a functional "Return to Calendar" button, setting the stage for future implementation of the workout summary.
 patches:
+  - file: src/main.js
+    content: |
+      import store from './modules/store.js';
+      import { init as initCalendarView } from './views/CalendarView.js';
+      import { init as initTrainerView } from './views/TrainerView.js';
+      import { init as initDebriefingView } from './views/DebriefingView.js';
+      import { init as initModal } from './ui/Modal.js';
+      import { loadFromStorage, saveToStorage } from './modules/storage.js';
+      import { mockWorkouts } from './modules/_mockData.js';
+
+      const WORKOUTS_STORAGE_KEY = 'workouts';
+
+      const views = {
+          calendar: document.getElementById('calendar-view'),
+          trainer: document.getElementById('trainer-view'),
+          debriefing: document.getElementById('debriefing-view'),
+      };
+      const initializedViews = new Set();
+
+      function initializeApp() {
+        let workouts = loadFromStorage(WORKOUTS_STORAGE_KEY);
+        if (!workouts) {
+          saveToStorage(WORKOUTS_STORAGE_KEY, mockWorkouts);
+          workouts = mockWorkouts;
+        }
+        store.dispatch({ type: 'SET_WORKOUTS', payload: workouts });
+
+        initCalendarView(views.calendar);
+        initializedViews.add('calendar');
+        initModal(document.getElementById('modal-container'));
+      }
+
+      let currentActiveView = views.calendar;
+      function handleViewChange() {
+        const { currentView } = store.getState();
+        const newActiveViewEl = views[currentView];
+
+        if (currentActiveView !== newActiveViewEl) {
+          currentActiveView.classList.remove('view--active');
+          newActiveViewEl.classList.add('view--active');
+          currentActiveView = newActiveViewEl;
+
+          // Inizializza la vista solo la prima volta che viene mostrata
+          if (!initializedViews.has(currentView)) {
+            if (currentView === 'trainer') {
+              initTrainerView(views.trainer);
+            } else if (currentView === 'debriefing') {
+              initDebriefingView(views.debriefing);
+            }
+            // Aggiungere qui l'inizializzazione di altre viste future
+            initializedViews.add(currentView);
+          }
+        }
+      }
+
+      store.subscribe(handleViewChange);
+      initializeApp();
+      console.log('App "Mio Trainer Personale" inizializzata.');
   - file: src/modules/store.js
     content: |
       import { saveToStorage } from './storage.js';
@@ -118,6 +177,10 @@ patches:
                 trainerState: 'ready',
                 trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 }
               };
+              break;
+            }
+            case 'FINISH_WORKOUT': {
+              newState = { ...state, currentView: 'debriefing', activeWorkout: null, trainerState: 'idle', trainerContext: {} };
               break;
             }
             case 'SET_TRAINER_STATE': {
@@ -244,5 +307,255 @@ patches:
       }
       const store = createStore();
       export default store;
+  - file: src/views/DebriefingView.js
+    content: |
+      import store from '../modules/store.js';
+
+      function render() {
+          // In a future step, we'll get the completed workout from the store
+          // and generate a real summary.
+          const summaryHtml = `
+              <h2>Workout Completato!</h2>
+              <p>Qui verrà mostrato il riepilogo dell'allenamento.</p>
+          `;
+
+          const actionsHtml = `
+              <div class="debriefing-actions">
+                  <button class="copy-btn">Copia per il Coach</button>
+                  <button class="return-btn">Torna al Calendario</button>
+              </div>
+          `;
+
+          return `
+              <div class="debriefing-container">
+                  ${summaryHtml}
+                  ${actionsHtml}
+              </div>
+          `;
+      }
+
+      export function init(element) {
+          element.addEventListener('click', (event) => {
+              if (event.target.closest('.return-btn')) {
+                  store.dispatch({ type: 'CHANGE_VIEW', payload: 'calendar' });
+              }
+              if (event.target.closest('.copy-btn')) {
+                  // Logic for copying to clipboard will be added later
+                  alert('Funzione di copia non ancora implementata.');
+              }
+          });
+
+          // We don't need to subscribe to the store for this basic version,
+          // but we will in the future to render the workout data.
+          element.innerHTML = render();
+      }
+  - file: src/views/TrainerView.js
+    content: |
+      import store from '../modules/store.js';
+      import { getExerciseById } from '../modules/exerciseRepository.js';
+
+      let animationFrameId = null;
+      let animationStartTime = null;
+
+      export function init(element) {
+          element.addEventListener('click', (event) => {
+              const mainButton = event.target.closest('.trainer-main-btn');
+              if (!mainButton) return;
+              
+              const { trainerState } = store.getState();
+              switch (trainerState) {
+                  case 'ready':
+                      store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'preparing' });
+                      break;
+                  case 'paused':
+                      store.dispatch({ type: 'RESUME_TRAINER' });
+                      break;
+                  case 'finished':
+                      store.dispatch({ type: 'FINISH_WORKOUT' });
+                      break;
+                  case 'preparing':
+                  case 'action':
+                  case 'rest':
+                  case 'announcing':
+                      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                      const elapsed = performance.now() - animationStartTime;
+                      const remaining = mainButton.dataset.duration - elapsed;
+                      store.dispatch({ type: 'PAUSE_TRAINER', payload: { remaining: remaining > 0 ? remaining : 0, duration: mainButton.dataset.duration } });
+                      break;
+              }
+          });
+
+          element.addEventListener('animateRing', ({ detail }) => {
+              if (animationFrameId) cancelAnimationFrame(animationFrameId);
+              const ringEl = element.querySelector('.progress-ring__foreground');
+              const timerEl = element.querySelector('.progress-ring__timer');
+              if (!ringEl || !timerEl) return;
+              const circumference = 2 * Math.PI * ringEl.r.baseVal.value;
+              const { trainerContext } = store.getState();
+              
+              const isResuming = trainerContext.stateBeforePause && trainerContext.remaining > 0;
+              const duration = isResuming ? trainerContext.remaining : detail.duration;
+              let startTime = performance.now();
+              animationStartTime = startTime;
+              if (isResuming) {
+                  store.dispatch({ type: 'UPDATE_TRAINER_CONTEXT', payload: { remaining: 0, stateBeforePause: null }});
+              }
+              
+              const animationStep = (timestamp) => {
+                  const elapsed = timestamp - startTime;
+                  const progress = Math.min(1, elapsed / duration);
+                  ringEl.style.strokeDashoffset = circumference * (1 - progress);
+                  
+                  if (store.getState().trainerState !== 'announcing') {
+                    timerEl.textContent = Math.ceil((duration - elapsed) / 1000);
+                  } else {
+                    timerEl.textContent = '';
+                  }
+
+                  if (elapsed < duration) {
+                      animationFrameId = requestAnimationFrame(animationStep);
+                  } else {
+                      ringEl.style.strokeDashoffset = 0;
+                      timerEl.textContent = 0;
+                      if (detail.onComplete) detail.onComplete();
+                  }
+              };
+              animationFrameId = requestAnimationFrame(animationStep);
+          });
+
+          function runStateBasedTimer() {
+              const { trainerState, trainerContext, activeWorkout } = store.getState();
+              
+              if (animationFrameId && trainerState !== 'paused') {
+                  cancelAnimationFrame(animationFrameId);
+                  animationFrameId = null;
+              }
+
+              const onComplete = () => store.dispatch({ type: 'TIMER_COMPLETE' });
+              const currentItem = activeWorkout.items[trainerContext.itemIndex];
+              let duration = 0;
+
+              switch(trainerState) {
+                  case 'preparing':
+                      duration = 3000;
+                      break;
+                  case 'announcing':
+                      duration = 750;
+                      break;
+                  case 'action':
+                      if (currentItem.type === 'time') {
+                          duration = (currentItem.duration || 10) * 1000;
+                      } else {
+                          const tempo = currentItem.tempo || {};
+                          duration = (tempo[trainerContext.currentPhase] || 1) * 1000;
+                      }
+                      break;
+                  case 'rest': {
+                      let restDuration = 60; // Default
+                      if (currentItem.type === 'rest') {
+                          restDuration = currentItem.duration;
+                      } else if (currentItem.exerciseId) {
+                          restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60;
+                      }
+                      duration = restDuration * 1000;
+                      break;
+                  }
+                  default:
+                      // No timer for states like 'ready', 'paused', 'finished'
+                      return;
+              }
+              element.dispatchEvent(new CustomEvent('animateRing', { detail: { duration, onComplete } }));
+          }
+
+          function render() {
+              const { activeWorkout, trainerState, trainerContext } = store.getState();
+              if (!activeWorkout) { element.innerHTML = '<h2>Nessun workout attivo.</h2>'; return; }
+
+              const currentItem = activeWorkout.items[trainerContext.itemIndex];
+              const radius = 90;
+              const circumference = 2 * Math.PI * radius;
+              let phaseText = '', instructionText = '', buttonText = '', timerText = '', phaseClass = '';
+              let ringOffset = circumference;
+              const isExercise = currentItem.type === 'exercise' || currentItem.type === 'time';
+              let currentDuration = 0;
+
+              switch (trainerState) {
+                  case 'ready':
+                      phaseText = 'PRONTO'; instructionText = `Premi INIZIA per cominciare`; buttonText = 'INIZIA';
+                      break;
+                  case 'preparing':
+                      phaseText = 'PREPARATI'; instructionText = 'Inizia il movimento...'; buttonText = 'PAUSA'; timerText = '3'; currentDuration = 3000;
+                      break;
+                  case 'rest': {
+                      let restDuration = 60;
+                      if (currentItem.type === 'rest') { restDuration = currentItem.duration; }
+                      else if (currentItem.exerciseId) { restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60; }
+                      phaseText = 'RIPOSO'; instructionText = 'Recupera'; buttonText = 'PAUSA'; timerText = restDuration; currentDuration = restDuration * 1000;
+                      break;
+                  }
+                  case 'announcing':
+                      phaseText = trainerContext.currentPhase?.toUpperCase() || '';
+                      instructionText = `Prossima fase: ${phaseText}`; buttonText = 'PAUSA'; phaseClass = 'is-flashing'; currentDuration = 750;
+                      break;
+                  case 'action':
+                      phaseText = trainerContext.currentPhase?.toUpperCase() || '';
+                      if (currentItem.type === 'time') { currentDuration = currentItem.duration * 1000; }
+                      else { const tempo = currentItem.tempo || {}; currentDuration = (tempo[trainerContext.currentPhase] || 1) * 1000; }
+                      instructionText = 'Esegui il movimento'; buttonText = 'PAUSA';
+                      break;
+                  case 'paused': {
+                      const prevState = trainerContext.stateBeforePause;
+                      if(prevState === 'preparing') { phaseText = 'PREPARATI'; }
+                      else if(prevState === 'rest') { phaseText = 'RIPOSO'; }
+                      else if(prevState === 'announcing' || prevState === 'action') { phaseText = trainerContext.currentPhase?.toUpperCase() || ''; }
+                      if(prevState === 'announcing') { phaseClass = 'is-flashing'; }
+                      
+                      instructionText = 'Pausa'; buttonText = 'RIPRENDI'; 
+                      if(prevState !== 'announcing') { timerText = Math.ceil(trainerContext.remaining/1000); }
+                      ringOffset = circumference * (1 - ( (trainerContext.duration - trainerContext.remaining) / trainerContext.duration) );
+                      currentDuration = trainerContext.duration;
+                      break;
+                  }
+                  case 'finished':
+                      phaseText = 'FINE'; instructionText = 'Workout completato!'; buttonText = 'DEBRIEFING';
+                      break;
+                  default: phaseText = 'IDLE'; instructionText = 'Stato non riconosciuto'; buttonText = 'RESET';
+              }
+              const headerTitle = currentItem.name || 'Riposo';
+              const seriesText = isExercise ? `SERIE ${trainerContext.currentSeries} / ${currentItem.series || 1}` : '';
+              const repsText = currentItem.type === 'exercise' ? `REP ${trainerContext.currentRep} / ${currentItem.reps || 1}` : '';
+
+              element.innerHTML = `
+                  <div class="trainer-container">
+                      <header class="trainer-header">
+                          <h2>${headerTitle}</h2>
+                          <p>${seriesText} ${repsText ? `| ${repsText}` : ''}</p>
+                      </header>
+                      <div class="progress-ring">
+                          <svg>
+                              <circle class="progress-ring__background" stroke-width="10" r="${radius}" cx="50%" cy="50%"></circle>
+                              <circle class="progress-ring__foreground" style="stroke-dashoffset: ${ringOffset};" stroke-width="10" r="${radius}" cx="50%" cy="50%" stroke-dasharray="${circumference}"></circle>
+                          </svg>
+                          <div class="progress-ring__text">
+                              <div class="progress-ring__phase ${phaseClass}">${phaseText}</div>
+                              <div class="progress-ring__timer">${timerText}</div>
+                          </div>
+                      </div>
+                      <footer class="trainer-footer">
+                          <p class="trainer-instruction">${instructionText}</p>
+                          <div class="trainer-controls">
+                              <button class="trainer-main-btn" data-duration="${currentDuration}">${buttonText}</button>
+                          </div>
+                      </footer>
+                  </div>
+              `;
+              
+              if (trainerState !== 'paused') {
+                runStateBasedTimer();
+              }
+          }
+          store.subscribe(render);
+          render();
+      }
 commands:
- - "echo 'Bug fix applicato. Il pulsante INIZIA ora funziona correttamente.'"
+  - "echo 'DebriefingView structure created and navigation enabled.'"

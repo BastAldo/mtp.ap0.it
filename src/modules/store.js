@@ -110,6 +110,10 @@ function createStore() {
         };
         break;
       }
+      case 'FINISH_WORKOUT': {
+        newState = { ...state, currentView: 'debriefing', activeWorkout: null, trainerState: 'idle', trainerContext: {} };
+        break;
+      }
       case 'SET_TRAINER_STATE': {
         newState = { ...state, trainerState: action.payload };
         break;

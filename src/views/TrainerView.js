@@ -17,6 +17,9 @@ export function init(element) {
             case 'paused':
                 store.dispatch({ type: 'RESUME_TRAINER' });
                 break;
+            case 'finished':
+                store.dispatch({ type: 'FINISH_WORKOUT' });
+                break;
             case 'preparing':
             case 'action':
             case 'rest':
