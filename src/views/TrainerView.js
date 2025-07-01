@@ -33,7 +33,7 @@ const PhasedExerciseRunner = {
         const { trainerContext } = store.getState();
         const phaseName = trainerContext.currentPhase;
         const durationMap = { 'up': 1.5, 'hold': 1, 'down': 2 };
-        const duration = durationMap[phaseName] || 1;
+        const duration = (durationMap[phaseName] || 1) * 1000;
         let elapsed = 0;
         const interval = 50;
 
@@ -44,12 +44,12 @@ const PhasedExerciseRunner = {
 
         stateTimer = setInterval(() => {
             elapsed += interval;
-            const progress = Math.min(1, elapsed / (duration * 1000));
+            const progress = Math.min(1, elapsed / duration);
             const offset = circumference * (1 - progress);
             ringEl.style.strokeDashoffset = offset;
-            if (timerEl) timerEl.textContent = Math.ceil((duration * 1000 - elapsed) / 1000);
+            if (timerEl) timerEl.textContent = Math.ceil((duration - elapsed) / 1000);
 
-            if (elapsed >= duration * 1000) {
+            if (elapsed >= duration) {
                 clearInterval(stateTimer);
                 ringEl.style.strokeDashoffset = 0; // Forza il completamento
                 store.dispatch({ type: 'UPDATE_TRAINER_CONTEXT', payload: { currentPhaseIndex: trainerContext.currentPhaseIndex + 1 } });
@@ -76,7 +76,8 @@ export function init(element) {
 
         const timerEl = element.querySelector('.progress-ring__timer');
         const ringEl = element.querySelector('.progress-ring__foreground');
-        const radius = ringEl?.r.baseVal.value;
+        if (!ringEl) return; // Guardia per evitare errori se l'elemento non è ancora renderizzato
+        const radius = ringEl.r.baseVal.value;
         const circumference = 2 * Math.PI * radius;
 
         if (trainerState === 'preparing') {
@@ -84,14 +85,16 @@ export function init(element) {
             let elapsed = 0;
             const interval = 50;
             if (timerEl) timerEl.textContent = '3';
+            ringEl.style.strokeDashoffset = circumference;
             stateTimer = setInterval(() => {
                 elapsed += interval;
                 const progress = Math.min(1, elapsed / duration);
                 const offset = circumference * (1 - progress);
-                if(ringEl) ringEl.style.strokeDashoffset = offset;
+                ringEl.style.strokeDashoffset = offset;
                 if (timerEl) timerEl.textContent = Math.ceil((duration - elapsed) / 1000);
                 if (elapsed >= duration) {
                     clearInterval(stateTimer);
+                    ringEl.style.strokeDashoffset = 0; // Forza il completamento
                     PhasedExerciseRunner.start(element);
                 }
             }, interval);
@@ -160,7 +163,7 @@ export function init(element) {
         }
 
         const headerTitle = isExercise ? currentItem.name : 'Riposo';
-        const seriesText = isExercise ? `SERIES ${trainerContext.currentSeries} / ${currentItem.series || 1}` : '';
+        const seriesText = isExercise ? `SERIE ${trainerContext.currentSeries} / ${currentItem.series || 1}` : '';
         const repsText = isExercise ? `REP ${trainerContext.currentRep} / ${currentItem.reps || 1}` : '';
 
         element.innerHTML = `

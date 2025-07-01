@@ -88,7 +88,7 @@ body::-webkit-scrollbar-thumb, .modal-body::-webkit-scrollbar-thumb { background
 .progress-ring__background { stroke: var(--card-color); fill: transparent; }
 .progress-ring__foreground { stroke: var(--secondary-color); fill: transparent; }
 .progress-ring__text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
-.progress-ring__phase { font-size: 2rem; font-weight: bold; }
+.progress-ring__phase { font-size: 1.8rem; font-weight: bold; text-transform: uppercase; }
 .progress-ring__timer { font-size: 3rem; color: var(--text-color); }
 .trainer-footer { margin-top: 1rem; }
 .trainer-footer p { font-size: 1.2rem; min-height: 2em; }

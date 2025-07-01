@@ -64,7 +64,8 @@ function createStore() {
 
         if (nextContext.currentRep < maxReps) {
           nextContext.currentRep++;
-          nextState = 'ready';
+          // Passa direttamente alla prossima ripetizione senza tornare a 'ready'
+          nextState = 'preparing'; // Inizia subito la preparazione per la prossima rep
         } else if (nextContext.currentSeries < maxSeries) {
           nextContext.currentSeries++;
           nextContext.currentRep = 1;
@@ -78,10 +79,10 @@ function createStore() {
             if(nextItem.type === 'exercise') {
               nextContext.currentSeries = 1;
               nextContext.currentRep = 1;
-              nextState = 'ready';
+              nextState = 'preparing'; // Prepara il prossimo esercizio
             } else {
               nextContext.restDuration = nextItem.duration;
-              nextState = 'rest';
+              nextState = 'rest'; // Esegui un item di riposo
             }
           } else {
             nextState = 'finished';
