@@ -1,55 +1,84 @@
 import store from '../modules/store.js';
 
-function generateSummary(completedWorkout) {
+function generateSummaryHtml(completedWorkout) {
     if (!completedWorkout) return '<p>Nessun dato di allenamento disponibile.</p>';
 
     const title = completedWorkout.completed
         ? '<h2>Workout Completato!</h2>'
         : '<h2>Workout Interrotto</h2>';
 
-    const itemsHtml = completedWorkout.items.map((item, index) => {
+    const termPoint = completedWorkout.terminationPoint;
+
+    const itemsHtml = completedWorkout.fullPlan.map((item, index) => {
+        let itemClass = 'debrief-item';
+        let statusText = '';
+
+        if (completedWorkout.completed) {
+            itemClass += ' debrief-item--completed';
+        } else {
+            if (index < termPoint.itemIndex) {
+                itemClass += ' debrief-item--completed';
+            } else if (index === termPoint.itemIndex) {
+                itemClass += ' debrief-item--terminated';
+                const currentSeries = termPoint.currentSeries || 1;
+                statusText = `(interrotto alla serie ${currentSeries})`;
+            } else {
+                itemClass += ' debrief-item--skipped';
+            }
+        }
+
+        let mainText = '';
         if (item.type === 'rest') {
-            return `<li>Riposo: ${item.duration}s</li>`;
+            mainText = `Riposo: ${item.duration}s`;
+        } else {
+            const series = item.series || 1;
+            const reps = item.reps ? `${item.reps} reps` : `${item.duration}s`;
+            mainText = `${item.name}: ${series}x${reps} ${statusText}`;
         }
-        const series = item.series || 1;
-        const reps = item.reps ? `${item.reps} reps` : `${item.duration}s`;
-        let status = '';
-        if (!completedWorkout.completed && index === completedWorkout.items.length - 1) {
-            const point = completedWorkout.terminationPoint;
-            status = ` (interrotto a serie ${point.currentSeries}/${series})`;
-        }
-        return `<li>${item.name}: ${series} x ${reps}${status}</li>`;
+
+        return `<li class="${itemClass}">${mainText}</li>`;
     }).join('');
 
-    return `${title}<ul>${itemsHtml}</ul>`;
+    return `${title}<ul class="debrief-list">${itemsHtml}</ul>`;
 }
 
 function generateTextForCoach(completedWorkout) {
     if (!completedWorkout) return 'Nessun dato disponibile.';
     const date = new Date(completedWorkout.date).toLocaleDateString('it-IT');
     const status = completedWorkout.completed ? 'Completato' : 'Interrotto';
-    let report = `Report Allenamento - ${date} (${status})\n\n`;
+    let report = `Report Allenamento - ${date} (${status})\n====================\n\n`;
 
-    completedWorkout.items.forEach((item, index) => {
+    const termPoint = completedWorkout.terminationPoint;
+
+    completedWorkout.fullPlan.forEach((item, index) => {
+        let statusTag = '';
+        if (!completedWorkout.completed) {
+            if (index < termPoint.itemIndex) statusTag = '[✓]';
+            else if (index === termPoint.itemIndex) statusTag = '[✗]';
+            else statusTag = '[-]';
+        } else {
+            statusTag = '[✓]';
+        }
+
         if (item.type === 'rest') {
-            report += `- Riposo: ${item.duration}s\n`;
+            report += `${statusTag} Riposo: ${item.duration}s\n`;
         } else {
             const series = item.series || 1;
             const reps = item.reps ? `${item.reps} reps` : `${item.duration}s`;
             let terminationInfo = '';
-            if (!completedWorkout.completed && index === completedWorkout.items.length - 1) {
-                const point = completedWorkout.terminationPoint;
-                terminationInfo = ` (interrotto a serie ${point.currentSeries}/${series})`;
+            if (statusTag === '[✗]') {
+                terminationInfo = ` (interrotto alla serie ${termPoint.currentSeries}/${series})`;
             }
-            report += `- ${item.name}: ${series} x ${reps}${terminationInfo}\n`;
+            report += `${statusTag} ${item.name}: ${series}x${reps}${terminationInfo}\n`;
         }
     });
     return report;
 }
 
+
 function render(element) {
     const { completedWorkout } = store.getState();
-    const summaryHtml = generateSummary(completedWorkout);
+    const summaryHtml = generateSummaryHtml(completedWorkout);
     const actionsHtml = `
         <div class="debriefing-actions">
             <button class="copy-btn">Copia per il Coach</button>

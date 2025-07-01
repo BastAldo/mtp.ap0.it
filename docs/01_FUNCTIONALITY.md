@@ -4,7 +4,7 @@ This document outlines the core features and operational logic of the "Mio Train
 
 ## 1. Core Concept
 
-The application is a single-page app (SPA) designed for users to schedule, execute, and track workouts. All user data is persisted locally in the browser's `localStorage`.
+The application is a single-page app (SPA) designed for users to schedule, execute, and track workouts. It features a persistent header for consistent branding. All user data is persisted locally in the browser's `localStorage`.
 
 ## 2. Main Views
 
@@ -47,15 +47,16 @@ The trainer operates as a state machine. The primary user flow is as follows:
 7.  **Advancement Logic:**
     - After an `action` phase, the logic checks for more phases, repetitions, or series within the same exercise.
     - Once an entire exercise item is complete (all series and reps), the trainer immediately advances to the next item in the workout list.
-    - If the next item is an exercise, it begins the `announcing` phase for it.
-    - If the next item is a rest block, it enters the `rest` state.
 8.  **Finished (`finished`):** Once all items in the routine are complete, the trainer's main button changes to "DEBRIEFING". Clicking it transitions to the Debriefing View.
 9.  **Terminated (`terminate`):** If the user clicks "Termina", the workout is immediately stopped, and the app transitions to the Debriefing View with a partial summary.
 
 ### 2.4. Debriefing View
 
 -   **Activation:** Appears automatically after a workout is finished or terminated.
--   **Content:** Displays a summary of all exercises completed (or partially completed). For partial workouts, it indicates exactly where the user left off.
+-   **Content:** Displays a visually styled list representing the entire workout plan.
+    - **Completed** items are marked (e.g., green).
+    - The **point of termination** is clearly highlighted (e.g., red).
+    - **Skipped** items are visually distinct (e.g., greyed out).
 -   **Actions:**
-    - **"Copy for Coach"**: Copies a pre-formatted text summary of the workout to the clipboard.
+    - **"Copy for Coach"**: Copies a pre-formatted text summary of the workout to the clipboard, detailing what was completed, where it was stopped, and what was skipped.
     - **"Return to Calendar"**: Navigates back to the main calendar view.

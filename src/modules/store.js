@@ -23,8 +23,12 @@ function createStore() {
 
   // Custom Logger Function
   function logState(actionType, state) {
+      if (actionType.startsWith('@@')) return; // Silences internal actions if any
       const { activeWorkout, trainerState, trainerContext } = state;
-      if (!activeWorkout) return;
+      if (!activeWorkout) {
+        console.log(`%c[${actionType}]`, 'color: #88aaff; font-weight: bold;', 'No active workout.');
+        return;
+      }
 
       const currentItem = activeWorkout.items[trainerContext.itemIndex];
       const exerciseName = currentItem?.name || 'Riposo';
@@ -105,7 +109,7 @@ function createStore() {
         newState = {
           ...state,
           currentView: 'trainer',
-          activeWorkout: { date, items: workoutItems, completed: false },
+          activeWorkout: { date, items: workoutItems, completed: false, fullPlan: workoutItems },
           completedWorkout: null,
           trainerState: 'ready',
           trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 }
@@ -119,10 +123,10 @@ function createStore() {
       case 'TERMINATE_WORKOUT': {
         const { activeWorkout, trainerContext } = state;
         const partialWorkout = {
-          ...activeWorkout,
+          date: activeWorkout.date,
+          fullPlan: activeWorkout.fullPlan,
           completed: false,
-          items: activeWorkout.items.slice(0, trainerContext.itemIndex + 1),
-          terminationPoint: trainerContext
+          terminationPoint: trainerContext,
         };
         newState = { ...state, currentView: 'debriefing', completedWorkout: partialWorkout, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
         break;
@@ -147,6 +151,11 @@ function createStore() {
         break;
       }
       case 'TIMER_COMPLETE': {
+        // Critical Bug Fix: Guard against race conditions.
+        if (!state.activeWorkout) {
+          return;
+        }
+
         const { trainerState, activeWorkout, trainerContext } = state;
         const currentItem = activeWorkout.items[trainerContext.itemIndex];
 
@@ -232,13 +241,12 @@ function createStore() {
         break;
       }
       default:
-        return;
+        action.type = '@@UNKNOWN'; // Prevents logging for unknown actions
+        break;
     }
     state = newState;
     if (state !== oldState) {
-      if (action.type !== 'PAUSE_TRAINER' && action.type !== 'RESUME_TRAINER') {
-          logState(action.type, state);
-      }
+      logState(action.type, state);
       if (state.workouts !== oldState.workouts) {
         saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
       }

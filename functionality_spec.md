@@ -4,7 +4,7 @@ This document outlines the core features and operational logic of the "Mio Train
 
 ## 1. Core Concept
 
-The application is a single-page app (SPA) designed for users to schedule, execute, and track workouts. All user data is persisted locally in the browser's `localStorage`.
+The application is a single-page app (SPA) designed for users to schedule, execute, and track workouts. It features a persistent header for consistent branding. All user data is persisted locally in the browser's `localStorage`.
 
 ## 2. Main Views
 
@@ -38,22 +38,20 @@ The editor is a two-stage modal system for managing a day's workout routine.
 The trainer operates as a state machine. Each exercise consists of a number of **series**. The primary user flow is as follows:
 
 1.  **Ready (`ready`):** The trainer displays the current exercise and series number. It shows "READY" inside the progress ring. It awaits user input to begin.
-2.  **Announcing (`announcing`):** Before every new phase, this 0.75-second state is activated. The progress ring is shown as empty. The content inside the ring is replaced by a large, flashing text label announcing the upcoming phase (e.g., "PREPARE", "UP", "REST"). An audio tick alerts the user.
-3.  **Preparing (`preparing`):** A 3-second countdown to prepare the user for the first series of an exercise. The progress ring fills up, and the countdown is displayed inside.
-4.  **Action (`action`):** The core execution phase. The progress ring animates for the duration of the phase, with the countdown and phase label shown inside.
-    - For **`reps`**-based exercises, the trainer automatically cycles through timed phases as defined by the exercise's `tempo` object (e.g., `up`, `hold`, `down`), each with its own countdown and progress ring animation.
-    - For **`time`**-based exercises, a single countdown for the specified `duration` is run.
-5.  **Paused (`paused`):** The user can pause the workout at any time during a countdown state. The timer and the progress ring animation stop. The user must click "RESUME" to continue.
-6.  **Rest (`rest`):** This state is **only** activated when the trainer encounters a user-defined rest block in the workout sequence. There are no automatic rests between series or exercises. A countdown for the specified `rest` duration is shown, and the progress ring animates accordingly.
-7.  **Advancement:** After completing all series/reps of an exercise, the system automatically proceeds to the next item in the workout list. If the next item is another exercise, it begins immediately. If it is an explicit rest block, the `rest` state is triggered.
-8.  **Finished (`finished`):** Once all exercises and series are complete, the trainer automatically transitions to the Debriefing View.
+2.  **Announcing (`announcing`):** Before every new phase, this 0.75-second state is activated.
+3.  **Preparing (`preparing`):** A 3-second countdown to prepare the user for the first series of an exercise.
+4.  **Action (`action`):** The core execution phase for a timed duration.
+5.  **Paused (`paused`):** The user can pause the workout at any time during a countdown state.
+6.  **Rest (`rest`):** This state is **only** activated when the trainer encounters a user-defined rest block in the workout sequence. There are no automatic rests.
+7.  **Advancement:** After completing an item, the system automatically proceeds to the next item in the workout list.
+8.  **Finished (`finished`):** Once all items are complete, the trainer automatically transitions to the Debriefing View.
 9.  **Terminated (`terminate`):** If the user clicks the "Termina" button, the workout is immediately stopped, and the app transitions to the Debriefing View with a partial summary.
 
 ### 2.4. Debriefing View
 - **Activation:** Appears automatically when a workout is completed or manually terminated.
 - **Content:**
-    - **Summary:** Displays a list of all exercises completed during the session. For terminated workouts, it clearly indicates the last attempted exercise and series/rep.
-    - **Text Report:** Generates a pre-formatted, multi-line string summarizing the workout, ready for sharing.
+    - **Summary:** Displays a visually styled list representing the entire workout plan. **Completed** items are marked (e.g., green). The **point of termination** is clearly highlighted (e.g., red). **Skipped** items are visually distinct (e.g., greyed out).
+    - **Text Report:** Generates a pre-formatted, multi-line string summarizing the workout, detailing what was completed, where it was stopped, and what was skipped.
 - **Actions:**
     - **Copy for Coach:** Copies the text report to the user's clipboard.
     - **Return to Calendar:** Switches the view back to the main Calendar.

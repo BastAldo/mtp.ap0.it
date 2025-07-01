@@ -1,15 +1,161 @@
-commit_message: "feat(debriefing): Implement workout summary and terminate button"
+commit_message: "feat(app): Implement full debriefing overhaul, fixed header, and critical bug fix"
 rationale: |
-  This commit delivers a major feature enhancement by implementing a fully functional Debriefing View and adding the ability for users to terminate a workout prematurely.
+  This is a major feature update that addresses user feedback by implementing a complete overhaul of the debriefing experience, adding a persistent application header, and fixing a critical race condition bug.
 
-  1.  **State Management**: A `completedWorkout` property has been added to the store. This acts as a vessel to transfer data of the finished (or terminated) workout to the Debriefing View, ensuring a clean separation of concerns.
+  1.  **Critical Fix**: A guard clause has been added to the `TIMER_COMPLETE` action in `store.js`. This prevents a race condition that occurred when a timer completed after the workout was already terminated, which previously crashed the app.
 
-  2.  **Terminate Functionality**: A "Termina" button has been added to the Trainer. It dispatches a new `TERMINATE_WORKOUT` action, which saves the partial workout progress to `completedWorkout` and navigates to the debriefing screen.
+  2.  **Persistent Header**: A fixed header has been added to `index.html` and styled in `style.css`. This provides consistent branding and navigation context across all views.
 
-  3.  **Dynamic Debriefing View**: The `DebriefingView` is no longer static. It now subscribes to the store and dynamically renders a summary based on the `completedWorkout` data. It also includes a functional "Copy for Coach" button that uses the Clipboard API.
+  3.  **Advanced Debriefing**:
+      - The `DebriefingView` is now a "true snapshot" of the workout. It visually differentiates between completed, terminated, and skipped exercises.
+      - The logic in `store.js` was updated to pass the entire workout plan to the debriefing view, including the exact termination point.
 
-  4.  **Documentation**: All relevant documentation (`01_FUNCTIONALITY.md`, `functionality_spec.md`) has been updated to reflect the new "Terminate" button and the detailed behavior of the Debriefing View for both complete and partial workouts.
+  4.  **UI/UX Improvements**:
+      - The Debriefing view has been completely restyled to align with the application's dark theme and aesthetic.
+      - The `confirm()` dialog for terminating a workout has been kept for simplicity in this iteration, but the overall UX is significantly improved.
+
+  5.  **Documentation**: All relevant functionality documents have been updated to reflect these substantial changes.
 patches:
+  - file: assets/css/style.css
+    content: |
+      /* --- GLOBAL STYLES & MOBILE FIRST --- */
+      :root {
+          --bg-color: #1a1a1d;
+          --card-color: #2c2c34;
+          --primary-color: #9575cd;
+          --secondary-color: #4db6ac;
+          --text-color: #f4f4f9;
+          --text-color-muted: #aaa;
+          --border-color: #40404a;
+          --danger-color: #ef5350;
+          --success-color: #66bb6a;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+          background-color: var(--bg-color);
+          color: var(--text-color);
+          padding-top: 60px; /* Space for the fixed header */
+          scrollbar-width: thin;
+          scrollbar-color: var(--primary-color) var(--bg-color);
+      }
+      /* Custom Scrollbar for Webkit Browsers */
+      body::-webkit-scrollbar, .modal-body::-webkit-scrollbar { width: 8px; }
+      body::-webkit-scrollbar-track, .modal-body::-webkit-scrollbar-track { background: var(--card-color); }
+      body::-webkit-scrollbar-thumb, .modal-body::-webkit-scrollbar-thumb { background-color: var(--primary-color); border-radius: 10px; border: 2px solid var(--card-color); }
+      
+      /* --- PERSISTENT HEADER --- */
+      .app-header {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 60px;
+          background-color: var(--card-color);
+          border-bottom: 1px solid var(--border-color);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+      }
+      .app-header h1 {
+          font-size: 1.5rem;
+          color: var(--primary-color);
+      }
+
+      #app-container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+      .view { display: none; width: 100%; }
+      .view--active { display: block; }
+
+      /* --- KEYFRAMES --- */
+      @keyframes flash {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.2; }
+      }
+      .is-flashing {
+          animation: flash 0.25s 3; /* 3 flash in 0.75s */
+      }
+
+      /* --- CALENDAR VIEW STYLES --- */
+      .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+      .calendar-header h2 { font-size: 1.25rem; text-align: center; }
+      .calendar-header button { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: background-color 0.2s; }
+      .calendar-header button:hover { background-color: var(--primary-color); }
+      .calendar-grid { display: grid; grid-template-columns: 1fr; gap: 0.5rem; }
+      .day-cell { background-color: var(--card-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; min-height: 150px; display: flex; flex-direction: column; cursor: pointer; transition: border-color 0.2s; }
+      .day-cell:hover { border-color: var(--primary-color); }
+      .day-cell__header { display: flex; justify-content: space-between; font-weight: bold; color: var(--text-color-muted); text-transform: uppercase; font-size: 0.8rem; pointer-events: none; }
+      .day-cell__body { margin-top: 0.5rem; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; pointer-events: none; }
+      .exercise-count { font-size: 0.9rem; color: var(--secondary-color); }
+      .start-btn { background-color: var(--secondary-color); color: var(--bg-color); border: none; padding: 0.6rem; border-radius: 6px; cursor: pointer; font-weight: bold; text-transform: uppercase; width: 100%; margin-top: 1rem; transition: opacity 0.2s; pointer-events: all !important; }
+      .start-btn:hover { opacity: 0.85; }
+
+      /* --- MODAL STYLES --- */
+      #modal-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; z-index: 1001; }
+      #modal-container.active { opacity: 1; pointer-events: all; }
+      .modal-content { background-color: var(--card-color); border-radius: 8px; border: 1px solid var(--border-color); width: 90%; max-width: 500px; transform: scale(0.95); transition: transform 0.3s ease; display: flex; flex-direction: column; max-height: 90vh; }
+      #modal-container.active .modal-content { transform: scale(1); }
+      .modal-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; }
+      .modal-header h3 { color: var(--primary-color); }
+      .modal-close-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; cursor: pointer; }
+      .modal-body { overflow-y: auto; flex-grow: 1; padding: 0 1.5rem; }
+      .modal-actions { padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 1rem; flex-shrink: 0; }
+      .add-rest-btn, .add-exercise-btn { background-color: transparent; border: 1px solid var(--secondary-color); color: var(--secondary-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+      .add-rest-btn:hover, .add-exercise-btn:hover { background-color: var(--secondary-color); color: var(--card-color); }
+
+      /* --- WORKOUT EDITOR & LIBRARY STYLES --- */
+      .workout-item-list, .exercise-library-list { list-style: none; padding: 0; margin: 0; }
+      .workout-item { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0.5rem; border-bottom: 1px solid var(--border-color); }
+      .workout-item:last-child { border-bottom: none; }
+      .item-info { display: flex; align-items: baseline; gap: 0.75rem; flex-grow: 1; }
+      .item-info .item-name { font-weight: bold; }
+      .item-info .item-details { color: var(--secondary-color); }
+      .workout-item--rest .item-info .item-name { color: var(--text-color-muted); font-style: italic; }
+      .rest-duration-input { -moz-appearance: textfield; background-color: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 4px; padding: 0.25rem; width: 60px; text-align: center; }
+      .rest-duration-input::-webkit-outer-spin-button, .rest-duration-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+      .remove-item-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; font-weight: bold; cursor: pointer; padding: 0 0.5rem; border-radius: 50%; }
+      .remove-item-btn:hover { color: var(--danger-color); background-color: rgba(239, 83, 80, 0.1); }
+      .exercise-library-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0.5rem; border-bottom: 1px solid var(--border-color); }
+      .exercise-library-item:last-child { border-bottom: none; }
+      .add-to-workout-btn { background-color: var(--primary-color); color: var(--text-color); border: none; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; }
+
+      /* --- TRAINER VIEW STYLES --- */
+      .trainer-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: calc(100vh - 4rem - 60px); text-align: center; }
+      .trainer-header { margin-bottom: 1rem; }
+      .trainer-header h2 { font-size: 2rem; text-transform: uppercase; color: var(--primary-color); }
+      .trainer-header p { color: var(--text-color-muted); }
+      .progress-ring { position: relative; width: 250px; height: 250px; margin: 2rem 0; }
+      .progress-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+      .progress-ring__background { stroke: var(--card-color); fill: transparent; }
+      .progress-ring__foreground { stroke: var(--secondary-color); fill: transparent; }
+      .progress-ring__text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+      .progress-ring__phase { font-size: 1.6rem; font-weight: bold; text-transform: uppercase; }
+      .progress-ring__timer { font-size: 3rem; color: var(--text-color); }
+      .trainer-footer { margin-top: 1rem; }
+      .trainer-footer p { font-size: 1.2rem; min-height: 2em; }
+      .trainer-controls { display: flex; flex-direction: column; align-items: center; gap: 1rem; margin-top: 1rem; }
+      .trainer-main-btn { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 1rem 2rem; border-radius: 8px; cursor: pointer; font-size: 1.2rem; text-transform: uppercase; }
+      .trainer-terminate-btn { background: none; border: none; color: var(--danger-color); cursor: pointer; font-size: 0.9rem; }
+      
+      /* --- DEBRIEFING VIEW STYLES --- */
+      .debriefing-container { max-width: 700px; margin: 0 auto; padding: 1rem; }
+      .debriefing-container h2 { text-align: center; color: var(--primary-color); margin-bottom: 2rem; }
+      .debrief-list { list-style: none; padding: 0; margin: 0 0 2rem 0; }
+      .debrief-item { background-color: var(--card-color); border: 1px solid var(--border-color); border-left: 5px solid var(--border-color); padding: 1rem; border-radius: 6px; margin-bottom: 0.75rem; }
+      .debrief-item--completed { border-left-color: var(--success-color); }
+      .debrief-item--terminated { border-left-color: var(--danger-color); font-weight: bold; }
+      .debrief-item--skipped { border-left-color: var(--text-color-muted); opacity: 0.6; }
+      .debriefing-actions { display: flex; justify-content: center; gap: 1rem; }
+      .debriefing-actions button { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.8rem 1.5rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+      .debriefing-actions button:hover { border-color: var(--primary-color); color: var(--primary-color); }
+
+      /* --- TABLET/DESKTOP OVERRIDES --- */
+      @media (min-width: 768px) {
+          #app-container { padding: 2rem; }
+          .calendar-grid { grid-template-columns: repeat(7, 1fr); gap: 1rem; }
+          .modal-content { max-width: 600px; height: auto; max-height: 80vh; }
+          .progress-ring { width: 300px; height: 300px; }
+      }
   - file: docs/01_FUNCTIONALITY.md
     content: |
       # App Functionality Specification
@@ -18,7 +164,7 @@ patches:
 
       ## 1. Core Concept
 
-      The application is a single-page app (SPA) designed for users to schedule, execute, and track workouts. All user data is persisted locally in the browser's `localStorage`.
+      The application is a single-page app (SPA) designed for users to schedule, execute, and track workouts. It features a persistent header for consistent branding. All user data is persisted locally in the browser's `localStorage`.
 
       ## 2. Main Views
 
@@ -61,17 +207,18 @@ patches:
       7.  **Advancement Logic:**
           - After an `action` phase, the logic checks for more phases, repetitions, or series within the same exercise.
           - Once an entire exercise item is complete (all series and reps), the trainer immediately advances to the next item in the workout list.
-          - If the next item is an exercise, it begins the `announcing` phase for it.
-          - If the next item is a rest block, it enters the `rest` state.
       8.  **Finished (`finished`):** Once all items in the routine are complete, the trainer's main button changes to "DEBRIEFING". Clicking it transitions to the Debriefing View.
       9.  **Terminated (`terminate`):** If the user clicks "Termina", the workout is immediately stopped, and the app transitions to the Debriefing View with a partial summary.
 
       ### 2.4. Debriefing View
 
       -   **Activation:** Appears automatically after a workout is finished or terminated.
-      -   **Content:** Displays a summary of all exercises completed (or partially completed). For partial workouts, it indicates exactly where the user left off.
+      -   **Content:** Displays a visually styled list representing the entire workout plan.
+          - **Completed** items are marked (e.g., green).
+          - The **point of termination** is clearly highlighted (e.g., red).
+          - **Skipped** items are visually distinct (e.g., greyed out).
       -   **Actions:**
-          - **"Copy for Coach"**: Copies a pre-formatted text summary of the workout to the clipboard.
+          - **"Copy for Coach"**: Copies a pre-formatted text summary of the workout to the clipboard, detailing what was completed, where it was stopped, and what was skipped.
           - **"Return to Calendar"**: Navigates back to the main calendar view.
   - file: functionality_spec.md
     content: |
@@ -81,7 +228,7 @@ patches:
 
       ## 1. Core Concept
 
-      The application is a single-page app (SPA) designed for users to schedule, execute, and track workouts. All user data is persisted locally in the browser's `localStorage`.
+      The application is a single-page app (SPA) designed for users to schedule, execute, and track workouts. It features a persistent header for consistent branding. All user data is persisted locally in the browser's `localStorage`.
 
       ## 2. Main Views
 
@@ -115,25 +262,54 @@ patches:
       The trainer operates as a state machine. Each exercise consists of a number of **series**. The primary user flow is as follows:
 
       1.  **Ready (`ready`):** The trainer displays the current exercise and series number. It shows "READY" inside the progress ring. It awaits user input to begin.
-      2.  **Announcing (`announcing`):** Before every new phase, this 0.75-second state is activated. The progress ring is shown as empty. The content inside the ring is replaced by a large, flashing text label announcing the upcoming phase (e.g., "PREPARE", "UP", "REST"). An audio tick alerts the user.
-      3.  **Preparing (`preparing`):** A 3-second countdown to prepare the user for the first series of an exercise. The progress ring fills up, and the countdown is displayed inside.
-      4.  **Action (`action`):** The core execution phase. The progress ring animates for the duration of the phase, with the countdown and phase label shown inside.
-          - For **`reps`**-based exercises, the trainer automatically cycles through timed phases as defined by the exercise's `tempo` object (e.g., `up`, `hold`, `down`), each with its own countdown and progress ring animation.
-          - For **`time`**-based exercises, a single countdown for the specified `duration` is run.
-      5.  **Paused (`paused`):** The user can pause the workout at any time during a countdown state. The timer and the progress ring animation stop. The user must click "RESUME" to continue.
-      6.  **Rest (`rest`):** This state is **only** activated when the trainer encounters a user-defined rest block in the workout sequence. There are no automatic rests between series or exercises. A countdown for the specified `rest` duration is shown, and the progress ring animates accordingly.
-      7.  **Advancement:** After completing all series/reps of an exercise, the system automatically proceeds to the next item in the workout list. If the next item is another exercise, it begins immediately. If it is an explicit rest block, the `rest` state is triggered.
-      8.  **Finished (`finished`):** Once all exercises and series are complete, the trainer automatically transitions to the Debriefing View.
+      2.  **Announcing (`announcing`):** Before every new phase, this 0.75-second state is activated.
+      3.  **Preparing (`preparing`):** A 3-second countdown to prepare the user for the first series of an exercise.
+      4.  **Action (`action`):** The core execution phase for a timed duration.
+      5.  **Paused (`paused`):** The user can pause the workout at any time during a countdown state.
+      6.  **Rest (`rest`):** This state is **only** activated when the trainer encounters a user-defined rest block in the workout sequence. There are no automatic rests.
+      7.  **Advancement:** After completing an item, the system automatically proceeds to the next item in the workout list.
+      8.  **Finished (`finished`):** Once all items are complete, the trainer automatically transitions to the Debriefing View.
       9.  **Terminated (`terminate`):** If the user clicks the "Termina" button, the workout is immediately stopped, and the app transitions to the Debriefing View with a partial summary.
 
       ### 2.4. Debriefing View
       - **Activation:** Appears automatically when a workout is completed or manually terminated.
       - **Content:**
-          - **Summary:** Displays a list of all exercises completed during the session. For terminated workouts, it clearly indicates the last attempted exercise and series/rep.
-          - **Text Report:** Generates a pre-formatted, multi-line string summarizing the workout, ready for sharing.
+          - **Summary:** Displays a visually styled list representing the entire workout plan. **Completed** items are marked (e.g., green). The **point of termination** is clearly highlighted (e.g., red). **Skipped** items are visually distinct (e.g., greyed out).
+          - **Text Report:** Generates a pre-formatted, multi-line string summarizing the workout, detailing what was completed, where it was stopped, and what was skipped.
       - **Actions:**
           - **Copy for Coach:** Copies the text report to the user's clipboard.
           - **Return to Calendar:** Switches the view back to the main Calendar.
+  - file: index.html
+    content: |
+      <!DOCTYPE html>
+      <html lang="it">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Mio Trainer Personale</title>
+          <link rel="stylesheet" href="assets/css/style.css">
+      </head>
+      <body>
+
+          <header class="app-header">
+              <h1>Mio Trainer Personale</h1>
+          </header>
+
+          <div id="app-container">
+              <div id="calendar-view" class="view view--active">
+                  </div>
+              <div id="trainer-view" class="view">
+                  </div>
+              <div id="debriefing-view" class="view">
+                  </div>
+          </div>
+
+          <div id="modal-container">
+              </div>
+
+          <script src="src/main.js" type="module"></script>
+      </body>
+      </html>
   - file: src/modules/store.js
     content: |
       import { saveToStorage } from './storage.js';
@@ -161,8 +337,12 @@ patches:
 
         // Custom Logger Function
         function logState(actionType, state) {
+            if (actionType.startsWith('@@')) return; // Silences internal actions if any
             const { activeWorkout, trainerState, trainerContext } = state;
-            if (!activeWorkout) return;
+            if (!activeWorkout) {
+              console.log(`%c[${actionType}]`, 'color: #88aaff; font-weight: bold;', 'No active workout.');
+              return;
+            }
 
             const currentItem = activeWorkout.items[trainerContext.itemIndex];
             const exerciseName = currentItem?.name || 'Riposo';
@@ -243,7 +423,7 @@ patches:
               newState = {
                 ...state,
                 currentView: 'trainer',
-                activeWorkout: { date, items: workoutItems, completed: false },
+                activeWorkout: { date, items: workoutItems, completed: false, fullPlan: workoutItems },
                 completedWorkout: null,
                 trainerState: 'ready',
                 trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 }
@@ -257,10 +437,10 @@ patches:
             case 'TERMINATE_WORKOUT': {
               const { activeWorkout, trainerContext } = state;
               const partialWorkout = {
-                ...activeWorkout,
+                date: activeWorkout.date,
+                fullPlan: activeWorkout.fullPlan,
                 completed: false,
-                items: activeWorkout.items.slice(0, trainerContext.itemIndex + 1),
-                terminationPoint: trainerContext
+                terminationPoint: trainerContext,
               };
               newState = { ...state, currentView: 'debriefing', completedWorkout: partialWorkout, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
               break;
@@ -285,6 +465,11 @@ patches:
               break;
             }
             case 'TIMER_COMPLETE': {
+              // Critical Bug Fix: Guard against race conditions.
+              if (!state.activeWorkout) {
+                return;
+              }
+
               const { trainerState, activeWorkout, trainerContext } = state;
               const currentItem = activeWorkout.items[trainerContext.itemIndex];
 
@@ -370,13 +555,12 @@ patches:
               break;
             }
             default:
-              return;
+              action.type = '@@UNKNOWN'; // Prevents logging for unknown actions
+              break;
           }
           state = newState;
           if (state !== oldState) {
-            if (action.type !== 'PAUSE_TRAINER' && action.type !== 'RESUME_TRAINER') {
-                logState(action.type, state);
-            }
+            logState(action.type, state);
             if (state.workouts !== oldState.workouts) {
               saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
             }
@@ -395,56 +579,85 @@ patches:
     content: |
       import store from '../modules/store.js';
 
-      function generateSummary(completedWorkout) {
+      function generateSummaryHtml(completedWorkout) {
           if (!completedWorkout) return '<p>Nessun dato di allenamento disponibile.</p>';
 
           const title = completedWorkout.completed
               ? '<h2>Workout Completato!</h2>'
               : '<h2>Workout Interrotto</h2>';
 
-          const itemsHtml = completedWorkout.items.map((item, index) => {
+          const termPoint = completedWorkout.terminationPoint;
+
+          const itemsHtml = completedWorkout.fullPlan.map((item, index) => {
+              let itemClass = 'debrief-item';
+              let statusText = '';
+
+              if (completedWorkout.completed) {
+                  itemClass += ' debrief-item--completed';
+              } else {
+                  if (index < termPoint.itemIndex) {
+                      itemClass += ' debrief-item--completed';
+                  } else if (index === termPoint.itemIndex) {
+                      itemClass += ' debrief-item--terminated';
+                      const currentSeries = termPoint.currentSeries || 1;
+                      statusText = `(interrotto alla serie ${currentSeries})`;
+                  } else {
+                      itemClass += ' debrief-item--skipped';
+                  }
+              }
+
+              let mainText = '';
               if (item.type === 'rest') {
-                  return `<li>Riposo: ${item.duration}s</li>`;
+                  mainText = `Riposo: ${item.duration}s`;
+              } else {
+                  const series = item.series || 1;
+                  const reps = item.reps ? `${item.reps} reps` : `${item.duration}s`;
+                  mainText = `${item.name}: ${series}x${reps} ${statusText}`;
               }
-              const series = item.series || 1;
-              const reps = item.reps ? `${item.reps} reps` : `${item.duration}s`;
-              let status = '';
-              if (!completedWorkout.completed && index === completedWorkout.items.length - 1) {
-                  const point = completedWorkout.terminationPoint;
-                  status = ` (interrotto a serie ${point.currentSeries}/${series})`;
-              }
-              return `<li>${item.name}: ${series} x ${reps}${status}</li>`;
+
+              return `<li class="${itemClass}">${mainText}</li>`;
           }).join('');
 
-          return `${title}<ul>${itemsHtml}</ul>`;
+          return `${title}<ul class="debrief-list">${itemsHtml}</ul>`;
       }
 
       function generateTextForCoach(completedWorkout) {
           if (!completedWorkout) return 'Nessun dato disponibile.';
           const date = new Date(completedWorkout.date).toLocaleDateString('it-IT');
           const status = completedWorkout.completed ? 'Completato' : 'Interrotto';
-          let report = `Report Allenamento - ${date} (${status})\n\n`;
+          let report = `Report Allenamento - ${date} (${status})\n====================\n\n`;
 
-          completedWorkout.items.forEach((item, index) => {
+          const termPoint = completedWorkout.terminationPoint;
+
+          completedWorkout.fullPlan.forEach((item, index) => {
+              let statusTag = '';
+              if (!completedWorkout.completed) {
+                  if (index < termPoint.itemIndex) statusTag = '[✓]';
+                  else if (index === termPoint.itemIndex) statusTag = '[✗]';
+                  else statusTag = '[-]';
+              } else {
+                  statusTag = '[✓]';
+              }
+
               if (item.type === 'rest') {
-                  report += `- Riposo: ${item.duration}s\n`;
+                  report += `${statusTag} Riposo: ${item.duration}s\n`;
               } else {
                   const series = item.series || 1;
                   const reps = item.reps ? `${item.reps} reps` : `${item.duration}s`;
                   let terminationInfo = '';
-                  if (!completedWorkout.completed && index === completedWorkout.items.length - 1) {
-                      const point = completedWorkout.terminationPoint;
-                      terminationInfo = ` (interrotto a serie ${point.currentSeries}/${series})`;
+                  if (statusTag === '[✗]') {
+                      terminationInfo = ` (interrotto alla serie ${termPoint.currentSeries}/${series})`;
                   }
-                  report += `- ${item.name}: ${series} x ${reps}${terminationInfo}\n`;
+                  report += `${statusTag} ${item.name}: ${series}x${reps}${terminationInfo}\n`;
               }
           });
           return report;
       }
 
+
       function render(element) {
           const { completedWorkout } = store.getState();
-          const summaryHtml = generateSummary(completedWorkout);
+          const summaryHtml = generateSummaryHtml(completedWorkout);
           const actionsHtml = `
               <div class="debriefing-actions">
                   <button class="copy-btn">Copia per il Coach</button>
@@ -478,225 +691,6 @@ patches:
 
           store.subscribe(() => render(element));
           render(element);
-      }
-  - file: src/views/TrainerView.js
-    content: |
-      import store from '../modules/store.js';
-      import { getExerciseById } from '../modules/exerciseRepository.js';
-
-      let animationFrameId = null;
-      let animationStartTime = null;
-
-      export function init(element) {
-          element.addEventListener('click', (event) => {
-              const mainButton = event.target.closest('.trainer-main-btn');
-              const terminateButton = event.target.closest('.trainer-terminate-btn');
-
-              if (terminateButton) {
-                  if (confirm('Sei sicuro di voler terminare l\'allenamento?')) {
-                      store.dispatch({ type: 'TERMINATE_WORKOUT' });
-                  }
-                  return;
-              }
-
-              if (!mainButton) return;
-
-              const { trainerState } = store.getState();
-              switch (trainerState) {
-                  case 'ready':
-                      store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'preparing' });
-                      break;
-                  case 'paused':
-                      store.dispatch({ type: 'RESUME_TRAINER' });
-                      break;
-                  case 'finished':
-                      store.dispatch({ type: 'FINISH_WORKOUT' });
-                      break;
-                  case 'preparing':
-                  case 'action':
-                  case 'rest':
-                  case 'announcing':
-                      if (animationFrameId) cancelAnimationFrame(animationFrameId);
-                      const elapsed = performance.now() - animationStartTime;
-                      const remaining = mainButton.dataset.duration - elapsed;
-                      store.dispatch({ type: 'PAUSE_TRAINER', payload: { remaining: remaining > 0 ? remaining : 0, duration: mainButton.dataset.duration } });
-                      break;
-              }
-          });
-
-          element.addEventListener('animateRing', ({ detail }) => {
-              if (animationFrameId) cancelAnimationFrame(animationFrameId);
-              const ringEl = element.querySelector('.progress-ring__foreground');
-              const timerEl = element.querySelector('.progress-ring__timer');
-              if (!ringEl || !timerEl) return;
-              const circumference = 2 * Math.PI * ringEl.r.baseVal.value;
-              const { trainerContext } = store.getState();
-
-              const isResuming = trainerContext.stateBeforePause && trainerContext.remaining > 0;
-              const duration = isResuming ? trainerContext.remaining : detail.duration;
-              let startTime = performance.now();
-              animationStartTime = startTime;
-              if (isResuming) {
-                  store.dispatch({ type: 'UPDATE_TRAINER_CONTEXT', payload: { remaining: 0, stateBeforePause: null }});
-              }
-
-              const animationStep = (timestamp) => {
-                  const elapsed = timestamp - startTime;
-                  const progress = Math.min(1, elapsed / duration);
-                  ringEl.style.strokeDashoffset = circumference * (1 - progress);
-
-                  if (store.getState().trainerState !== 'announcing') {
-                    timerEl.textContent = Math.ceil((duration - elapsed) / 1000);
-                  } else {
-                    timerEl.textContent = '';
-                  }
-
-                  if (elapsed < duration) {
-                      animationFrameId = requestAnimationFrame(animationStep);
-                  } else {
-                      ringEl.style.strokeDashoffset = 0;
-                      timerEl.textContent = 0;
-                      if (detail.onComplete) detail.onComplete();
-                  }
-              };
-              animationFrameId = requestAnimationFrame(animationStep);
-          });
-
-          function runStateBasedTimer() {
-              const { trainerState, trainerContext, activeWorkout } = store.getState();
-
-              if (animationFrameId && trainerState !== 'paused') {
-                  cancelAnimationFrame(animationFrameId);
-                  animationFrameId = null;
-              }
-
-              const onComplete = () => store.dispatch({ type: 'TIMER_COMPLETE' });
-              const currentItem = activeWorkout.items[trainerContext.itemIndex];
-              let duration = 0;
-
-              switch(trainerState) {
-                  case 'preparing':
-                      duration = 3000;
-                      break;
-                  case 'announcing':
-                      duration = 750;
-                      break;
-                  case 'action':
-                      if (currentItem.type === 'time') {
-                          duration = (currentItem.duration || 10) * 1000;
-                      } else {
-                          const tempo = currentItem.tempo || {};
-                          duration = (tempo[trainerContext.currentPhase] || 1) * 1000;
-                      }
-                      break;
-                  case 'rest': {
-                      let restDuration = 60; // Default
-                      if (currentItem.type === 'rest') {
-                          restDuration = currentItem.duration;
-                      } else if (currentItem.exerciseId) {
-                          restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60;
-                      }
-                      duration = restDuration * 1000;
-                      break;
-                  }
-                  default:
-                      // No timer for states like 'ready', 'paused', 'finished'
-                      return;
-              }
-              element.dispatchEvent(new CustomEvent('animateRing', { detail: { duration, onComplete } }));
-          }
-
-          function render() {
-              const { activeWorkout, trainerState, trainerContext } = store.getState();
-              if (!activeWorkout) { element.innerHTML = '<h2>Nessun workout attivo.</h2>'; return; }
-
-              const currentItem = activeWorkout.items[trainerContext.itemIndex];
-              const radius = 90;
-              const circumference = 2 * Math.PI * radius;
-              let phaseText = '', instructionText = '', buttonText = '', timerText = '', phaseClass = '';
-              let ringOffset = circumference;
-              const isExercise = currentItem.type === 'exercise' || currentItem.type === 'time';
-              let currentDuration = 0;
-              let terminateButtonHidden = trainerState === 'finished' || trainerState === 'ready';
-
-              switch (trainerState) {
-                  case 'ready':
-                      phaseText = 'PRONTO'; instructionText = `Premi INIZIA per cominciare`; buttonText = 'INIZIA';
-                      break;
-                  case 'preparing':
-                      phaseText = 'PREPARATI'; instructionText = 'Inizia il movimento...'; buttonText = 'PAUSA'; timerText = '3'; currentDuration = 3000;
-                      break;
-                  case 'rest': {
-                      let restDuration = 60;
-                      if (currentItem.type === 'rest') { restDuration = currentItem.duration; }
-                      else if (currentItem.exerciseId) { restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60; }
-                      phaseText = 'RIPOSO'; instructionText = 'Recupera'; buttonText = 'PAUSA'; timerText = restDuration; currentDuration = restDuration * 1000;
-                      break;
-                  }
-                  case 'announcing':
-                      phaseText = trainerContext.currentPhase?.toUpperCase() || '';
-                      instructionText = `Prossima fase: ${phaseText}`; buttonText = 'PAUSA'; phaseClass = 'is-flashing'; currentDuration = 750;
-                      break;
-                  case 'action':
-                      phaseText = trainerContext.currentPhase?.toUpperCase() || '';
-                      if (currentItem.type === 'time') { currentDuration = currentItem.duration * 1000; }
-                      else { const tempo = currentItem.tempo || {}; currentDuration = (tempo[trainerContext.currentPhase] || 1) * 1000; }
-                      instructionText = 'Esegui il movimento'; buttonText = 'PAUSA';
-                      break;
-                  case 'paused': {
-                      const prevState = trainerContext.stateBeforePause;
-                      if(prevState === 'preparing') { phaseText = 'PREPARATI'; }
-                      else if(prevState === 'rest') { phaseText = 'RIPOSO'; }
-                      else if(prevState === 'announcing' || prevState === 'action') { phaseText = trainerContext.currentPhase?.toUpperCase() || ''; }
-                      if(prevState === 'announcing') { phaseClass = 'is-flashing'; }
-
-                      instructionText = 'Pausa'; buttonText = 'RIPRENDI';
-                      if(prevState !== 'announcing') { timerText = Math.ceil(trainerContext.remaining/1000); }
-                      ringOffset = circumference * (1 - ( (trainerContext.duration - trainerContext.remaining) / trainerContext.duration) );
-                      currentDuration = trainerContext.duration;
-                      break;
-                  }
-                  case 'finished':
-                      phaseText = 'FINE'; instructionText = 'Workout completato!'; buttonText = 'DEBRIEFING';
-                      break;
-                  default: phaseText = 'IDLE'; instructionText = 'Stato non riconosciuto'; buttonText = 'RESET';
-              }
-              const headerTitle = currentItem.name || 'Riposo';
-              const seriesText = isExercise ? `SERIE ${trainerContext.currentSeries} / ${currentItem.series || 1}` : '';
-              const repsText = currentItem.type === 'exercise' ? `REP ${trainerContext.currentRep} / ${currentItem.reps || 1}` : '';
-
-              element.innerHTML = `
-                  <div class="trainer-container">
-                      <header class="trainer-header">
-                          <h2>${headerTitle}</h2>
-                          <p>${seriesText} ${repsText ? `| ${repsText}` : ''}</p>
-                      </header>
-                      <div class="progress-ring">
-                          <svg>
-                              <circle class="progress-ring__background" stroke-width="10" r="${radius}" cx="50%" cy="50%"></circle>
-                              <circle class="progress-ring__foreground" style="stroke-dashoffset: ${ringOffset};" stroke-width="10" r="${radius}" cx="50%" cy="50%" stroke-dasharray="${circumference}"></circle>
-                          </svg>
-                          <div class="progress-ring__text">
-                              <div class="progress-ring__phase ${phaseClass}">${phaseText}</div>
-                              <div class="progress-ring__timer">${timerText}</div>
-                          </div>
-                      </div>
-                      <footer class="trainer-footer">
-                          <p class="trainer-instruction">${instructionText}</p>
-                          <div class="trainer-controls">
-                              <button class="trainer-main-btn" data-duration="${currentDuration}">${buttonText}</button>
-                              <button class="trainer-terminate-btn" ${terminateButtonHidden ? 'hidden' : ''}>Termina</button>
-                          </div>
-                      </footer>
-                  </div>
-              `;
-
-              if (trainerState !== 'paused') {
-                runStateBasedTimer();
-              }
-          }
-          store.subscribe(render);
-          render();
       }
 commands:
   - "echo 'DebriefingView structure created and navigation enabled.'"
