@@ -52,9 +52,12 @@ The application MUST use a centralized state store (`src/modules/store.js`) as t
 
 ### ADR 002: Exercise Repository Pattern
 -   **Status**: Accepted
--   **Context**: The application needs a way to list available exercises for the user to add to a workout. A simple approach would be to have the UI directly import a static list of exercises.
--   **Decision**: We will introduce an "Exercise Repository" module. This module will abstract the source of exercise data. The UI will only interact with the repository, not with the data source itself. Initially, the repository will return a static list, but this pattern allows us to easily add other sources in the future (e.g., user-defined exercises from `localStorage`, exercises from a remote API) without changing the UI code.
--   **Consequences**:
-    -   The UI is decoupled from the data source, increasing maintainability and extensibility.
-    -   A slight increase in initial complexity (one extra module).
-    -   Provides a clear point of extension for future features like custom exercises.
+-   **Context**: The application needs a way to list available exercises for the user to add to a workout.
+-   **Decision**: We will introduce an "Exercise Repository" module. This module will abstract the source of exercise data.
+-   **Consequences**: The UI is decoupled from the data source, increasing maintainability.
+
+### ADR 003: Centralizzazione della Logica di Flusso del Trainer
+-   **Status**: Proposto
+-   **Contesto**: Durante lo sviluppo, la logica di transizione di stato del trainer è stata distribuita in modo non ottimale tra la view (`TrainerView.js`) e lo store (`store.js`). Questo ha portato a bug critici, loop e race condition, rendendo il sistema instabile e difficile da debuggare.
+-   **Decisione**: Si decide di refattorizzare il sistema per centralizzare il 100% della logica di flusso del trainer all'interno dello store. La view diventerà "stupida", limitandosi a renderizzare lo stato e a inviare un'unica azione generica (`TIMER_COMPLETE`) allo store al termine di ogni timer. Lo store, ricevendo questa azione, sarà l'unico responsabile di calcolare e impostare lo stato successivo.
+-   **Conseguenze**: Aumento della stabilità e della prevedibilità. Aderenza stretta al principio del Single Source of Truth. Semplificazione del debugging e della manutenibilità futura.
