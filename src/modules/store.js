@@ -63,29 +63,28 @@ function createStore() {
         let nextState = state.trainerState;
 
         if (nextContext.currentRep < maxReps) {
-          // Prossima ripetizione
           nextContext.currentRep++;
-          nextState = 'ready'; // Pronto per la prossima ripetizione
+          nextState = 'ready';
         } else if (nextContext.currentSeries < maxSeries) {
-          // Prossima serie
           nextContext.currentSeries++;
           nextContext.currentRep = 1;
-          nextState = 'rest'; // Inizia il riposo tra le serie
+          const exerciseDef = getExerciseById(currentItem.exerciseId);
+          nextContext.restDuration = exerciseDef?.defaultRest || 60;
+          nextState = 'rest';
         } else {
-          // Prossimo item nel workout
           if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
             nextContext.itemIndex++;
             const nextItem = activeWorkout.items[nextContext.itemIndex];
             if(nextItem.type === 'exercise') {
               nextContext.currentSeries = 1;
               nextContext.currentRep = 1;
-              nextState = 'ready'; // Pronto per il prossimo esercizio
+              nextState = 'ready';
             } else {
-              nextState = 'rest'; // Inizia un item di riposo
+              nextContext.restDuration = nextItem.duration;
+              nextState = 'rest';
             }
           } else {
-            // Workout finito
-            nextState = 'finished'; // TODO: Implementare stato finished
+            nextState = 'finished';
           }
         }
         state = { ...state, trainerState: nextState, trainerContext: nextContext };

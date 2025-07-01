@@ -1,31 +1,27 @@
-commit_message: "feat(trainer): Implementa stato 'rest' e refactoring del flusso"
+commit_message: "fix(trainer): Corregge bug riposo, migliora UI e animazioni"
 rationale: |
-  Questo commit introduce lo stato 'rest' e migliora la gestione del flusso del trainer per renderla più robusta e scalabile.
+  Questo commit risolve diversi problemi segnalati dall'utente relativi alla Trainer View:
 
-  1.  **Stato 'rest' implementato**: La state machine ora gestisce correttamente gli item di riposo tra le serie o gli esercizi. Viene visualizzato un timer per la durata specificata, e al termine il flusso prosegue.
-  2.  **Refactoring del Flusso**: È stata introdotta una logica di avanzamento centralizzata (`ADVANCE_TRAINER_LOGIC` nello store) che gestisce la progressione tra ripetizioni, serie e item del workout (esercizi o riposi). Questo disaccoppia la logica di stato dalla vista, rendendo il codice più pulito e mantenibile.
-  3.  **Documentazione Aggiornata**: Il file `docs/05_STATUS.md` è stato aggiornato per riflettere il completamento dello stato 'action' e l'attuale lavoro sullo stato 'rest'.
+  1.  **Correzione Bug Riposo**: La logica per avviare il riposo tra le serie è stata corretta. Ora la durata viene letta correttamente dalla definizione dell'esercizio, e un valore di `defaultRest` è stato aggiunto alla libreria statica per robustezza.
+  2.  **Miglioramento Stato 'preparing'**: Il testo è stato cambiato in 'PREPARATI' e l'anello di progresso ora si anima correttamente durante il countdown iniziale di 3 secondi.
+  3.  **Correzione Animazione Anello**: L'animazione dell'anello di progresso ora si completa sempre visivamente, forzando lo stato finale prima di passare alla fase successiva.
+  4.  **Formattazione Timer**: Il timer del conto alla rovescia ora visualizza solo numeri interi, senza decimali, per una migliore leggibilità.
 patches:
-  - file: docs/05_STATUS.md
+  - file: src/data/_staticExercises.js
     content: |
-      # Stato Attuale del Progetto
-      *Ultimo aggiornamento: 2025-07-01*
+      // --- Libreria Statica degli Esercizi ---
+      // Questa è una delle fonti dati per l'ExerciseRepository.
 
-      ## Focus Corrente: Interactive Trainer View
-
-      ### Implementazione State Machine:
-      - [x] ready
-      - [x] preparing
-      - [x] announcing
-      - [x] action
-      - [ ] **rest <-- PROSSIMO STEP**
-      - [ ] paused
-      - [ ] finished
-
-      ### Altre Funzionalità:
-      - [x] Calendar View
-      - [x] Workout Editor (Completo)
-      - [ ] Debriefing View
+      export const staticExercises = [
+        { id: 'bench-press', name: 'Bench Press', series: 3, reps: 8, defaultRest: 90 },
+        { id: 'deadlift', name: 'Deadlift', series: 3, reps: 5, defaultRest: 120 },
+        { id: 'squat', name: 'Squat', series: 3, reps: 10, defaultRest: 90 },
+        { id: 'overhead-press', name: 'Overhead Press', series: 4, reps: 8, defaultRest: 75 },
+        { id: 'pull-ups', name: 'Pull-ups', series: 3, reps: 'max', defaultRest: 60 },
+        { id: 'push-ups', name: 'Push-ups', series: 3, reps: 12, defaultRest: 60 },
+        { id: 'dips', name: 'Dips', series: 3, reps: 10, defaultRest: 60 },
+        { id: 'plank', name: 'Plank', series: 3, duration: 60, type: 'time', defaultRest: 45 }, // Esempio esercizio a tempo
+      ];
   - file: src/modules/store.js
     content: |
       import { saveToStorage } from './storage.js';
@@ -93,29 +89,28 @@ patches:
               let nextState = state.trainerState;
 
               if (nextContext.currentRep < maxReps) {
-                // Prossima ripetizione
                 nextContext.currentRep++;
-                nextState = 'ready'; // Pronto per la prossima ripetizione
+                nextState = 'ready';
               } else if (nextContext.currentSeries < maxSeries) {
-                // Prossima serie
                 nextContext.currentSeries++;
                 nextContext.currentRep = 1;
-                nextState = 'rest'; // Inizia il riposo tra le serie
+                const exerciseDef = getExerciseById(currentItem.exerciseId);
+                nextContext.restDuration = exerciseDef?.defaultRest || 60;
+                nextState = 'rest';
               } else {
-                // Prossimo item nel workout
                 if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
                   nextContext.itemIndex++;
                   const nextItem = activeWorkout.items[nextContext.itemIndex];
                   if(nextItem.type === 'exercise') {
                     nextContext.currentSeries = 1;
                     nextContext.currentRep = 1;
-                    nextState = 'ready'; // Pronto per il prossimo esercizio
+                    nextState = 'ready';
                   } else {
-                    nextState = 'rest'; // Inizia un item di riposo
+                    nextContext.restDuration = nextItem.duration;
+                    nextState = 'rest';
                   }
                 } else {
-                  // Workout finito
-                  nextState = 'finished'; // TODO: Implementare stato finished
+                  nextState = 'finished';
                 }
               }
               state = { ...state, trainerState: nextState, trainerContext: nextContext };
@@ -166,7 +161,6 @@ patches:
               const currentPhaseIndex = trainerContext.currentPhaseIndex;
 
               if (currentPhaseIndex >= phases.length) {
-                  // Rep finita, delega la logica di avanzamento
                   advanceTrainer();
                   return;
               }
@@ -181,9 +175,9 @@ patches:
               const phaseName = trainerContext.currentPhase;
               const durationMap = { 'up': 1.5, 'hold': 1, 'down': 2 };
               const duration = durationMap[phaseName] || 1;
-
               let elapsed = 0;
-              const interval = 50; // ms
+              const interval = 50;
+
               const timerEl = this.element.querySelector('.progress-ring__timer');
               const ringEl = this.element.querySelector('.progress-ring__foreground');
               const radius = ringEl.r.baseVal.value;
@@ -191,13 +185,14 @@ patches:
 
               stateTimer = setInterval(() => {
                   elapsed += interval;
-                  const progress = elapsed / (duration * 1000);
+                  const progress = Math.min(1, elapsed / (duration * 1000));
                   const offset = circumference * (1 - progress);
                   ringEl.style.strokeDashoffset = offset;
-                  if (timerEl) timerEl.textContent = ((duration * 1000 - elapsed) / 1000).toFixed(1);
+                  if (timerEl) timerEl.textContent = Math.ceil((duration * 1000 - elapsed) / 1000);
 
                   if (elapsed >= duration * 1000) {
                       clearInterval(stateTimer);
+                      ringEl.style.strokeDashoffset = 0; // Forza il completamento
                       store.dispatch({ type: 'UPDATE_TRAINER_CONTEXT', payload: { currentPhaseIndex: trainerContext.currentPhaseIndex + 1 } });
                       this.runNextPhase();
                   }
@@ -217,26 +212,38 @@ patches:
           });
 
           function runStateLogic() {
-              const { trainerState, activeWorkout, trainerContext } = store.getState();
+              const { trainerState, trainerContext } = store.getState();
               if (stateTimer) { clearInterval(stateTimer); stateTimer = null; }
 
-              const currentItem = activeWorkout.items[trainerContext.itemIndex];
+              const timerEl = element.querySelector('.progress-ring__timer');
+              const ringEl = element.querySelector('.progress-ring__foreground');
+              const radius = ringEl?.r.baseVal.value;
+              const circumference = 2 * Math.PI * radius;
 
               if (trainerState === 'preparing') {
-                  stateTimer = setTimeout(() => PhasedExerciseRunner.start(element), 3000);
+                  const duration = 3000;
+                  let elapsed = 0;
+                  const interval = 50;
+                  if (timerEl) timerEl.textContent = '3';
+                  stateTimer = setInterval(() => {
+                      elapsed += interval;
+                      const progress = Math.min(1, elapsed / duration);
+                      const offset = circumference * (1 - progress);
+                      if(ringEl) ringEl.style.strokeDashoffset = offset;
+                      if (timerEl) timerEl.textContent = Math.ceil((duration - elapsed) / 1000);
+                      if (elapsed >= duration) {
+                          clearInterval(stateTimer);
+                          PhasedExerciseRunner.start(element);
+                      }
+                  }, interval);
               } else if (trainerState === 'announcing') {
                   stateTimer = setTimeout(() => store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'action' }), 750);
               } else if (trainerState === 'action') {
                   PhasedExerciseRunner.execute();
               } else if (trainerState === 'rest') {
-                  const restDuration = currentItem.type === 'rest'
-                    ? currentItem.duration
-                    : (getExerciseById(currentItem.exerciseId)?.rest || 60);
-
+                  const restDuration = trainerContext.restDuration || 60;
                   let timeLeft = restDuration;
-                  const timerEl = element.querySelector('.progress-ring__timer');
                   if (timerEl) timerEl.textContent = timeLeft;
-
                   stateTimer = setInterval(() => {
                       timeLeft--;
                       if (timerEl) timerEl.textContent = timeLeft;
@@ -262,15 +269,17 @@ patches:
 
               switch (trainerState) {
                   case 'ready':
-                      phaseText = 'READY';
+                      phaseText = 'PRONTO';
                       instructionText = `Premi INIZIA per cominciare`;
                       buttonText = 'INIZIA';
                       break;
                   case 'preparing':
-                      phaseText = 'PREP'; instructionText = 'Preparati...'; buttonText = 'PAUSA'; timerText = '3';
+                      phaseText = 'PREPARATI'; instructionText = 'Inizia il movimento...'; buttonText = 'PAUSA'; timerText = '3';
+                      ringOffset = circumference;
                       break;
                   case 'rest':
                       phaseText = 'RIPOSO'; instructionText = 'Recupera per la prossima serie'; buttonText = 'PAUSA';
+                      timerText = trainerContext.restDuration || 60;
                       break;
                   case 'announcing':
                       phaseText = trainerContext.currentPhase?.toUpperCase() || '';
@@ -282,7 +291,7 @@ patches:
                       phaseText = trainerContext.currentPhase?.toUpperCase() || '';
                       instructionText = 'Esegui il movimento';
                       buttonText = 'PAUSA';
-                      ringOffset = circumference; // L'animazione parte da zero
+                      ringOffset = circumference;
                       break;
                   case 'finished':
                       phaseText = 'FINE'; instructionText = 'Workout completato!'; buttonText = 'DEBRIEFING';
@@ -299,7 +308,7 @@ patches:
                   <div class="trainer-container">
                       <header class="trainer-header">
                           <h2>${headerTitle}</h2>
-                          <p>${seriesText} | ${repsText}</p>
+                          <p>${seriesText} ${repsText ? `| ${repsText}` : ''}</p>
                       </header>
                       <div class="progress-ring">
                           <svg>
@@ -324,4 +333,5 @@ patches:
           store.subscribe(render);
           render();
       }
-commands: []
+commands:
+  - "echo 'Correzioni applicate. Ora puoi testare di nuovo il flusso del trainer.'"

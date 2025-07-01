@@ -20,7 +20,6 @@ const PhasedExerciseRunner = {
         const currentPhaseIndex = trainerContext.currentPhaseIndex;
 
         if (currentPhaseIndex >= phases.length) {
-            // Rep finita, delega la logica di avanzamento
             advanceTrainer();
             return;
         }
@@ -35,9 +34,9 @@ const PhasedExerciseRunner = {
         const phaseName = trainerContext.currentPhase;
         const durationMap = { 'up': 1.5, 'hold': 1, 'down': 2 };
         const duration = durationMap[phaseName] || 1;
-
         let elapsed = 0;
-        const interval = 50; // ms
+        const interval = 50;
+
         const timerEl = this.element.querySelector('.progress-ring__timer');
         const ringEl = this.element.querySelector('.progress-ring__foreground');
         const radius = ringEl.r.baseVal.value;
@@ -45,13 +44,14 @@ const PhasedExerciseRunner = {
 
         stateTimer = setInterval(() => {
             elapsed += interval;
-            const progress = elapsed / (duration * 1000);
+            const progress = Math.min(1, elapsed / (duration * 1000));
             const offset = circumference * (1 - progress);
             ringEl.style.strokeDashoffset = offset;
-            if (timerEl) timerEl.textContent = ((duration * 1000 - elapsed) / 1000).toFixed(1);
+            if (timerEl) timerEl.textContent = Math.ceil((duration * 1000 - elapsed) / 1000);
 
             if (elapsed >= duration * 1000) {
                 clearInterval(stateTimer);
+                ringEl.style.strokeDashoffset = 0; // Forza il completamento
                 store.dispatch({ type: 'UPDATE_TRAINER_CONTEXT', payload: { currentPhaseIndex: trainerContext.currentPhaseIndex + 1 } });
                 this.runNextPhase();
             }
@@ -71,26 +71,38 @@ export function init(element) {
     });
 
     function runStateLogic() {
-        const { trainerState, activeWorkout, trainerContext } = store.getState();
+        const { trainerState, trainerContext } = store.getState();
         if (stateTimer) { clearInterval(stateTimer); stateTimer = null; }
 
-        const currentItem = activeWorkout.items[trainerContext.itemIndex];
+        const timerEl = element.querySelector('.progress-ring__timer');
+        const ringEl = element.querySelector('.progress-ring__foreground');
+        const radius = ringEl?.r.baseVal.value;
+        const circumference = 2 * Math.PI * radius;
 
         if (trainerState === 'preparing') {
-            stateTimer = setTimeout(() => PhasedExerciseRunner.start(element), 3000);
+            const duration = 3000;
+            let elapsed = 0;
+            const interval = 50;
+            if (timerEl) timerEl.textContent = '3';
+            stateTimer = setInterval(() => {
+                elapsed += interval;
+                const progress = Math.min(1, elapsed / duration);
+                const offset = circumference * (1 - progress);
+                if(ringEl) ringEl.style.strokeDashoffset = offset;
+                if (timerEl) timerEl.textContent = Math.ceil((duration - elapsed) / 1000);
+                if (elapsed >= duration) {
+                    clearInterval(stateTimer);
+                    PhasedExerciseRunner.start(element);
+                }
+            }, interval);
         } else if (trainerState === 'announcing') {
             stateTimer = setTimeout(() => store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'action' }), 750);
         } else if (trainerState === 'action') {
             PhasedExerciseRunner.execute();
         } else if (trainerState === 'rest') {
-            const restDuration = currentItem.type === 'rest'
-              ? currentItem.duration
-              : (getExerciseById(currentItem.exerciseId)?.rest || 60);
-
+            const restDuration = trainerContext.restDuration || 60;
             let timeLeft = restDuration;
-            const timerEl = element.querySelector('.progress-ring__timer');
             if (timerEl) timerEl.textContent = timeLeft;
-
             stateTimer = setInterval(() => {
                 timeLeft--;
                 if (timerEl) timerEl.textContent = timeLeft;
@@ -116,15 +128,17 @@ export function init(element) {
 
         switch (trainerState) {
             case 'ready':
-                phaseText = 'READY';
+                phaseText = 'PRONTO';
                 instructionText = `Premi INIZIA per cominciare`;
                 buttonText = 'INIZIA';
                 break;
             case 'preparing':
-                phaseText = 'PREP'; instructionText = 'Preparati...'; buttonText = 'PAUSA'; timerText = '3';
+                phaseText = 'PREPARATI'; instructionText = 'Inizia il movimento...'; buttonText = 'PAUSA'; timerText = '3';
+                ringOffset = circumference;
                 break;
             case 'rest':
                 phaseText = 'RIPOSO'; instructionText = 'Recupera per la prossima serie'; buttonText = 'PAUSA';
+                timerText = trainerContext.restDuration || 60;
                 break;
             case 'announcing':
                 phaseText = trainerContext.currentPhase?.toUpperCase() || '';
@@ -136,7 +150,7 @@ export function init(element) {
                 phaseText = trainerContext.currentPhase?.toUpperCase() || '';
                 instructionText = 'Esegui il movimento';
                 buttonText = 'PAUSA';
-                ringOffset = circumference; // L'animazione parte da zero
+                ringOffset = circumference;
                 break;
             case 'finished':
                 phaseText = 'FINE'; instructionText = 'Workout completato!'; buttonText = 'DEBRIEFING';
@@ -153,7 +167,7 @@ export function init(element) {
             <div class="trainer-container">
                 <header class="trainer-header">
                     <h2>${headerTitle}</h2>
-                    <p>${seriesText} | ${repsText}</p>
+                    <p>${seriesText} ${repsText ? `| ${repsText}` : ''}</p>
                 </header>
                 <div class="progress-ring">
                     <svg>
