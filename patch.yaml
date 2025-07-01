@@ -1,139 +1,15 @@
-commit_message: "fix(trainer): Migliora animazioni, stile e aggiunge dati di test"
+commit_message: "fix(trainer): Aggiunge fallback per tempo e corregge mock data"
 rationale: |
-  Questo commit risolve diversi problemi di usabilità e visualizzazione nella Trainer View, basandosi sul feedback dettagliato dell'utente.
+  Questo commit risolve un crash critico nella Trainer View e corregge l'inconsistenza dei dati di default.
 
-  1.  **Risoluzione Conflitto Animazione**: È stata rimossa la transizione CSS (`transition: stroke-dashoffset`) che entrava in conflitto con gli aggiornamenti JavaScript, causando l'effetto dell'anello incompleto. L'animazione è ora gestita interamente da JavaScript, garantendo un movimento preciso e un completamento visivo del 100%.
-  2.  **Aggiunta Dati di Test Rapidi**: È stato creato un 'Esercizio di Test' con cicli molto brevi (2 serie, 2 ripetizioni, 3s di riposo) e aggiunto al workout di default. Questo accelera drasticamente il processo di test del flusso del trainer.
-  3.  **Animazione Stato di Riposo**: L'anello di progresso ora si anima correttamente anche durante lo stato di riposo, creando un'esperienza visiva coerente in tutte le fasi temporizzate.
-  4.  **Correzione Stile**: La dimensione del font per il testo di fase (es. 'PREPARATI') è stata ulteriormente ridotta per garantire che non tocchi i bordi del cerchio, migliorando l'estetica.
+  1.  **Fallback per 'tempo'**: Il componente `TrainerView` è stato reso più robusto. Ora, se un esercizio nel workout attivo non ha una proprietà 'tempo' definita, viene applicato un valore di default `{ up: 1, hold: 1, down: 2 }`. Questo previene il crash 'Cannot read properties of undefined' e rende il sistema resiliente a dati incompleti.
+  2.  **Correzione Mock Data**: I dati in `_mockData.js` sono stati resi coerenti. Ora tutti gli esercizi di default, inclusi 'Squat' e 'Push-ups', contengono una proprietà 'tempo', eliminando l'incongruenza che causava l'errore e garantendo che il workout di test funzioni come previsto. L'esercizio di test è confermato come primo della lista.
 patches:
-  - file: assets/css/style.css
-    content: |
-      /* --- GLOBAL STYLES & MOBILE FIRST --- */
-      :root {
-          --bg-color: #1a1a1d;
-          --card-color: #2c2c34;
-          --primary-color: #9575cd;
-          --secondary-color: #4db6ac;
-          --text-color: #f4f4f9;
-          --text-color-muted: #aaa;
-          --border-color: #40404a;
-          --danger-color: #ef5350;
-      }
-      * { box-sizing: border-box; margin: 0; padding: 0; }
-      body {
-          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-          background-color: var(--bg-color);
-          color: var(--text-color);
-          scrollbar-width: thin;
-          scrollbar-color: var(--primary-color) var(--bg-color);
-      }
-      /* Custom Scrollbar for Webkit Browsers */
-      body::-webkit-scrollbar, .modal-body::-webkit-scrollbar { width: 8px; }
-      body::-webkit-scrollbar-track, .modal-body::-webkit-scrollbar-track { background: var(--card-color); }
-      body::-webkit-scrollbar-thumb, .modal-body::-webkit-scrollbar-thumb { background-color: var(--primary-color); border-radius: 10px; border: 2px solid var(--card-color); }
-      #app-container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
-      .view { display: none; width: 100%; }
-      .view--active { display: block; }
-
-      /* --- KEYFRAMES --- */
-      @keyframes flash {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.2; }
-      }
-      .is-flashing {
-          animation: flash 0.25s 3; /* 3 flash in 0.75s */
-      }
-
-      /* --- CALENDAR VIEW STYLES --- */
-      .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-      .calendar-header h2 { font-size: 1.25rem; text-align: center; }
-      .calendar-header button { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: background-color 0.2s; }
-      .calendar-header button:hover { background-color: var(--primary-color); }
-      .calendar-grid { display: grid; grid-template-columns: 1fr; gap: 0.5rem; }
-      .day-cell { background-color: var(--card-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; min-height: 150px; display: flex; flex-direction: column; cursor: pointer; transition: border-color 0.2s; }
-      .day-cell:hover { border-color: var(--primary-color); }
-      .day-cell__header { display: flex; justify-content: space-between; font-weight: bold; color: var(--text-color-muted); text-transform: uppercase; font-size: 0.8rem; pointer-events: none; }
-      .day-cell__body { margin-top: 0.5rem; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; pointer-events: none; }
-      .exercise-count { font-size: 0.9rem; color: var(--secondary-color); }
-      .start-btn { background-color: var(--secondary-color); color: var(--bg-color); border: none; padding: 0.6rem; border-radius: 6px; cursor: pointer; font-weight: bold; text-transform: uppercase; width: 100%; margin-top: 1rem; transition: opacity 0.2s; pointer-events: all !important; }
-      .start-btn:hover { opacity: 0.85; }
-
-      /* --- MODAL STYLES --- */
-      #modal-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; z-index: 1000; }
-      #modal-container.active { opacity: 1; pointer-events: all; }
-      .modal-content { background-color: var(--card-color); border-radius: 8px; border: 1px solid var(--border-color); width: 90%; max-width: 500px; transform: scale(0.95); transition: transform 0.3s ease; display: flex; flex-direction: column; max-height: 90vh; }
-      #modal-container.active .modal-content { transform: scale(1); }
-      .modal-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; }
-      .modal-header h3 { color: var(--primary-color); }
-      .modal-close-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; cursor: pointer; }
-      .modal-body { overflow-y: auto; flex-grow: 1; padding: 0 1.5rem; }
-      .modal-actions { padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 1rem; flex-shrink: 0; }
-      .add-rest-btn, .add-exercise-btn { background-color: transparent; border: 1px solid var(--secondary-color); color: var(--secondary-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
-      .add-rest-btn:hover, .add-exercise-btn:hover { background-color: var(--secondary-color); color: var(--card-color); }
-
-      /* --- WORKOUT EDITOR & LIBRARY STYLES --- */
-      .workout-item-list, .exercise-library-list { list-style: none; padding: 0; margin: 0; }
-      .workout-item { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0.5rem; border-bottom: 1px solid var(--border-color); }
-      .workout-item:last-child { border-bottom: none; }
-      .item-info { display: flex; align-items: baseline; gap: 0.75rem; flex-grow: 1; }
-      .item-info .item-name { font-weight: bold; }
-      .item-info .item-details { color: var(--secondary-color); }
-      .workout-item--rest .item-info .item-name { color: var(--text-color-muted); font-style: italic; }
-      .rest-duration-input { -moz-appearance: textfield; background-color: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 4px; padding: 0.25rem; width: 60px; text-align: center; }
-      .rest-duration-input::-webkit-outer-spin-button, .rest-duration-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-      .remove-item-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; font-weight: bold; cursor: pointer; padding: 0 0.5rem; border-radius: 50%; }
-      .remove-item-btn:hover { color: var(--danger-color); background-color: rgba(239, 83, 80, 0.1); }
-      .exercise-library-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0.5rem; border-bottom: 1px solid var(--border-color); }
-      .exercise-library-item:last-child { border-bottom: none; }
-      .add-to-workout-btn { background-color: var(--primary-color); color: var(--text-color); border: none; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; }
-
-      /* --- TRAINER VIEW STYLES --- */
-      .trainer-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: calc(100vh - 4rem); text-align: center; }
-      .trainer-header { margin-bottom: 1rem; }
-      .trainer-header h2 { font-size: 2rem; text-transform: uppercase; color: var(--primary-color); }
-      .trainer-header p { color: var(--text-color-muted); }
-      .progress-ring { position: relative; width: 250px; height: 250px; margin: 2rem 0; }
-      .progress-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-      .progress-ring__background { stroke: var(--card-color); fill: transparent; }
-      .progress-ring__foreground { stroke: var(--secondary-color); fill: transparent; }
-      .progress-ring__text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
-      .progress-ring__phase { font-size: 1.6rem; font-weight: bold; text-transform: uppercase; }
-      .progress-ring__timer { font-size: 3rem; color: var(--text-color); }
-      .trainer-footer { margin-top: 1rem; }
-      .trainer-footer p { font-size: 1.2rem; min-height: 2em; }
-      .trainer-controls button { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 1rem 2rem; border-radius: 8px; cursor: pointer; font-size: 1.2rem; text-transform: uppercase; }
-
-      /* --- TABLET/DESKTOP OVERRIDES --- */
-      @media (min-width: 768px) {
-          #app-container { padding: 2rem; }
-          .calendar-grid { grid-template-columns: repeat(7, 1fr); gap: 1rem; }
-          .modal-content { max-width: 600px; height: auto; max-height: 80vh; }
-          .progress-ring { width: 300px; height: 300px; }
-      }
-  - file: src/data/_staticExercises.js
-    content: |
-      // --- Libreria Statica degli Esercizi ---
-      // Questa è una delle fonti dati per l'ExerciseRepository.
-
-      export const staticExercises = [
-        { id: 'test-exercise', name: 'Esercizio di Test', series: 2, reps: 2, tempo: { up: 1, hold: 1, down: 1 }, defaultRest: 3 },
-        { id: 'bench-press', name: 'Bench Press', series: 3, reps: 8, defaultRest: 90 },
-        { id: 'deadlift', name: 'Deadlift', series: 3, reps: 5, defaultRest: 120 },
-        { id: 'squat', name: 'Squat', series: 3, reps: 10, defaultRest: 90 },
-        { id: 'overhead-press', name: 'Overhead Press', series: 4, reps: 8, defaultRest: 75 },
-        { id: 'pull-ups', name: 'Pull-ups', series: 3, reps: 'max', defaultRest: 60 },
-        { id: 'push-ups', name: 'Push-ups', series: 3, reps: 12, defaultRest: 60 },
-        { id: 'dips', name: 'Dips', series: 3, reps: 10, defaultRest: 60 },
-        { id: 'plank', name: 'Plank', series: 3, duration: 60, type: 'time', defaultRest: 45 }, // Esempio esercizio a tempo
-      ];
   - file: src/modules/_mockData.js
     content: |
       // --- Dati di Sviluppo Fittizi ---
       // Questi dati vengono usati per popolare localStorage al primo avvio.
 
-      // Nota: la data corrente è 30 Giugno 2025.
-      // Questo allenamento è per Martedì 1 Luglio 2025.
       const MOCK_DATE_KEY = 'workout-2025-07-01';
 
       export const mockWorkouts = {
@@ -153,7 +29,8 @@ patches:
             exerciseId: 'squat',
             name: 'Squat',
             series: 3,
-            reps: 10
+            reps: 10,
+            tempo: { up: 2, hold: 0, down: 2 }
           },
           {
             id: 'rest-1',
@@ -166,7 +43,8 @@ patches:
             exerciseId: 'push-ups',
             name: 'Push-ups',
             series: 3,
-            reps: 12
+            reps: 12,
+            tempo: { up: 1, hold: 0, down: 2 }
           }
         ]
       };
@@ -190,7 +68,8 @@ patches:
           runNextPhase() {
               const { activeWorkout, trainerContext } = store.getState();
               const currentExercise = activeWorkout.items[trainerContext.itemIndex];
-              const phases = Object.keys(currentExercise.tempo || { up: 1, hold: 1, down: 1 });
+              const tempo = currentExercise.tempo || { up: 1, hold: 1, down: 2 };
+              const phases = Object.keys(tempo);
               const currentPhaseIndex = trainerContext.currentPhaseIndex;
 
               if (currentPhaseIndex >= phases.length) {
@@ -206,8 +85,9 @@ patches:
           execute() {
               const { activeWorkout, trainerContext } = store.getState();
               const currentExercise = activeWorkout.items[trainerContext.itemIndex];
+              const tempo = currentExercise.tempo || { up: 1, hold: 1, down: 2 };
               const phaseName = trainerContext.currentPhase;
-              const duration = (currentExercise.tempo[phaseName] || 1) * 1000;
+              const duration = (tempo[phaseName] || 1) * 1000;
               let elapsed = 0;
               const interval = 50;
 
@@ -369,5 +249,4 @@ patches:
           store.subscribe(render);
           render();
       }
-commands:
-  - "echo 'Patch applicata. Il problema dell-anello dovrebbe essere risolto.'"
+commands: []

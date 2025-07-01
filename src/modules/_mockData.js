@@ -1,8 +1,6 @@
 // --- Dati di Sviluppo Fittizi ---
 // Questi dati vengono usati per popolare localStorage al primo avvio.
 
-// Nota: la data corrente è 30 Giugno 2025.
-// Questo allenamento è per Martedì 1 Luglio 2025.
 const MOCK_DATE_KEY = 'workout-2025-07-01';
 
 export const mockWorkouts = {
@@ -22,7 +20,8 @@ export const mockWorkouts = {
       exerciseId: 'squat',
       name: 'Squat',
       series: 3,
-      reps: 10
+      reps: 10,
+      tempo: { up: 2, hold: 0, down: 2 }
     },
     {
       id: 'rest-1',
@@ -35,7 +34,8 @@ export const mockWorkouts = {
       exerciseId: 'push-ups',
       name: 'Push-ups',
       series: 3,
-      reps: 12
+      reps: 12,
+      tempo: { up: 1, hold: 0, down: 2 }
     }
   ]
 };

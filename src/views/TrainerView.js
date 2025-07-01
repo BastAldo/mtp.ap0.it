@@ -16,7 +16,8 @@ const PhasedExerciseRunner = {
     runNextPhase() {
         const { activeWorkout, trainerContext } = store.getState();
         const currentExercise = activeWorkout.items[trainerContext.itemIndex];
-        const phases = Object.keys(currentExercise.tempo || { up: 1, hold: 1, down: 1 });
+        const tempo = currentExercise.tempo || { up: 1, hold: 1, down: 2 };
+        const phases = Object.keys(tempo);
         const currentPhaseIndex = trainerContext.currentPhaseIndex;
 
         if (currentPhaseIndex >= phases.length) {
@@ -32,8 +33,9 @@ const PhasedExerciseRunner = {
     execute() {
         const { activeWorkout, trainerContext } = store.getState();
         const currentExercise = activeWorkout.items[trainerContext.itemIndex];
+        const tempo = currentExercise.tempo || { up: 1, hold: 1, down: 2 };
         const phaseName = trainerContext.currentPhase;
-        const duration = (currentExercise.tempo[phaseName] || 1) * 1000;
+        const duration = (tempo[phaseName] || 1) * 1000;
         let elapsed = 0;
         const interval = 50;
 
