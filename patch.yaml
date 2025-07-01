@@ -1,228 +1,9 @@
-commit_message: "feat(editor): Implementa aggiunta esercizi con repository estensibile"
+commit_message: "fix(store): Rimuove la dichiarazione duplicata della variabile state"
 rationale: |
-  Questo commit completa la funzionalità del Workout Editor implementando il flusso per aggiungere esercizi, seguendo un'architettura estensibile e aggiornando la documentazione come richiesto.
-
-  - **Documentazione:** `02_ARCHITECTURE.md` è stato aggiornato con un nuovo ADR che formalizza l'uso del pattern Repository per disaccoppiare la UI dalle fonti dati degli esercizi.
-  - **Architettura:** È stato introdotto un `exerciseRepository` per fornire un punto di accesso centralizzato e astratto alla lista degli esercizi. Attualmente usa una lista statica, ma è predisposto per future estensioni.
-  - **Funzionalità:** L'utente può ora cliccare "+ Add Exercise", visualizzare una libreria di esercizi in una seconda vista della modale, selezionare un esercizio per aggiungerlo al workout del giorno e tornare alla vista principale dell'editor.
-  - **Store:** Lo store è stato potenziato con la nuova azione `ADD_EXERCISE_ITEM` che gestisce l'aggiunta e il ritorno alla vista precedente.
+  Questo commit corregge un `SyntaxError` critico nel file `src/modules/store.js`.
+  L'errore era dovuto a una dichiarazione duplicata della variabile `state`, un refuso introdotto nella patch precedente.
+  Questa correzione rimuove la riga ridondante, ripristinando la funzionalità dell'applicazione.
 patches:
-  - file: docs/01_FUNCTIONALITY.md
-    content: |
-      # App Functionality Specification
-
-      This document outlines the core features and operational logic of the "Mio Trainer Personale" web application.
-
-      ## 1. Core Concept
-
-      The application is a single-page app (SPA) designed for users to schedule, execute, and track workouts. All user data is persisted locally in the browser's `localStorage`.
-
-      ## 2. Main Views
-
-      The application operates using three primary, mutually exclusive views: `Calendar`, `Trainer`, and `Debriefing`.
-
-      ### 2.1. Calendar View
-
-      -   **Function:** The main dashboard and default view of the application.
-      -   **Display:** It presents a weekly grid layout.
-      -   **Navigation:** Users can navigate to the previous or next week.
-      -   **Day Cells:** Each cell represents a day and displays a summary of the number of exercises scheduled for that day. A "START" button is enabled if one or more exercises are scheduled.
-      -   **Interaction:** Clicking a day cell (but not the "START" button) opens the Workout Editor modal for that specific date.
-
-      ```plaintext
-      +-------------------------------------------------------------------------+
-      |  <- PREV WEEK         WEEK OF 2025-06-30         NEXT WEEK ->            |
-      +-------------------------------------------------------------------------+
-      | MONDAY 30      | TUESDAY 01     | WEDNESDAY 02   | THURSDAY 03    | ...  |
-      |----------------|----------------|----------------|----------------|------|
-      | 3 Exercises    | 0 Exercises    | 2 Exercises    | (No Workout)   |      |
-      |                |                |                |                |      |
-      | [   START   ]  |                | [   START   ]  |                |      |
-      +-------------------------------------------------------------------------+
-      ```
-
-      ### 2.2. Workout Editor (Modal System)
-
-      The editor is a modal system for managing a day's workout routine. It allows for the composition of exercises and configurable rest periods.
-
-      -   **Daily Workout Modal:**
-          -   Triggered by clicking a day cell.
-          -   Displays a list of items (exercises or rests) currently scheduled for the selected date.
-          -   Allows **removal** of any item from the list.
-          -   For "Rest" items, the duration is **editable inline**.
-          -   Contains an "Add Exercise" button to open the Exercise Library modal and an "Add Rest" button to insert a new rest period.
-      -   **Exercise Library Modal:**
-          -   Triggered by the "Add Exercise" button.
-          -   Displays a list of all **available exercises** from the application's library.
-
-      ```plaintext
-      // Stage 1: Daily Workout Modal with an editable Rest item.
-      +------------------------------------------+
-      | WORKOUT - MONDAY 30                      |
-      |------------------------------------------|
-      | - Squat (3x10)                 [Remove]  |
-      | - Rest: [ 60 ] seconds         [Remove]  |
-      | - Push-ups (3x12)              [Remove]  |
-      |                                          |
-      |    [Add Exercise] [+ Aggiungi Riposo]    |
-      +------------------------------------------+
-
-      // Stage 2: User clicks [Add Exercise] to open the library.
-      // Clicking [+ Aggiungi Riposo] directly adds a new rest item to the list above.
-      +----------------------------------+
-      | EXERCISE LIBRARY                 |
-      |----------------------------------|
-      | - Bench Press          [Add]     |
-      | - Deadlift             [Add]     |
-      | ... (scrollable) ...             |
-      |                        [Close]   |
-      +----------------------------------+
-      ```
-
-      ### 2.3. Interactive Trainer View
-
-      -   **Function:** An interactive, state-driven interface that guides the user through a scheduled workout in real-time. It features a large SVG Progress Ring for at-a-glance timer feedback. The phase name (e.g., UP, HOLD) and timer are displayed inside the ring. The exercise description is shown below it.
-      -   **Activation:** Triggered by clicking the "START" button on a day cell in the calendar.
-
-      ```plaintext
-      // State: Action (Reps-based, 50% through "DOWN" phase)
-      +-----------------------------------------+
-      |  ** SQUAT ** |
-      |  SERIES 1 / 3   |   REP 1 / 10          |
-      |-----------------------------------------|
-      |                                         |
-      |      /```\       DOWN                   |
-      |     | 50% |      1s                     |
-      |      \___/                              |
-      |                                         |
-      |-----------------------------------------|
-      |  Lower your body with control.          |
-      |  [           PAUSE           ]          |
-      +-----------------------------------------+
-      ```
-
-      #### Trainer State Machine & Flow
-      The trainer operates as a state machine. The primary user flow is as follows:
-
-      1.  **Ready (`ready`):** The trainer displays the current exercise and series number. Awaits user input to begin.
-      2.  **Announcing (`announcing`):** Before every new action phase, this 0.75-second state is activated. It displays the name of the upcoming phase (e.g., "UP", "REST") with a flashing visual effect and an audio tick to alert the user. It then automatically transitions to the announced phase.
-      3.  **Preparing (`preparing`):** A 3-second countdown to prepare the user for the first series of an exercise.
-      4.  **Action (`action`):** The core execution phase.
-          -   For **`reps`**-based exercises, the trainer automatically cycles through timed phases (e.g., `up`, `hold`, `down`). Each phase is preceded by the `announcing` state.
-          -   For **`time`**-based exercises, a single countdown for the specified `duration` is run.
-      5.  **Paused (`paused`):** The user can pause the workout at any time.
-      6.  **Rest (`rest`):** This state is triggered when a "Rest" item is encountered in the workout list. It runs a countdown for the user-defined duration.
-      7.  **Advancement:** After any state completes, the system proceeds to the next item in the workout list.
-      8.  **Finished (`finished`):** Once all items in the routine are complete, the trainer automatically transitions to the Debriefing View.
-
-      ### 2.4. Debriefing View
-
-      -   **Activation:** Appears automatically when a workout is completed or manually terminated.
-      -   **Content:** Displays a summary of all exercises completed.
-      -   **Actions:** "Copy for Coach" and "Return to Calendar".
-
-      ```plaintext
-      +-----------------------------------------+
-      |  WORKOUT COMPLETED!                     |
-      |-----------------------------------------|
-      |  Summary:                               |
-      |   - Squat: 3 series completed           |
-      |   - Push-ups: 3 series completed        |
-      |                                         |
-      |  [ Copy for Coach ] [Return to Calendar] |
-      +-----------------------------------------+
-      ```
-  - file: docs/02_ARCHITECTURE.md
-    content: |
-      # Application Architecture
-
-      This document outlines the high-level architecture for the "Mio Trainer Personale" SPA.
-
-      ## 1. Core Principles
-
-      -   **Modularity:** The application is broken down into distinct, single-responsibility modules.
-      -   **State-Driven UI:** The user interface reacts to changes in the application's state.
-
-      ## 2. Directory Structure
-
-      -   `docs/`: Contains all project documentation.
-      -   `index.html`: The single HTML entry point.
-      -   `src/`: Contains all application source code.
-          -   `src/modules/`: Contains core logic modules (store, repository, etc.).
-          -   `src/views/`: Contains UI rendering logic for major components.
-          -   `src/data/`: Contains static data sources.
-
-      ## 3. View Management
-
-      The application uses a simple view manager controlled by `main.js`. Only one view is active (`.view--active`) at any given time. This is driven by the state in the central store.
-
-      ## 4. Data Persistence
-
-      All user data is persisted in `localStorage`. The `storage.js` module provides a clean API for this.
-
-      ### 4.1. Data Schemas and Validation
-      To ensure data integrity, all data read from `localStorage` MUST be validated against a defined schema before being used by the application. This prevents errors from corrupted or outdated data structures.
-
-      - **Daily Workout Schema:** An array of "workout item" objects.
-        - `item`: `{ id: string, type: 'exercise' | 'rest', ...rest }`
-      - **Exercise Schema:** An object defining an exercise's properties.
-        - `exercise`: `{ id: string, name: string, tempo: object, ...rest }`
-
-      ### 4.2. Workout Item Structure
-      The data structure for a daily workout is an array of "workout items". Each item is an object with a `type` key:
-      -   `{ type: 'exercise', id: 'squat', ... }`
-      -   `{ type: 'rest', duration: 60, ... }`
-
-      ## 5. State Management
-
-      The application MUST use a centralized state store (`src/modules/store.js`) as the Single Source of Truth (SSoT) for all application state.
-      -   **State:** A single, read-only JavaScript object containing all shared application data.
-      -   **Actions:** State can only be modified by dispatching predefined, synchronous "actions".
-      -   **Subscriptions:** UI modules can "subscribe" to the store. When the state is updated, subscribers are notified to re-render.
-
-      ## 6. Architectural Decision Records (ADRs)
-
-      ### ADR 001: No Native Pop-ups
-      -   **Status**: Accepted
-      -   **Decision**: All forms of pop-up dialogs MUST be implemented as "pop-ins" or modals rendered within the application's own DOM.
-
-      ### ADR 002: Exercise Repository Pattern
-      -   **Status**: Accepted
-      -   **Context**: The application needs a way to list available exercises for the user to add to a workout. A simple approach would be to have the UI directly import a static list of exercises.
-      -   **Decision**: We will introduce an "Exercise Repository" module. This module will abstract the source of exercise data. The UI will only interact with the repository, not with the data source itself. Initially, the repository will return a static list, but this pattern allows us to easily add other sources in the future (e.g., user-defined exercises from `localStorage`, exercises from a remote API) without changing the UI code.
-      -   **Consequences**:
-          -   The UI is decoupled from the data source, increasing maintainability and extensibility.
-          -   A slight increase in initial complexity (one extra module).
-          -   Provides a clear point of extension for future features like custom exercises.
-  - file: src/data/_staticExercises.js
-    content: |
-      // --- Libreria Statica degli Esercizi ---
-      // Questa è una delle fonti dati per l'ExerciseRepository.
-
-      export const staticExercises = [
-        { id: 'bench-press', name: 'Bench Press', series: 3, reps: 8 },
-        { id: 'deadlift', name: 'Deadlift', series: 3, reps: 5 },
-        { id: 'squat', name: 'Squat', series: 3, reps: 10 },
-        { id: 'overhead-press', name: 'Overhead Press', series: 4, reps: 8 },
-        { id: 'pull-ups', name: 'Pull-ups', series: 3, reps: 'max' },
-        { id: 'push-ups', name: 'Push-ups', series: 3, reps: 12 },
-        { id: 'dips', name: 'Dips', series: 3, reps: 10 },
-        { id: 'plank', name: 'Plank', series: 3, duration: 60, type: 'time' }, // Esempio esercizio a tempo
-      ];
-  - file: src/modules/exerciseRepository.js
-    content: |
-      import { staticExercises } from '../data/_staticExercises.js';
-
-      // Il Repository attualmente restituisce solo la lista statica.
-      // In futuro, potrà essere esteso per includere altre fonti
-      // (es. esercizi custom dall'utente memorizzati in localStorage).
-      export function getExercises() {
-        return staticExercises;
-      }
-
-      export function getExerciseById(id) {
-        return getExercises().find(exercise => exercise.id === id);
-      }
   - file: src/modules/store.js
     content: |
       import { saveToStorage } from './storage.js';
@@ -231,8 +12,6 @@ patches:
       const WORKOUTS_STORAGE_KEY = 'workouts';
 
       function createStore() {
-        let state = { /* ... (stato invariato) ... */ };
-        // ... (resto del codice invariato fino a dispatch) ...
         let state = {
           currentView: 'calendar',
           focusedDate: new Date(),
@@ -247,12 +26,30 @@ patches:
         function dispatch(action) {
           const oldState = state;
           switch (action.type) {
-            case 'CHANGE_VIEW': state = { ...state, currentView: action.payload }; break;
-            case 'PREV_WEEK': { const d=new Date(state.focusedDate); d.setDate(d.getDate()-7); state={...state, focusedDate:d}; break; }
-            case 'NEXT_WEEK': { const d=new Date(state.focusedDate); d.setDate(d.getDate()+7); state={...state, focusedDate:d}; break; }
-            case 'SET_WORKOUTS': state = { ...state, workouts: action.payload }; break;
-            case 'OPEN_MODAL': state = { ...state, isModalOpen: true, modalContext: action.payload }; break;
-            case 'CLOSE_MODAL': state = { ...state, isModalOpen: false, modalContext: null }; break;
+            case 'CHANGE_VIEW':
+              state = { ...state, currentView: action.payload };
+              break;
+            case 'PREV_WEEK': {
+              const newDate = new Date(state.focusedDate);
+              newDate.setDate(newDate.getDate() - 7);
+              state = { ...state, focusedDate: newDate };
+              break;
+            }
+            case 'NEXT_WEEK': {
+              const newDate = new Date(state.focusedDate);
+              newDate.setDate(newDate.getDate() + 7);
+              state = { ...state, focusedDate: newDate };
+              break;
+            }
+            case 'SET_WORKOUTS':
+              state = { ...state, workouts: action.payload };
+              break;
+            case 'OPEN_MODAL':
+              state = { ...state, isModalOpen: true, modalContext: action.payload };
+              break;
+            case 'CLOSE_MODAL':
+              state = { ...state, isModalOpen: false, modalContext: null };
+              break;
             case 'REMOVE_WORKOUT_ITEM': {
               const { date, itemId } = action.payload;
               const dateKey = `workout-${date}`;
@@ -265,7 +62,9 @@ patches:
               const { date, itemId, newDuration } = action.payload;
               const dateKey = `workout-${date}`;
               if (!state.workouts[dateKey]) break;
-              const newWorkoutDay = state.workouts[dateKey].map(item => item.id === itemId ? { ...item, duration: newDuration } : item);
+              const newWorkoutDay = state.workouts[dateKey].map(item =>
+                item.id === itemId ? { ...item, duration: newDuration } : item
+              );
               state = { ...state, workouts: { ...state.workouts, [dateKey]: newWorkoutDay } };
               break;
             }
@@ -322,200 +121,4 @@ patches:
       }
       const store = createStore();
       export default store;
-  - file: src/ui/Modal.js
-    content: |
-      import store from '../modules/store.js';
-      import { render as renderWorkoutEditor } from '../views/WorkoutEditorView.js';
-      import { render as renderExerciseLibrary } from '../views/ExerciseLibraryView.js';
-
-      export function init(element) {
-          element.addEventListener('click', (event) => {
-              if (event.target === element) { store.dispatch({ type: 'CLOSE_MODAL' }); return; }
-
-              const removeBtn = event.target.closest('.remove-item-btn');
-              if (removeBtn) {
-                  const { itemId } = removeBtn.dataset;
-                  const { date } = store.getState().modalContext;
-                  store.dispatch({ type: 'REMOVE_WORKOUT_ITEM', payload: { date, itemId } });
-                  return;
-              }
-              const addRestBtn = event.target.closest('.add-rest-btn');
-              if (addRestBtn) {
-                  const { date } = store.getState().modalContext;
-                  store.dispatch({ type: 'ADD_REST_ITEM', payload: { date } });
-                  return;
-              }
-              const addExerciseBtn = event.target.closest('.add-exercise-btn');
-              if (addExerciseBtn) {
-                  const { date } = store.getState().modalContext;
-                  store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'CHOOSE_EXERCISE', date } });
-                  return;
-              }
-              const addToWorkoutBtn = event.target.closest('.add-to-workout-btn');
-              if (addToWorkoutBtn) {
-                  const { exerciseId } = addToWorkoutBtn.dataset;
-                  const { date } = store.getState().modalContext;
-                  store.dispatch({ type: 'ADD_EXERCISE_ITEM', payload: { date, exerciseId } });
-                  return;
-              }
-          });
-
-          element.addEventListener('change', (event) => { /* ... (invariato) ... */ });
-          // ... (resto del codice invariato) ...
-          element.addEventListener('change', (event) => {
-              const restInput = event.target.closest('.rest-duration-input');
-              if (restInput) {
-                  const { itemId } = restInput.dataset;
-                  const { date } = store.getState().modalContext;
-                  const newDuration = parseInt(restInput.value, 10);
-                  if (itemId && date && !isNaN(newDuration)) {
-                      store.dispatch({ type: 'UPDATE_REST_DURATION', payload: { date, itemId, newDuration } });
-                  }
-              }
-          });
-
-          function render() {
-              const { isModalOpen, modalContext } = store.getState();
-              if (isModalOpen) {
-                  element.classList.add('active');
-                  let headerContent = '', bodyContent = '';
-                  switch (modalContext?.type) {
-                      case 'EDIT_WORKOUT':
-                          headerContent = `<h3>Editor Workout - ${modalContext.date}</h3>`;
-                          bodyContent = renderWorkoutEditor(modalContext);
-                          break;
-                      case 'CHOOSE_EXERCISE':
-                          headerContent = `<h3>Libreria Esercizi</h3>`;
-                          bodyContent = renderExerciseLibrary(modalContext);
-                          break;
-                      default:
-                          headerContent = '<h3>Attenzione</h3>';
-                          bodyContent = '<p>Contenuto della modale non specificato.</p>';
-                  }
-                  element.innerHTML = `
-                      <div class="modal-content">
-                          <div class="modal-header">${headerContent}<button class="modal-close-btn">&times;</button></div>
-                          <div class="modal-body">${bodyContent}</div>
-                      </div>
-                  `;
-                  const closeButton = element.querySelector('.modal-close-btn');
-                  if (closeButton) { closeButton.addEventListener('click', () => { store.dispatch({ type: 'CLOSE_MODAL' }); }); }
-              } else {
-                  element.classList.remove('active');
-                  element.innerHTML = '';
-              }
-          }
-          store.subscribe(render);
-          render();
-      }
-  - file: src/views/WorkoutEditorView.js
-    content: |
-      import store from '../modules/store.js';
-
-      export function render(context) {
-          const { workouts } = store.getState();
-          const dateKey = `workout-${context.date}`;
-          const workoutItems = workouts[dateKey];
-
-          let listHtml = '<p>Nessun allenamento programmato per questo giorno.</p>';
-
-          if (workoutItems && workoutItems.length > 0) {
-              const itemsHtml = workoutItems.map(item => {
-                  let infoContent = '', detailsContent = '';
-                  if (item.type === 'exercise') {
-                      infoContent = `<span class="item-name">${item.name}</span>`;
-                      detailsContent = `<span class="item-details">${item.series}x${item.reps}</span>`;
-                  } else if (item.type === 'rest') {
-                      infoContent = `<span class="item-name">Riposo</span>`;
-                      detailsContent = `<input type="number" class="rest-duration-input" value="${item.duration}" data-item-id="${item.id}" /> s`;
-                  }
-                  return `
-                      <li class="workout-item workout-item--${item.type}">
-                          <div class="item-info">${infoContent}${detailsContent}</div>
-                          <button class="remove-item-btn" data-item-id="${item.id}" title="Rimuovi item">&times;</button>
-                      </li>
-                  `;
-              }).join('');
-              listHtml = `<ul class="workout-item-list">${itemsHtml}</ul>`;
-          }
-
-          return `
-              <div class="workout-editor-content">${listHtml}</div>
-              <footer class="modal-actions">
-                  <button class="add-exercise-btn">+ Add Exercise</button>
-                  <button class="add-rest-btn">+ Aggiungi Riposo</button>
-              </footer>
-          `;
-      }
-  - file: src/views/ExerciseLibraryView.js
-    content: |
-      import { getExercises } from '../modules/exerciseRepository.js';
-
-      export function render(context) {
-          const exercises = getExercises();
-          if (!exercises || exercises.length === 0) {
-              return '<p>Nessun esercizio disponibile nella libreria.</p>';
-          }
-
-          const itemsHtml = exercises.map(exercise => `
-              <li class="exercise-library-item">
-                  <span>${exercise.name}</span>
-                  <button class="add-to-workout-btn" data-exercise-id="${exercise.id}">Add</button>
-              </li>
-          `).join('');
-
-          return `<ul class="exercise-library-list">${itemsHtml}</ul>`;
-      }
-  - file: assets/css/style.css
-    content: |
-      /* ... (prime parti invariate) ... */
-      :root { --bg-color: #1a1a1d; --card-color: #2c2c34; --primary-color: #9575cd; --secondary-color: #4db6ac; --text-color: #f4f4f9; --text-color-muted: #aaa; --border-color: #40404a; --danger-color: #ef5350; }
-      * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; background-color: var(--bg-color); color: var(--text-color); }
-      #app-container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
-      .view { display: none; width: 100%; }
-      .view--active { display: block; }
-      .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-      .calendar-header h2 { font-size: 1.25rem; text-align: center; }
-      .calendar-header button { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: background-color 0.2s; }
-      .calendar-header button:hover { background-color: var(--primary-color); }
-      .calendar-grid { display: grid; grid-template-columns: 1fr; gap: 0.5rem; }
-      .day-cell { background-color: var(--card-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; min-height: 150px; display: flex; flex-direction: column; cursor: pointer; transition: border-color 0.2s; }
-      .day-cell:hover { border-color: var(--primary-color); }
-      .day-cell__header { display: flex; justify-content: space-between; font-weight: bold; color: var(--text-color-muted); text-transform: uppercase; font-size: 0.8rem; pointer-events: none; }
-      .day-cell__body { margin-top: 0.5rem; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; pointer-events: none; }
-      .exercise-count { font-size: 0.9rem; color: var(--secondary-color); }
-      .start-btn { background-color: var(--secondary-color); color: var(--bg-color); border: none; padding: 0.6rem; border-radius: 6px; cursor: pointer; font-weight: bold; text-transform: uppercase; width: 100%; margin-top: 1rem; transition: opacity 0.2s; pointer-events: all !important; }
-      .start-btn:hover { opacity: 0.85; }
-      #modal-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; z-index: 1000; }
-      #modal-container.active { opacity: 1; pointer-events: all; }
-      .modal-content { background-color: var(--card-color); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color); min-width: 300px; max-width: 90%; transform: scale(0.95); transition: transform 0.3s ease; }
-      #modal-container.active .modal-content { transform: scale(1); }
-      .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; }
-      .modal-header h3 { color: var(--primary-color); }
-      .modal-close-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; cursor: pointer; }
-      .modal-actions { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 1rem; }
-      .add-rest-btn, .add-exercise-btn { background-color: transparent; border: 1px solid var(--secondary-color); color: var(--secondary-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
-      .add-rest-btn:hover, .add-exercise-btn:hover { background-color: var(--secondary-color); color: var(--card-color); }
-      .workout-item-list { list-style: none; padding: 0; margin: 0; max-height: 40vh; overflow-y: auto; }
-      .workout-item { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0.5rem; border-bottom: 1px solid var(--border-color); }
-      .workout-item:last-child { border-bottom: none; }
-      .item-info { display: flex; align-items: baseline; gap: 0.75rem; flex-grow: 1; }
-      .item-info .item-name { font-weight: bold; }
-      .item-info .item-details { color: var(--secondary-color); }
-      .workout-item--rest .item-info .item-name { color: var(--text-color-muted); font-style: italic; }
-      .rest-duration-input { -moz-appearance: textfield; background-color: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 4px; padding: 0.25rem; width: 60px; text-align: center; }
-      .rest-duration-input::-webkit-outer-spin-button, .rest-duration-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-      .remove-item-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; font-weight: bold; cursor: pointer; padding: 0 0.5rem; border-radius: 50%; }
-      .remove-item-btn:hover { color: var(--danger-color); background-color: rgba(239, 83, 80, 0.1); }
-      .exercise-library-list { list-style: none; padding: 0; margin: 0; max-height: 40vh; overflow-y: auto; }
-      .exercise-library-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0.5rem; border-bottom: 1px solid var(--border-color); }
-      .exercise-library-item:last-child { border-bottom: none; }
-      .add-to-workout-btn { background-color: var(--primary-color); color: var(--text-color); border: none; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; }
-      @media (min-width: 768px) {
-          #app-container { padding: 2rem; }
-          .calendar-grid { grid-template-columns: repeat(7, 1fr); gap: 1rem; }
-          .calendar-header h2 { font-size: 1.5rem; }
-          .modal-content { min-width: 500px; max-width: 60%; padding: 2rem; }
-      }
 commands: []

@@ -4,8 +4,6 @@ import { getExerciseById } from './exerciseRepository.js';
 const WORKOUTS_STORAGE_KEY = 'workouts';
 
 function createStore() {
-  let state = { /* ... (stato invariato) ... */ };
-  // ... (resto del codice invariato fino a dispatch) ...
   let state = {
     currentView: 'calendar',
     focusedDate: new Date(),
@@ -20,12 +18,30 @@ function createStore() {
   function dispatch(action) {
     const oldState = state;
     switch (action.type) {
-      case 'CHANGE_VIEW': state = { ...state, currentView: action.payload }; break;
-      case 'PREV_WEEK': { const d=new Date(state.focusedDate); d.setDate(d.getDate()-7); state={...state, focusedDate:d}; break; }
-      case 'NEXT_WEEK': { const d=new Date(state.focusedDate); d.setDate(d.getDate()+7); state={...state, focusedDate:d}; break; }
-      case 'SET_WORKOUTS': state = { ...state, workouts: action.payload }; break;
-      case 'OPEN_MODAL': state = { ...state, isModalOpen: true, modalContext: action.payload }; break;
-      case 'CLOSE_MODAL': state = { ...state, isModalOpen: false, modalContext: null }; break;
+      case 'CHANGE_VIEW':
+        state = { ...state, currentView: action.payload };
+        break;
+      case 'PREV_WEEK': {
+        const newDate = new Date(state.focusedDate);
+        newDate.setDate(newDate.getDate() - 7);
+        state = { ...state, focusedDate: newDate };
+        break;
+      }
+      case 'NEXT_WEEK': {
+        const newDate = new Date(state.focusedDate);
+        newDate.setDate(newDate.getDate() + 7);
+        state = { ...state, focusedDate: newDate };
+        break;
+      }
+      case 'SET_WORKOUTS':
+        state = { ...state, workouts: action.payload };
+        break;
+      case 'OPEN_MODAL':
+        state = { ...state, isModalOpen: true, modalContext: action.payload };
+        break;
+      case 'CLOSE_MODAL':
+        state = { ...state, isModalOpen: false, modalContext: null };
+        break;
       case 'REMOVE_WORKOUT_ITEM': {
         const { date, itemId } = action.payload;
         const dateKey = `workout-${date}`;
@@ -38,7 +54,9 @@ function createStore() {
         const { date, itemId, newDuration } = action.payload;
         const dateKey = `workout-${date}`;
         if (!state.workouts[dateKey]) break;
-        const newWorkoutDay = state.workouts[dateKey].map(item => item.id === itemId ? { ...item, duration: newDuration } : item);
+        const newWorkoutDay = state.workouts[dateKey].map(item =>
+          item.id === itemId ? { ...item, duration: newDuration } : item
+        );
         state = { ...state, workouts: { ...state.workouts, [dateKey]: newWorkoutDay } };
         break;
       }
