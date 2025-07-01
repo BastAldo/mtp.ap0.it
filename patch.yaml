@@ -1,14 +1,10 @@
-commit_message: "feat(ui): Migliora UX modale e crea la shell della Trainer View"
+commit_message: "feat(trainer): Implementa lo stato 'ready' e corregge UI modale/trainer"
 rationale: |
-  Questo commit accorpa due importanti aggiornamenti, come da piano approvato:
+  Questo commit accorpa diverse modifiche per migliorare l'UI e avanzare con la logica del trainer:
 
-  1.  **Miglioramenti UX della Modale:**
-      - La modale ora ha un'altezza massima fissa per evitare ridimensionamenti inattesi.
-      - Il corpo della modale è scrollabile.
-      - È stata implementata una logica di auto-scroll che mostra l'ultimo elemento aggiunto a una lista.
-  2.  **Creazione Shell Trainer View:**
-      - È stata creata la struttura HTML e CSS per la `Trainer View`, sostituendo il placeholder precedente con un'interfaccia fedele al mockup, inclusivo di anello di progresso SVG.
-      - La logica di inizializzazione della vista è stata aggiunta al `main.js`.
+  1.  **Fix UI Modale:** Il footer della modale (`.modal-actions`) è ora fissato in fondo, garantendo che i pulsanti siano sempre visibili indipendentemente dalla lunghezza della lista.
+  2.  **Fix UI Trainer:** La logica e il testo iniziale della `Trainer View` sono stati resi coerenti. Ora mostra un pulsante "INIZIA" per avviare il workout.
+  3.  **Stato 'Ready' del Trainer:** È stata implementata la prima fase della state machine del trainer. Lo store ora traccia il `trainerState`. Cliccando "INIZIA", lo stato avanza, preparando il terreno per le fasi successive del timer.
 patches:
   - file: assets/css/style.css
     content: |
@@ -107,152 +103,154 @@ patches:
           .modal-content { min-width: 500px; max-width: 60%; padding: 2rem; }
           .progress-ring { width: 300px; height: 300px; }
       }
-  - file: src/main.js
+  - file: src/modules/store.js
     content: |
-      import store from './modules/store.js';
-      import { init as initCalendarView } from './views/CalendarView.js';
-      import { init as initTrainerView } from './views/TrainerView.js';
-      import { init as initModal } from './ui/Modal.js';
-      import { loadFromStorage, saveToStorage } from './modules/storage.js';
-      import { mockWorkouts } from './modules/_mockData.js';
+      import { saveToStorage } from './storage.js';
+      import { getExerciseById } from './exerciseRepository.js';
 
       const WORKOUTS_STORAGE_KEY = 'workouts';
 
-      const views = {
-          calendar: document.getElementById('calendar-view'),
-          trainer: document.getElementById('trainer-view'),
-          debriefing: document.getElementById('debriefing-view'),
-      };
-      const initializedViews = new Set();
+      function createStore() {
+        let state = {
+          currentView: 'calendar',
+          focusedDate: new Date(),
+          workouts: {},
+          isModalOpen: false,
+          modalContext: null,
+          activeWorkout: null,
+          trainerState: 'idle', // idle, ready, preparing, action, rest, paused, finished
+        };
 
-      function initializeApp() {
-        let workouts = loadFromStorage(WORKOUTS_STORAGE_KEY);
-        if (!workouts) {
-          saveToStorage(WORKOUTS_STORAGE_KEY, mockWorkouts);
-          workouts = mockWorkouts;
-        }
-        store.dispatch({ type: 'SET_WORKOUTS', payload: workouts });
+        const subscribers = new Set();
+        function notify() { subscribers.forEach(callback => callback()); }
 
-        initCalendarView(views.calendar);
-        initializedViews.add('calendar');
-        initModal(document.getElementById('modal-container'));
-      }
-
-      let currentActiveView = views.calendar;
-      function handleViewChange() {
-        const { currentView } = store.getState();
-        const newActiveViewEl = views[currentView];
-
-        if (currentActiveView !== newActiveViewEl) {
-          currentActiveView.classList.remove('view--active');
-          newActiveViewEl.classList.add('view--active');
-          currentActiveView = newActiveViewEl;
-
-          // Inizializza la vista solo la prima volta che viene mostrata
-          if (!initializedViews.has(currentView)) {
-            if (currentView === 'trainer') {
-              initTrainerView(views.trainer);
+        function dispatch(action) {
+          const oldState = state;
+          switch (action.type) {
+            case 'CHANGE_VIEW': state = { ...state, currentView: action.payload }; break;
+            case 'PREV_WEEK': { const d=new Date(state.focusedDate); d.setDate(d.getDate()-7); state={...state, focusedDate:d}; break; }
+            case 'NEXT_WEEK': { const d=new Date(state.focusedDate); d.setDate(d.getDate()+7); state={...state, focusedDate:d}; break; }
+            case 'SET_WORKOUTS': state = { ...state, workouts: action.payload }; break;
+            case 'OPEN_MODAL': state = { ...state, isModalOpen: true, modalContext: action.payload }; break;
+            case 'CLOSE_MODAL': state = { ...state, isModalOpen: false, modalContext: null }; break;
+            case 'REMOVE_WORKOUT_ITEM': {
+              const { date, itemId } = action.payload;
+              const dateKey = `workout-${date}`;
+              if (!state.workouts[dateKey]) break;
+              const newWorkoutDay = state.workouts[dateKey].filter(item => item.id !== itemId);
+              state = { ...state, workouts: { ...state.workouts, [dateKey]: newWorkoutDay } };
+              break;
             }
-            // Aggiungere qui l'inizializzazione di altre viste future
-            initializedViews.add(currentView);
+            case 'UPDATE_REST_DURATION': {
+              const { date, itemId, newDuration } = action.payload;
+              const dateKey = `workout-${date}`;
+              if (!state.workouts[dateKey]) break;
+              const newWorkoutDay = state.workouts[dateKey].map(item => item.id === itemId ? { ...item, duration: newDuration } : item);
+              state = { ...state, workouts: { ...state.workouts, [dateKey]: newWorkoutDay } };
+              break;
+            }
+            case 'ADD_REST_ITEM': {
+              const { date } = action.payload;
+              const dateKey = `workout-${date}`;
+              const newRestItem = { id: `rest-${Date.now()}`, type: 'rest', duration: 60 };
+              const currentItems = state.workouts[dateKey] || [];
+              const newWorkoutDay = [...currentItems, newRestItem];
+              state = { ...state, workouts: { ...state.workouts, [dateKey]: newWorkoutDay } };
+              break;
+            }
+            case 'ADD_EXERCISE_ITEM': {
+              const { date, exerciseId } = action.payload;
+              const exerciseTemplate = getExerciseById(exerciseId);
+              if (!exerciseTemplate) break;
+              const newExerciseItem = { ...exerciseTemplate, id: `ex-${Date.now()}`, type: exerciseTemplate.type || 'exercise', };
+              const dateKey = `workout-${date}`;
+              const currentItems = state.workouts[dateKey] || [];
+              const newWorkoutDay = [...currentItems, newExerciseItem];
+              state = { ...state, workouts: { ...state.workouts, [dateKey]: newWorkoutDay }, modalContext: { type: 'EDIT_WORKOUT', date }, };
+              break;
+            }
+            case 'START_WORKOUT': {
+              const { date } = action.payload;
+              const dateKey = `workout-${date}`;
+              const workoutItems = state.workouts[dateKey];
+              if (!workoutItems || workoutItems.length === 0) break;
+              state = { ...state, currentView: 'trainer', activeWorkout: { date, items: workoutItems }, trainerState: 'ready' };
+              break;
+            }
+            case 'SET_TRAINER_STATE': {
+              state = { ...state, trainerState: action.payload };
+              break;
+            }
+            default:
+              console.warn(`Azione non riconosciuta: ${action.type}`);
+              return;
+          }
+          if (state !== oldState) {
+            console.log(`Action: ${action.type}`, action.payload);
+            if (state.workouts !== oldState.workouts) {
+              saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
+              console.log('Workouts salvati in localStorage.');
+            }
+            notify();
           }
         }
+        return {
+          getState: () => ({ ...state }),
+          subscribe: (callback) => { subscribers.add(callback); return () => subscribers.delete(callback); },
+          dispatch,
+        };
       }
-
-      store.subscribe(handleViewChange);
-      initializeApp();
-      console.log('App "Mio Trainer Personale" inizializzata.');
-  - file: src/ui/Modal.js
-    content: |
-      import store from '../modules/store.js';
-      import { render as renderWorkoutEditor } from '../views/WorkoutEditorView.js';
-      import { render as renderExerciseLibrary } from '../views/ExerciseLibraryView.js';
-
-      export function init(element) {
-          let previousItemCount = 0;
-
-          element.addEventListener('click', (event) => { /* ... (invariato) ... */ });
-          element.addEventListener('change', (event) => { /* ... (invariato) ... */ });
-          // ... (resto del codice invariato) ...
-          element.addEventListener('click', (event) => {
-              if (event.target === element) { store.dispatch({ type: 'CLOSE_MODAL' }); return; }
-              const removeBtn = event.target.closest('.remove-item-btn');
-              if (removeBtn) { const { itemId } = removeBtn.dataset; const { date } = store.getState().modalContext; store.dispatch({ type: 'REMOVE_WORKOUT_ITEM', payload: { date, itemId } }); return; }
-              const addRestBtn = event.target.closest('.add-rest-btn');
-              if (addRestBtn) { const { date } = store.getState().modalContext; store.dispatch({ type: 'ADD_REST_ITEM', payload: { date } }); return; }
-              const addExerciseBtn = event.target.closest('.add-exercise-btn');
-              if (addExerciseBtn) { const { date } = store.getState().modalContext; store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'CHOOSE_EXERCISE', date } }); return; }
-              const addToWorkoutBtn = event.target.closest('.add-to-workout-btn');
-              if (addToWorkoutBtn) { const { exerciseId } = addToWorkoutBtn.dataset; const { date } = store.getState().modalContext; store.dispatch({ type: 'ADD_EXERCISE_ITEM', payload: { date, exerciseId } }); return; }
-          });
-          element.addEventListener('change', (event) => {
-              const restInput = event.target.closest('.rest-duration-input');
-              if (restInput) { const { itemId } = restInput.dataset; const { date } = store.getState().modalContext; const newDuration = parseInt(restInput.value, 10); if (itemId && date && !isNaN(newDuration)) { store.dispatch({ type: 'UPDATE_REST_DURATION', payload: { date, itemId, newDuration } }); } }
-          });
-
-          function render() {
-              const { isModalOpen, modalContext, workouts } = store.getState();
-              if (isModalOpen) {
-                  const dateKey = `workout-${modalContext.date}`;
-                  const currentItemCount = workouts[dateKey]?.length || 0;
-
-                  element.classList.add('active');
-                  let headerContent = '', bodyContent = '';
-                  switch (modalContext?.type) {
-                      case 'EDIT_WORKOUT':
-                          headerContent = `<h3>Editor Workout - ${modalContext.date}</h3>`;
-                          bodyContent = renderWorkoutEditor(modalContext);
-                          break;
-                      case 'CHOOSE_EXERCISE':
-                          headerContent = `<h3>Libreria Esercizi</h3>`;
-                          bodyContent = renderExerciseLibrary(modalContext);
-                          break;
-                      default:
-                          headerContent = '<h3>Attenzione</h3>';
-                          bodyContent = '<p>Contenuto della modale non specificato.</p>';
-                  }
-                  element.innerHTML = `
-                      <div class="modal-content">
-                          <div class="modal-header">${headerContent}<button class="modal-close-btn">&times;</button></div>
-                          <div class="modal-body">${bodyContent}</div>
-                      </div>
-                  `;
-                  const closeButton = element.querySelector('.modal-close-btn');
-                  if (closeButton) { closeButton.addEventListener('click', () => { store.dispatch({ type: 'CLOSE_MODAL' }); }); }
-
-                  // Logica di auto-scroll
-                  if (currentItemCount > previousItemCount) {
-                      const modalBody = element.querySelector('.modal-body');
-                      if (modalBody) {
-                          modalBody.scrollTop = modalBody.scrollHeight;
-                      }
-                  }
-                  previousItemCount = currentItemCount;
-
-              } else {
-                  element.classList.remove('active');
-                  element.innerHTML = '';
-                  previousItemCount = 0; // Resetta il conteggio quando la modale si chiude
-              }
-          }
-          store.subscribe(render);
-          render();
-      }
+      const store = createStore();
+      export default store;
   - file: src/views/TrainerView.js
     content: |
       import store from '../modules/store.js';
 
       export function init(element) {
+          const radius = 90;
+          const circumference = 2 * Math.PI * radius;
+
+          element.addEventListener('click', (event) => {
+              const mainButton = event.target.closest('.trainer-main-btn');
+              if (mainButton) {
+                  const currentState = store.getState().trainerState;
+                  if (currentState === 'ready') {
+                      store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'preparing' });
+                  }
+                  // Aggiungere qui la logica per gli altri stati (es. PAUSA)
+              }
+          });
+
           function render() {
-              const { activeWorkout } = store.getState();
+              const { activeWorkout, trainerState } = store.getState();
               if (!activeWorkout) {
                   element.innerHTML = '<h2>Nessun workout attivo.</h2>';
                   return;
               }
 
               const currentExercise = activeWorkout.items.find(item => item.type === 'exercise') || { name: 'Workout' };
-              const radius = 90;
-              const circumference = 2 * Math.PI * radius;
+
+              let phaseText = '';
+              let instructionText = '';
+              let buttonText = '';
+
+              switch (trainerState) {
+                  case 'ready':
+                      phaseText = 'READY';
+                      instructionText = 'Premi INIZIA per cominciare';
+                      buttonText = 'INIZIA';
+                      break;
+                  case 'preparing':
+                      phaseText = 'PREP';
+                      instructionText = 'Preparati...';
+                      buttonText = 'PAUSA';
+                      break;
+                  // Aggiungere qui gli altri stati
+                  default:
+                      phaseText = 'IDLE';
+                      instructionText = 'Stato non riconosciuto';
+                      buttonText = 'RESET';
+              }
 
               element.innerHTML = `
                   <div class="trainer-container">
@@ -269,19 +267,20 @@ patches:
                               ></circle>
                           </svg>
                           <div class="progress-ring__text">
-                              <div class="progress-ring__phase">READY</div>
+                              <div class="progress-ring__phase">${phaseText}</div>
                               <div class="progress-ring__timer"></div>
                           </div>
                       </div>
                       <footer class="trainer-footer">
-                          <p class="trainer-instruction">Premi PAUSA per iniziare</p>
+                          <p class="trainer-instruction">${instructionText}</p>
                           <div class="trainer-controls">
-                              <button>PAUSE</button>
+                              <button class="trainer-main-btn">${buttonText}</button>
                           </div>
                       </footer>
                   </div>
               `;
           }
+          store.subscribe(render);
           render();
       }
 commands: []

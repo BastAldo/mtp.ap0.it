@@ -10,7 +10,8 @@ function createStore() {
     workouts: {},
     isModalOpen: false,
     modalContext: null,
-    activeWorkout: null, // Contiene i dati del workout in esecuzione
+    activeWorkout: null,
+    trainerState: 'idle', // idle, ready, preparing, action, rest, paused, finished
   };
 
   const subscribers = new Set();
@@ -66,7 +67,11 @@ function createStore() {
         const dateKey = `workout-${date}`;
         const workoutItems = state.workouts[dateKey];
         if (!workoutItems || workoutItems.length === 0) break;
-        state = { ...state, currentView: 'trainer', activeWorkout: { date, items: workoutItems } };
+        state = { ...state, currentView: 'trainer', activeWorkout: { date, items: workoutItems }, trainerState: 'ready' };
+        break;
+      }
+      case 'SET_TRAINER_STATE': {
+        state = { ...state, trainerState: action.payload };
         break;
       }
       default:
