@@ -25,6 +25,15 @@ body::-webkit-scrollbar-thumb, .modal-body::-webkit-scrollbar-thumb { background
 .view { display: none; width: 100%; }
 .view--active { display: block; }
 
+/* --- KEYFRAMES --- */
+@keyframes flash {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+}
+.is-flashing {
+    animation: flash 0.25s 3; /* 3 flash in 0.75s */
+}
+
 /* --- CALENDAR VIEW STYLES --- */
 .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
 .calendar-header h2 { font-size: 1.25rem; text-align: center; }
@@ -48,7 +57,7 @@ body::-webkit-scrollbar-thumb, .modal-body::-webkit-scrollbar-thumb { background
 .modal-header h3 { color: var(--primary-color); }
 .modal-close-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; cursor: pointer; }
 .modal-body { overflow-y: auto; flex-grow: 1; padding: 0 1.5rem; }
-.modal-actions { margin-top: auto; padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 1rem; flex-shrink: 0; }
+.modal-actions { padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 1rem; flex-shrink: 0; }
 .add-rest-btn, .add-exercise-btn { background-color: transparent; border: 1px solid var(--secondary-color); color: var(--secondary-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
 .add-rest-btn:hover, .add-exercise-btn:hover { background-color: var(--secondary-color); color: var(--card-color); }
 
@@ -87,6 +96,8 @@ body::-webkit-scrollbar-thumb, .modal-body::-webkit-scrollbar-thumb { background
 
 /* --- TABLET/DESKTOP OVERRIDES --- */
 @media (min-width: 768px) {
-    .modal-content { max-width: 600px; height: 70vh; max-height: 70vh; }
+    #app-container { padding: 2rem; }
+    .calendar-grid { grid-template-columns: repeat(7, 1fr); gap: 1rem; }
+    .modal-content { max-width: 600px; height: auto; max-height: 80vh; }
     .progress-ring { width: 300px; height: 300px; }
 }

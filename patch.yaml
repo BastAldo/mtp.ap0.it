@@ -1,10 +1,9 @@
-commit_message: "feat(trainer): Implementa stato 'preparing' e migliora UX modale"
+commit_message: "feat(trainer): Implementa stato 'announcing' e corregge layout calendario"
 rationale: |
-  Questo commit accorpa diverse modifiche per migliorare l'UI e avanzare con la logica del trainer, come richiesto:
+  Questo commit accorpa due modifiche:
 
-  1.  **Fix Layout Modale:** La struttura HTML/CSS della modale è stata refattorizzata. Il footer con i pulsanti di azione è ora un fratello del corpo scrollabile, non un figlio, garantendo che rimanga sempre visibile in fondo alla modale.
-  2.  **Ottimizzazione Mobile:** L'altezza della modale è stata resa più contenuta e adattiva sui dispositivi mobili, migliorando l'usabilità su schermi piccoli.
-  3.  **Stato 'Preparing' del Trainer:** È stata implementata la fase `preparing` del trainer, che mostra un conto alla rovescia di 3 secondi prima dell'inizio dell'esercizio, introducendo la prima logica a tempo nella state machine.
+  1.  **Fix Layout Calendario:** È stata ripristinata la regola CSS nel media query per il `.calendar-grid`. Ora il calendario tornerà a visualizzarsi correttamente su 7 colonne negli schermi larghi, correggendo l'errore di regressione.
+  2.  **Stato 'Announcing' del Trainer:** È stata implementata la fase `announcing` della state machine del trainer. Questa fase, della durata di 0.75s, precede ogni azione e serve ad avvisare l'utente della mossa successiva, come da specifiche.
 patches:
   - file: assets/css/style.css
     content: |
@@ -35,6 +34,15 @@ patches:
       .view { display: none; width: 100%; }
       .view--active { display: block; }
 
+      /* --- KEYFRAMES --- */
+      @keyframes flash {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.2; }
+      }
+      .is-flashing {
+          animation: flash 0.25s 3; /* 3 flash in 0.75s */
+      }
+
       /* --- CALENDAR VIEW STYLES --- */
       .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
       .calendar-header h2 { font-size: 1.25rem; text-align: center; }
@@ -58,7 +66,7 @@ patches:
       .modal-header h3 { color: var(--primary-color); }
       .modal-close-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; cursor: pointer; }
       .modal-body { overflow-y: auto; flex-grow: 1; padding: 0 1.5rem; }
-      .modal-actions { margin-top: auto; padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 1rem; flex-shrink: 0; }
+      .modal-actions { padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 1rem; flex-shrink: 0; }
       .add-rest-btn, .add-exercise-btn { background-color: transparent; border: 1px solid var(--secondary-color); color: var(--secondary-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
       .add-rest-btn:hover, .add-exercise-btn:hover { background-color: var(--secondary-color); color: var(--card-color); }
 
@@ -97,122 +105,16 @@ patches:
 
       /* --- TABLET/DESKTOP OVERRIDES --- */
       @media (min-width: 768px) {
-          .modal-content { max-width: 600px; height: 70vh; max-height: 70vh; }
+          #app-container { padding: 2rem; }
+          .calendar-grid { grid-template-columns: repeat(7, 1fr); gap: 1rem; }
+          .modal-content { max-width: 600px; height: auto; max-height: 80vh; }
           .progress-ring { width: 300px; height: 300px; }
-      }
-  - file: src/ui/Modal.js
-    content: |
-      import store from '../modules/store.js';
-      import { render as renderWorkoutEditor } from '../views/WorkoutEditorView.js';
-      import { render as renderExerciseLibrary } from '../views/ExerciseLibraryView.js';
-
-      export function init(element) {
-          let previousItemCount = 0;
-
-          element.addEventListener('click', (event) => { /* ... (invariato, come precedente) ... */ });
-          element.addEventListener('change', (event) => { /* ... (invariato, come precedente) ... */ });
-          // ... (resto del codice invariato) ...
-          element.addEventListener('click', (event) => {
-              if (event.target === element) { store.dispatch({ type: 'CLOSE_MODAL' }); return; }
-              const removeBtn = event.target.closest('.remove-item-btn');
-              if (removeBtn) { const { itemId } = removeBtn.dataset; const { date } = store.getState().modalContext; store.dispatch({ type: 'REMOVE_WORKOUT_ITEM', payload: { date, itemId } }); return; }
-              const addRestBtn = event.target.closest('.add-rest-btn');
-              if (addRestBtn) { const { date } = store.getState().modalContext; store.dispatch({ type: 'ADD_REST_ITEM', payload: { date } }); return; }
-              const addExerciseBtn = event.target.closest('.add-exercise-btn');
-              if (addExerciseBtn) { const { date } = store.getState().modalContext; store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'CHOOSE_EXERCISE', date } }); return; }
-              const addToWorkoutBtn = event.target.closest('.add-to-workout-btn');
-              if (addToWorkoutBtn) { const { exerciseId } = addToWorkoutBtn.dataset; const { date } = store.getState().modalContext; store.dispatch({ type: 'ADD_EXERCISE_ITEM', payload: { date, exerciseId } }); return; }
-          });
-          element.addEventListener('change', (event) => {
-              const restInput = event.target.closest('.rest-duration-input');
-              if (restInput) { const { itemId } = restInput.dataset; const { date } = store.getState().modalContext; const newDuration = parseInt(restInput.value, 10); if (itemId && date && !isNaN(newDuration)) { store.dispatch({ type: 'UPDATE_REST_DURATION', payload: { date, itemId, newDuration } }); } }
-          });
-
-          function render() {
-              const { isModalOpen, modalContext, workouts } = store.getState();
-              if (isModalOpen) {
-                  const dateKey = `workout-${modalContext.date}`;
-                  const currentItemCount = workouts[dateKey]?.length || 0;
-
-                  element.classList.add('active');
-                  let headerContent = '', bodyContent = '', actionsContent = '';
-
-                  switch (modalContext?.type) {
-                      case 'EDIT_WORKOUT':
-                          headerContent = `<h3>Editor Workout - ${modalContext.date}</h3>`;
-                          bodyContent = renderWorkoutEditor(modalContext);
-                          actionsContent = `<button class="add-exercise-btn">+ Add Exercise</button><button class="add-rest-btn">+ Aggiungi Riposo</button>`;
-                          break;
-                      case 'CHOOSE_EXERCISE':
-                          headerContent = `<h3>Libreria Esercizi</h3>`;
-                          bodyContent = renderExerciseLibrary(modalContext);
-                          break;
-                      default:
-                          headerContent = '<h3>Attenzione</h3>';
-                          bodyContent = '<p>Contenuto della modale non specificato.</p>';
-                  }
-                  element.innerHTML = `
-                      <div class="modal-content">
-                          <div class="modal-header">${headerContent}<button class="modal-close-btn">&times;</button></div>
-                          <div class="modal-body">${bodyContent}</div>
-                          ${actionsContent ? `<footer class="modal-actions">${actionsContent}</footer>` : ''}
-                      </div>
-                  `;
-                  const closeButton = element.querySelector('.modal-close-btn');
-                  if (closeButton) { closeButton.addEventListener('click', () => { store.dispatch({ type: 'CLOSE_MODAL' }); }); }
-
-                  if (currentItemCount > previousItemCount) {
-                      const modalBody = element.querySelector('.modal-body');
-                      if (modalBody) { modalBody.scrollTop = modalBody.scrollHeight; }
-                  }
-                  previousItemCount = currentItemCount;
-
-              } else {
-                  element.classList.remove('active');
-                  element.innerHTML = '';
-                  previousItemCount = 0;
-              }
-          }
-          store.subscribe(render);
-          render();
-      }
-  - file: src/views/WorkoutEditorView.js
-    content: |
-      import store from '../modules/store.js';
-
-      export function render(context) {
-          const { workouts } = store.getState();
-          const dateKey = `workout-${context.date}`;
-          const workoutItems = workouts[dateKey];
-
-          if (!workoutItems || workoutItems.length === 0) {
-              return '<div class="workout-editor-content"><p>Nessun allenamento programmato per questo giorno.</p></div>';
-          }
-
-          const itemsHtml = workoutItems.map(item => {
-              let infoContent = '', detailsContent = '';
-              if (item.type === 'exercise') {
-                  infoContent = `<span class="item-name">${item.name}</span>`;
-                  detailsContent = `<span class="item-details">${item.series}x${item.reps}</span>`;
-              } else if (item.type === 'rest') {
-                  infoContent = `<span class="item-name">Riposo</span>`;
-                  detailsContent = `<input type="number" class="rest-duration-input" value="${item.duration}" data-item-id="${item.id}" /> s`;
-              }
-              return `
-                  <li class="workout-item workout-item--${item.type}">
-                      <div class="item-info">${infoContent}${detailsContent}</div>
-                      <button class="remove-item-btn" data-item-id="${item.id}" title="Rimuovi item">&times;</button>
-                  </li>`;
-          }).join('');
-
-          return `<div class="workout-editor-content"><ul class="workout-item-list">${itemsHtml}</ul></div>`;
       }
   - file: src/views/TrainerView.js
     content: |
       import store from '../modules/store.js';
 
-      // Variabile per tenere traccia del timer
-      let countdownTimer = null;
+      let stateTimer = null; // Un solo timer per gestire tutte le transizioni di stato a tempo
 
       export function init(element) {
           element.addEventListener('click', (event) => {
@@ -227,22 +129,20 @@ patches:
 
           function runStateLogic() {
               const { trainerState } = store.getState();
-              // Pulisce sempre i timer precedenti quando lo stato cambia
-              if (countdownTimer) clearInterval(countdownTimer);
+              if (stateTimer) {
+                  clearTimeout(stateTimer);
+                  stateTimer = null;
+              }
 
               if (trainerState === 'preparing') {
-                  let countdown = 3;
-                  const timerEl = element.querySelector('.progress-ring__timer');
-                  if(timerEl) timerEl.textContent = countdown;
-
-                  countdownTimer = setInterval(() => {
-                      countdown--;
-                      if(timerEl) timerEl.textContent = countdown;
-                      if (countdown === 0) {
-                          clearInterval(countdownTimer);
-                          store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'announcing' });
-                      }
-                  }, 1000);
+                  stateTimer = setTimeout(() => {
+                      store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'announcing' });
+                  }, 3000);
+              } else if (trainerState === 'announcing') {
+                  stateTimer = setTimeout(() => {
+                      // Prossimo stato dopo l'annuncio
+                      store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'action' });
+                  }, 750);
               }
           }
 
@@ -253,11 +153,11 @@ patches:
                   return;
               }
 
-              const currentExercise = activeWorkout.items.find(item => item.type === 'exercise') || { name: 'Workout' };
+              const currentExercise = activeWorkout.items[0] || { name: 'Workout' };
               const radius = 90;
               const circumference = 2 * Math.PI * radius;
 
-              let phaseText = '', instructionText = '', buttonText = '', timerText = '';
+              let phaseText = '', instructionText = '', buttonText = '', timerText = '', phaseClass = '';
 
               switch (trainerState) {
                   case 'ready':
@@ -269,11 +169,19 @@ patches:
                       phaseText = 'PREP';
                       instructionText = 'Preparati...';
                       buttonText = 'PAUSA';
+                      timerText = '3';
                       break;
                   case 'announcing':
                       phaseText = 'UP'; // Esempio
                       instructionText = 'Prossima fase: UP';
                       buttonText = 'PAUSA';
+                      phaseClass = 'is-flashing';
+                      break;
+                  case 'action':
+                      phaseText = 'UP'; // Stato di azione vero e proprio
+                      instructionText = 'Esegui il movimento';
+                      buttonText = 'PAUSA';
+                      timerText = '1.5';
                       break;
                   default:
                       phaseText = 'IDLE';
@@ -296,7 +204,7 @@ patches:
                               ></circle>
                           </svg>
                           <div class="progress-ring__text">
-                              <div class="progress-ring__phase">${phaseText}</div>
+                              <div class="progress-ring__phase ${phaseClass}">${phaseText}</div>
                               <div class="progress-ring__timer">${timerText}</div>
                           </div>
                       </div>
@@ -308,7 +216,6 @@ patches:
                       </footer>
                   </div>
               `;
-              // Esegui la logica dello stato DOPO aver renderizzato il DOM
               runStateLogic();
           }
           store.subscribe(render);

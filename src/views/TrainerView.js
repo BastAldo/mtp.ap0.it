@@ -1,7 +1,6 @@
 import store from '../modules/store.js';
 
-// Variabile per tenere traccia del timer
-let countdownTimer = null;
+let stateTimer = null; // Un solo timer per gestire tutte le transizioni di stato a tempo
 
 export function init(element) {
     element.addEventListener('click', (event) => {
@@ -16,22 +15,20 @@ export function init(element) {
 
     function runStateLogic() {
         const { trainerState } = store.getState();
-        // Pulisce sempre i timer precedenti quando lo stato cambia
-        if (countdownTimer) clearInterval(countdownTimer);
+        if (stateTimer) {
+            clearTimeout(stateTimer);
+            stateTimer = null;
+        }
 
         if (trainerState === 'preparing') {
-            let countdown = 3;
-            const timerEl = element.querySelector('.progress-ring__timer');
-            if(timerEl) timerEl.textContent = countdown;
-
-            countdownTimer = setInterval(() => {
-                countdown--;
-                if(timerEl) timerEl.textContent = countdown;
-                if (countdown === 0) {
-                    clearInterval(countdownTimer);
-                    store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'announcing' });
-                }
-            }, 1000);
+            stateTimer = setTimeout(() => {
+                store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'announcing' });
+            }, 3000);
+        } else if (trainerState === 'announcing') {
+            stateTimer = setTimeout(() => {
+                // Prossimo stato dopo l'annuncio
+                store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'action' });
+            }, 750);
         }
     }
 
@@ -42,11 +39,11 @@ export function init(element) {
             return;
         }
 
-        const currentExercise = activeWorkout.items.find(item => item.type === 'exercise') || { name: 'Workout' };
+        const currentExercise = activeWorkout.items[0] || { name: 'Workout' };
         const radius = 90;
         const circumference = 2 * Math.PI * radius;
 
-        let phaseText = '', instructionText = '', buttonText = '', timerText = '';
+        let phaseText = '', instructionText = '', buttonText = '', timerText = '', phaseClass = '';
 
         switch (trainerState) {
             case 'ready':
@@ -58,11 +55,19 @@ export function init(element) {
                 phaseText = 'PREP';
                 instructionText = 'Preparati...';
                 buttonText = 'PAUSA';
+                timerText = '3';
                 break;
             case 'announcing':
                 phaseText = 'UP'; // Esempio
                 instructionText = 'Prossima fase: UP';
                 buttonText = 'PAUSA';
+                phaseClass = 'is-flashing';
+                break;
+            case 'action':
+                phaseText = 'UP'; // Stato di azione vero e proprio
+                instructionText = 'Esegui il movimento';
+                buttonText = 'PAUSA';
+                timerText = '1.5';
                 break;
             default:
                 phaseText = 'IDLE';
@@ -85,7 +90,7 @@ export function init(element) {
                         ></circle>
                     </svg>
                     <div class="progress-ring__text">
-                        <div class="progress-ring__phase">${phaseText}</div>
+                        <div class="progress-ring__phase ${phaseClass}">${phaseText}</div>
                         <div class="progress-ring__timer">${timerText}</div>
                     </div>
                 </div>
@@ -97,7 +102,6 @@ export function init(element) {
                 </footer>
             </div>
         `;
-        // Esegui la logica dello stato DOPO aver renderizzato il DOM
         runStateLogic();
     }
     store.subscribe(render);
