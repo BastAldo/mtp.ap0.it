@@ -6,36 +6,26 @@ const MOCK_DATE_KEY = 'workout-2025-07-01';
 export const mockWorkouts = {
   [MOCK_DATE_KEY]: [
     {
-      id: 'test-ex-1',
+      id: 'test-ex-reps',
       type: 'exercise',
       exerciseId: 'test-exercise',
-      name: 'Esercizio di Test',
+      name: 'Esercizio di Test (Reps)',
       series: 2,
       reps: 2,
       tempo: { up: 1, hold: 1, down: 1 }
     },
     {
-      id: 'squat-1',
-      type: 'exercise',
-      exerciseId: 'squat',
-      name: 'Squat',
-      series: 3,
-      reps: 10,
-      tempo: { up: 2, hold: 0, down: 2 }
-    },
-    {
-      id: 'rest-1',
+      id: 'test-rest',
       type: 'rest',
-      duration: 90 // secondi
+      duration: 3
     },
     {
-      id: 'pushups-1',
+      id: 'test-ex-time',
       type: 'exercise',
-      exerciseId: 'push-ups',
-      name: 'Push-ups',
-      series: 3,
-      reps: 12,
-      tempo: { up: 1, hold: 0, down: 2 }
+      exerciseId: 'test-time-exercise',
+      name: 'Esercizio di Test (Tempo)',
+      type: 'time',
+      duration: 5
     }
   ]
 };

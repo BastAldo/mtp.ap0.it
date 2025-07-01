@@ -16,6 +16,11 @@ const PhasedExerciseRunner = {
     runNextPhase() {
         const { activeWorkout, trainerContext } = store.getState();
         const currentExercise = activeWorkout.items[trainerContext.itemIndex];
+        // Esercizi a tempo non hanno fasi
+        if (currentExercise.type === 'time') {
+            store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'action' });
+            return;
+        }
         const tempo = currentExercise.tempo || { up: 1, hold: 1, down: 2 };
         const phases = Object.keys(tempo);
         const currentPhaseIndex = trainerContext.currentPhaseIndex;
@@ -32,13 +37,20 @@ const PhasedExerciseRunner = {
 
     execute() {
         const { activeWorkout, trainerContext } = store.getState();
-        const currentExercise = activeWorkout.items[trainerContext.itemIndex];
-        const tempo = currentExercise.tempo || { up: 1, hold: 1, down: 2 };
-        const phaseName = trainerContext.currentPhase;
-        const duration = (tempo[phaseName] || 1) * 1000;
+        const currentItem = activeWorkout.items[trainerContext.itemIndex];
+        let duration;
+
+        // Determina la durata in base al tipo di esercizio
+        if (currentItem.type === 'time') {
+            duration = (currentItem.duration || 10) * 1000;
+        } else {
+            const tempo = currentItem.tempo || { up: 1, hold: 1, down: 2 };
+            const phaseName = trainerContext.currentPhase;
+            duration = (tempo[phaseName] || 1) * 1000;
+        }
+
         let elapsed = 0;
         const interval = 50;
-
         const timerEl = this.element.querySelector('.progress-ring__timer');
         const ringEl = this.element.querySelector('.progress-ring__foreground');
         const radius = ringEl.r.baseVal.value;
@@ -54,8 +66,12 @@ const PhasedExerciseRunner = {
             if (elapsed >= duration) {
                 clearInterval(stateTimer);
                 ringEl.style.strokeDashoffset = 0;
-                store.dispatch({ type: 'UPDATE_TRAINER_CONTEXT', payload: { currentPhaseIndex: trainerContext.currentPhaseIndex + 1 } });
-                this.runNextPhase();
+                if (currentItem.type === 'time') {
+                  advanceTrainer();
+                } else {
+                  store.dispatch({ type: 'UPDATE_TRAINER_CONTEXT', payload: { currentPhaseIndex: trainerContext.currentPhaseIndex + 1 } });
+                  this.runNextPhase();
+                }
             }
         }, interval);
     }
@@ -73,7 +89,7 @@ export function init(element) {
     });
 
     function runStateLogic() {
-        const { trainerState, trainerContext } = store.getState();
+        const { trainerState, trainerContext, activeWorkout } = store.getState();
         if (stateTimer) { clearInterval(stateTimer); stateTimer = null; }
 
         const timerEl = element.querySelector('.progress-ring__timer');
@@ -81,40 +97,42 @@ export function init(element) {
         if (!ringEl) return;
         const radius = ringEl.r.baseVal.value;
         const circumference = 2 * Math.PI * radius;
+        const currentItem = activeWorkout.items[trainerContext.itemIndex];
 
-        const animateRing = (duration) => {
+        const animateRing = (durationMs, onComplete) => {
             let elapsed = 0;
             const interval = 50;
             ringEl.style.strokeDashoffset = circumference;
             stateTimer = setInterval(() => {
                 elapsed += interval;
-                const progress = Math.min(1, elapsed / duration);
+                const progress = Math.min(1, elapsed / durationMs);
                 const offset = circumference * (1 - progress);
                 ringEl.style.strokeDashoffset = offset;
-                if (timerEl) timerEl.textContent = Math.ceil((duration - elapsed) / 1000);
-                if (elapsed >= duration) {
+                if (timerEl) timerEl.textContent = Math.ceil((durationMs - elapsed) / 1000);
+                if (elapsed >= durationMs) {
                     clearInterval(stateTimer);
                     ringEl.style.strokeDashoffset = 0;
-                    if (trainerState === 'preparing') {
-                      PhasedExerciseRunner.start(element);
-                    } else if (trainerState === 'rest') {
-                      advanceTrainer();
-                    }
+                    if (onComplete) onComplete();
                 }
             }, interval);
         };
 
         if (trainerState === 'preparing') {
             if (timerEl) timerEl.textContent = '3';
-            animateRing(3000);
+            animateRing(3000, () => PhasedExerciseRunner.start(element));
         } else if (trainerState === 'announcing') {
-            stateTimer = setTimeout(() => store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'action' }), 750);
+            if (currentItem.type === 'time') {
+               // Salta 'announcing' per esercizi a tempo
+               store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'action' });
+            } else {
+               stateTimer = setTimeout(() => store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'action' }), 750);
+            }
         } else if (trainerState === 'action') {
             PhasedExerciseRunner.execute();
         } else if (trainerState === 'rest') {
             const restDuration = trainerContext.restDuration || 60;
             if (timerEl) timerEl.textContent = restDuration;
-            animateRing(restDuration * 1000);
+            animateRing(restDuration * 1000, advanceTrainer);
         }
     }
 
@@ -129,32 +147,30 @@ export function init(element) {
 
         let phaseText = '', instructionText = '', buttonText = '', timerText = '', phaseClass = '';
         let ringOffset = circumference;
+        
+        const isTimeBasedExercise = currentItem.type === 'time';
 
         switch (trainerState) {
             case 'ready':
-                phaseText = 'PRONTO';
-                instructionText = `Premi INIZIA per cominciare`;
-                buttonText = 'INIZIA';
+                phaseText = 'PRONTO'; instructionText = `Premi INIZIA per cominciare`; buttonText = 'INIZIA';
                 break;
             case 'preparing':
                 phaseText = 'PREPARATI'; instructionText = 'Inizia il movimento...'; buttonText = 'PAUSA'; timerText = '3';
                 ringOffset = circumference;
                 break;
             case 'rest':
-                phaseText = 'RIPOSO'; instructionText = 'Recupera per la prossima serie'; buttonText = 'PAUSA';
+                phaseText = 'RIPOSO'; instructionText = 'Recupera'; buttonText = 'PAUSA';
                 timerText = trainerContext.restDuration || 60;
                 ringOffset = circumference;
                 break;
             case 'announcing':
                 phaseText = trainerContext.currentPhase?.toUpperCase() || '';
-                instructionText = `Prossima fase: ${phaseText}`;
-                buttonText = 'PAUSA';
+                instructionText = `Prossima fase: ${phaseText}`; buttonText = 'PAUSA';
                 phaseClass = 'is-flashing';
                 break;
             case 'action':
-                phaseText = trainerContext.currentPhase?.toUpperCase() || '';
-                instructionText = 'Esegui il movimento';
-                buttonText = 'PAUSA';
+                phaseText = isTimeBasedExercise ? 'ESEGUI' : (trainerContext.currentPhase?.toUpperCase() || '');
+                instructionText = 'Esegui il movimento'; buttonText = 'PAUSA';
                 ringOffset = circumference;
                 break;
             case 'finished':
@@ -164,9 +180,9 @@ export function init(element) {
                 phaseText = 'IDLE'; instructionText = 'Stato non riconosciuto'; buttonText = 'RESET';
         }
 
-        const headerTitle = isExercise ? currentItem.name : 'Riposo';
-        const seriesText = isExercise ? `SERIE ${trainerContext.currentSeries} / ${currentItem.series || 1}` : '';
-        const repsText = isExercise ? `REP ${trainerContext.currentRep} / ${currentItem.reps || 1}` : '';
+        const headerTitle = currentItem.name;
+        const seriesText = !isTimeBasedExercise ? `SERIE ${trainerContext.currentSeries} / ${currentItem.series || 1}` : 'ESECUZIONE UNICA';
+        const repsText = !isTimeBasedExercise ? `REP ${trainerContext.currentRep} / ${currentItem.reps || 1}` : '';
 
         element.innerHTML = `
             <div class="trainer-container">

@@ -3,6 +3,9 @@ import { getExerciseById } from './exerciseRepository.js';
 
 const WORKOUTS_STORAGE_KEY = 'workouts';
 
+// Helper per clonare lo stato dei workout
+const cloneWorkouts = (workouts) => JSON.parse(JSON.stringify(workouts));
+
 function createStore() {
   let state = {
     currentView: 'calendar',
@@ -11,8 +14,8 @@ function createStore() {
     isModalOpen: false,
     modalContext: null,
     activeWorkout: null,
-    trainerState: 'idle', // idle, ready, preparing, announcing, action, rest, paused, finished
-    trainerContext: {}, // Contesto dinamico del trainer (serie, rep, fase corrente)
+    trainerState: 'idle',
+    trainerContext: {},
   };
 
   const subscribers = new Set();
@@ -27,10 +30,63 @@ function createStore() {
       case 'SET_WORKOUTS': state = { ...state, workouts: action.payload }; break;
       case 'OPEN_MODAL': state = { ...state, isModalOpen: true, modalContext: action.payload }; break;
       case 'CLOSE_MODAL': state = { ...state, isModalOpen: false, modalContext: null }; break;
-      case 'REMOVE_WORKOUT_ITEM': { /* ... (invariato) ... */ break; }
-      case 'UPDATE_REST_DURATION': { /* ... (invariato) ... */ break; }
-      case 'ADD_REST_ITEM': { /* ... (invariato) ... */ break; }
-      case 'ADD_EXERCISE_ITEM': { /* ... (invariato) ... */ break; }
+      case 'ADD_EXERCISE_ITEM': {
+          const { date, exerciseId } = action.payload;
+          const dateKey = `workout-${date}`;
+          const exercise = getExerciseById(exerciseId);
+          if (!exercise) break;
+
+          const newItem = {
+              ...exercise,
+              id: `item-${Date.now()}`,
+              type: 'exercise',
+              exerciseId: exercise.id,
+          };
+
+          const newWorkouts = cloneWorkouts(state.workouts);
+          const dayWorkout = newWorkouts[dateKey] || [];
+          dayWorkout.push(newItem);
+          newWorkouts[dateKey] = dayWorkout;
+          state = { ...state, workouts: newWorkouts, modalContext: { type: 'EDIT_WORKOUT', date } };
+          break;
+      }
+      case 'ADD_REST_ITEM': {
+          const { date } = action.payload;
+          const dateKey = `workout-${date}`;
+          const newItem = {
+              id: `item-${Date.now()}`,
+              type: 'rest',
+              duration: 60
+          };
+          const newWorkouts = cloneWorkouts(state.workouts);
+          const dayWorkout = newWorkouts[dateKey] || [];
+          dayWorkout.push(newItem);
+          newWorkouts[dateKey] = dayWorkout;
+          state = { ...state, workouts: newWorkouts };
+          break;
+      }
+      case 'REMOVE_WORKOUT_ITEM': {
+          const { date, itemId } = action.payload;
+          const dateKey = `workout-${date}`;
+          const newWorkouts = cloneWorkouts(state.workouts);
+          const dayWorkout = newWorkouts[dateKey] || [];
+          newWorkouts[dateKey] = dayWorkout.filter(item => item.id !== itemId);
+          state = { ...state, workouts: newWorkouts };
+          break;
+      }
+      case 'UPDATE_REST_DURATION': {
+          const { date, itemId, newDuration } = action.payload;
+          const dateKey = `workout-${date}`;
+          const newWorkouts = cloneWorkouts(state.workouts);
+          const dayWorkout = newWorkouts[dateKey] || [];
+          const itemIndex = dayWorkout.findIndex(item => item.id === itemId);
+          if (itemIndex > -1 && dayWorkout[itemIndex].type === 'rest') {
+              dayWorkout[itemIndex].duration = newDuration;
+              newWorkouts[dateKey] = dayWorkout;
+              state = { ...state, workouts: newWorkouts };
+          }
+          break;
+      }
       case 'START_WORKOUT': {
         const { date } = action.payload;
         const dateKey = `workout-${date}`;
@@ -56,16 +112,32 @@ function createStore() {
       case 'ADVANCE_TRAINER_LOGIC': {
         const { activeWorkout, trainerContext } = state;
         const currentItem = activeWorkout.items[trainerContext.itemIndex];
+
+        // Logica per avanzamento in esercizi a tempo
+        if (currentItem.type === 'time') {
+            if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
+                let nextContext = { ...trainerContext, itemIndex: trainerContext.itemIndex + 1 };
+                const nextItem = activeWorkout.items[nextContext.itemIndex];
+                if(nextItem.type === 'exercise') {
+                    nextContext.currentSeries = 1;
+                    nextContext.currentRep = 1;
+                }
+                state = { ...state, trainerState: 'preparing', trainerContext: nextContext };
+            } else {
+                state = { ...state, trainerState: 'finished' };
+            }
+            break;
+        }
+
+        // Logica per avanzamento in esercizi a ripetizioni
         const maxReps = currentItem.reps || 1;
         const maxSeries = currentItem.series || 1;
-
         let nextContext = { ...trainerContext };
         let nextState = state.trainerState;
 
         if (nextContext.currentRep < maxReps) {
           nextContext.currentRep++;
-          // Passa direttamente alla prossima ripetizione senza tornare a 'ready'
-          nextState = 'preparing'; // Inizia subito la preparazione per la prossima rep
+          nextState = 'preparing';
         } else if (nextContext.currentSeries < maxSeries) {
           nextContext.currentSeries++;
           nextContext.currentRep = 1;
@@ -79,10 +151,10 @@ function createStore() {
             if(nextItem.type === 'exercise') {
               nextContext.currentSeries = 1;
               nextContext.currentRep = 1;
-              nextState = 'preparing'; // Prepara il prossimo esercizio
+              nextState = 'preparing';
             } else {
               nextContext.restDuration = nextItem.duration;
-              nextState = 'rest'; // Esegui un item di riposo
+              nextState = 'rest';
             }
           } else {
             nextState = 'finished';
@@ -99,7 +171,6 @@ function createStore() {
       console.log(`Action: ${action.type}`, action.payload);
       if (state.workouts !== oldState.workouts) {
         saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
-        console.log('Workouts salvati in localStorage.');
       }
       notify();
     }
