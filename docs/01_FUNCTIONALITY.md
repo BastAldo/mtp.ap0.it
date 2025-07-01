@@ -74,39 +74,39 @@ The editor is a modal system for managing a day's workout routine. It allows for
 -   **Activation:** Triggered by clicking the "START" button on a day cell in the calendar.
 
 ```plaintext
-// State: Action (Reps-based, 50% through "DOWN" phase)
+// State: Paused during a rest period.
 +-----------------------------------------+
-|  ** SQUAT ** |
-|  SERIES 1 / 3   |   REP 1 / 10          |
+|  ** RIPOSO ** |
+|  SERIES 1 / 3   |   REP 10 / 10         |
 |-----------------------------------------|
 |                                         |
-|      /```\       DOWN                   |
-|     | 50% |      1s                     |
+|      /```\       PAUSA                  |
+|     | ||| |      45s                    |
 |      \___/                              |
 |                                         |
 |-----------------------------------------|
-|  Lower your body with control.          |
-|  [           PAUSE           ]          |
+|  Recupera.                              |
+|  [          RIPRENDI          ]         |
 +-----------------------------------------+
 ```
 
 #### Trainer State Machine & Flow
 The trainer operates as a state machine. The primary user flow is as follows:
 
-1.  **Ready (`ready`):** The trainer displays the current exercise and series number. Awaits user input to begin.
-2.  **Announcing (`announcing`):** Before every new action phase, this 0.75-second state is activated. It displays the name of the upcoming phase (e.g., "UP", "REST") with a flashing visual effect and an audio tick to alert the user. It then automatically transitions to the announced phase.
-3.  **Preparing (`preparing`):** A 3-second countdown to prepare the user for the first series of an exercise.
+1.  **Ready (`ready`):** The initial state. The trainer displays the first exercise and awaits user input to begin.
+2.  **Preparing (`preparing`):** A 3-second countdown that runs **only once** at the very beginning of the workout to prepare the user.
+3.  **Announcing (`announcing`):** Before every new action phase, this 0.75-second state is activated. It displays the name of the upcoming phase (e.g., "UP", "REST") with a flashing visual effect to alert the user.
 4.  **Action (`action`):** The core execution phase.
-    -   For **`reps`**-based exercises, the trainer automatically cycles through timed phases (e.g., `up`, `hold`, `down`). Each phase is preceded by the `announcing` state.
+    -   For **`reps`**-based exercises, the trainer automatically cycles through timed phases (e.g., `up`, `hold`, `down`).
     -   For **`time`**-based exercises, a single countdown for the specified `duration` is run.
-5.  **Paused (`paused`):** The user can pause the workout at any time.
-6.  **Rest (`rest`):** This state is triggered when a "Rest" item is encountered in the workout list. It runs a countdown for the user-defined duration.
-7.  **Advancement:** After any state completes, the system proceeds to the next item in the workout list.
+5.  **Rest (`rest`):** This state is triggered when a "Rest" item is encountered. It runs a countdown for the user-defined duration.
+6.  **Paused (`paused`):** The user can pause the workout at any time during `preparing`, `action`, or `rest`. The timer and animation freeze. The user must click "RIPRENDI" to continue.
+7.  **Advancement:** After any state completes, the system automatically proceeds to the next item in the workout list.
 8.  **Finished (`finished`):** Once all items in the routine are complete, the trainer automatically transitions to the Debriefing View.
 
 ### 2.4. Debriefing View
 
--   **Activation:** Appears automatically when a workout is completed or manually terminated.
+-   **Activation:** Appears automatically when a workout is completed.
 -   **Content:** Displays a summary of all exercises completed.
 -   **Actions:** "Copy for Coach" and "Return to Calendar".
 

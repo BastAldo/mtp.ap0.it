@@ -3,7 +3,6 @@ import { getExerciseById } from './exerciseRepository.js';
 
 const WORKOUTS_STORAGE_KEY = 'workouts';
 
-// Helper per clonare lo stato dei workout
 const cloneWorkouts = (workouts) => JSON.parse(JSON.stringify(workouts));
 
 function createStore() {
@@ -105,6 +104,23 @@ function createStore() {
         state = { ...state, trainerState: action.payload };
         break;
       }
+      case 'PAUSE_TRAINER': {
+        if (state.trainerState === 'paused' || state.trainerState === 'ready' || state.trainerState === 'finished') break;
+        const { remaining, duration } = action.payload;
+        const stateBeforePause = state.trainerState;
+        state = {
+          ...state,
+          trainerState: 'paused',
+          trainerContext: { ...state.trainerContext, remaining, duration, stateBeforePause },
+        };
+        break;
+      }
+      case 'RESUME_TRAINER': {
+        if (state.trainerState !== 'paused') break;
+        const { stateBeforePause } = state.trainerContext;
+        state = { ...state, trainerState: stateBeforePause };
+        break;
+      }
       case 'UPDATE_TRAINER_CONTEXT': {
         state = { ...state, trainerContext: { ...state.trainerContext, ...action.payload }};
         break;
@@ -112,54 +128,59 @@ function createStore() {
       case 'ADVANCE_TRAINER_LOGIC': {
         const { activeWorkout, trainerContext } = state;
         const currentItem = activeWorkout.items[trainerContext.itemIndex];
+        let nextContext = { ...trainerContext };
+        let nextState;
+
+        // Logica unificata per avanzare al prossimo item
+        const advanceToNextItem = () => {
+            if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
+                nextContext.itemIndex++;
+                const nextItem = activeWorkout.items[nextContext.itemIndex];
+                if (nextItem.type === 'exercise' || nextItem.type === 'time') {
+                    nextContext.currentSeries = 1;
+                    nextContext.currentRep = 1;
+                    nextState = 'announcing';
+                } else { // rest
+                    nextContext.restDuration = nextItem.duration;
+                    nextState = 'rest';
+                }
+            } else {
+                nextState = 'finished';
+            }
+        };
 
         // Logica per avanzamento in esercizi a tempo
         if (currentItem.type === 'time') {
-            if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
-                let nextContext = { ...trainerContext, itemIndex: trainerContext.itemIndex + 1 };
-                const nextItem = activeWorkout.items[nextContext.itemIndex];
-                if(nextItem.type === 'exercise') {
-                    nextContext.currentSeries = 1;
-                    nextContext.currentRep = 1;
-                }
-                state = { ...state, trainerState: 'preparing', trainerContext: nextContext };
+            if (nextContext.currentSeries < currentItem.series) {
+                nextContext.currentSeries++;
+                nextContext.restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60;
+                nextState = 'rest';
             } else {
-                state = { ...state, trainerState: 'finished' };
+                advanceToNextItem();
             }
-            break;
         }
-
         // Logica per avanzamento in esercizi a ripetizioni
-        const maxReps = currentItem.reps || 1;
-        const maxSeries = currentItem.series || 1;
-        let nextContext = { ...trainerContext };
-        let nextState = state.trainerState;
+        else if (currentItem.type === 'exercise') {
+            const maxReps = currentItem.reps || 1;
+            const maxSeries = currentItem.series || 1;
 
-        if (nextContext.currentRep < maxReps) {
-          nextContext.currentRep++;
-          nextState = 'preparing';
-        } else if (nextContext.currentSeries < maxSeries) {
-          nextContext.currentSeries++;
-          nextContext.currentRep = 1;
-          const exerciseDef = getExerciseById(currentItem.exerciseId);
-          nextContext.restDuration = exerciseDef?.defaultRest || 60;
-          nextState = 'rest';
-        } else {
-          if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
-            nextContext.itemIndex++;
-            const nextItem = activeWorkout.items[nextContext.itemIndex];
-            if(nextItem.type === 'exercise') {
-              nextContext.currentSeries = 1;
-              nextContext.currentRep = 1;
-              nextState = 'preparing';
+            if (nextContext.currentRep < maxReps) {
+                nextContext.currentRep++;
+                nextState = 'announcing';
+            } else if (nextContext.currentSeries < maxSeries) {
+                nextContext.currentSeries++;
+                nextContext.currentRep = 1;
+                nextContext.restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60;
+                nextState = 'rest';
             } else {
-              nextContext.restDuration = nextItem.duration;
-              nextState = 'rest';
+                advanceToNextItem();
             }
-          } else {
-            nextState = 'finished';
-          }
         }
+        // Logica per avanzare dopo un riposo
+        else if (currentItem.type === 'rest') {
+            advanceToNextItem();
+        }
+
         state = { ...state, trainerState: nextState, trainerContext: nextContext };
         break;
       }
@@ -168,7 +189,6 @@ function createStore() {
         return;
     }
     if (state !== oldState) {
-      console.log(`Action: ${action.type}`, action.payload);
       if (state.workouts !== oldState.workouts) {
         saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
       }

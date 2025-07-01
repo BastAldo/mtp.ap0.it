@@ -1,9 +1,138 @@
-commit_message: "chore: Ripristina a stato stabile 318eb26 pre-timeline"
+commit_message: "feat: Implementa pausa/ripresa e ottimizza flusso 'preparing'"
 rationale: |
-  Questo commit riporta il codebase allo stato stabile del commit 318eb26. Questa è l'ultima versione funzionante prima dell'introduzione della feature "Workout Timeline" che ha causato instabilità.
+  Questo commit introduce due miglioramenti chiave all'Interactive Trainer.
 
-  Tutta la documentazione è stata sincronizzata con questo stato. Il file `05_STATUS.md` ora indica che il prossimo passo è l'implementazione della pausa, come da progressione logica.
+  1.  **Funzionalità di Pausa e Ripresa**: L'utente può ora mettere in pausa il timer durante qualsiasi fase attiva (`preparing`, `action`, `rest`) e riprenderlo. Questo è stato implementato aggiungendo uno stato `paused` alla state machine, una logica per salvare e ripristinare lo stato del timer, e aggiornando l'interfaccia utente di conseguenza.
+
+  2.  **Ottimizzazione del Flusso "Preparing"**: Lo stato `preparing` di 3 secondi ora viene eseguito solo una volta all'inizio dell'intero workout, invece che prima di ogni serie. Questo rende il flusso di allenamento più snello e meno ripetitivo.
+
+  La documentazione (`01_FUNCTIONALITY.md` e `05_STATUS.md`) è stata aggiornata per riflettere queste modifiche.
 patches:
+  - file: docs/01_FUNCTIONALITY.md
+    content: |
+      # App Functionality Specification
+
+      This document outlines the core features and operational logic of the "Mio Trainer Personale" web application.
+
+      ## 1. Core Concept
+
+      The application is a single-page app (SPA) designed for users to schedule, execute, and track workouts. All user data is persisted locally in the browser's `localStorage`.
+
+      ## 2. Main Views
+
+      The application operates using three primary, mutually exclusive views: `Calendar`, `Trainer`, and `Debriefing`.
+
+      ### 2.1. Calendar View
+
+      -   **Function:** The main dashboard and default view of the application.
+      -   **Display:** It presents a weekly grid layout.
+      -   **Navigation:** Users can navigate to the previous or next week.
+      -   **Day Cells:** Each cell represents a day and displays a summary of the number of exercises scheduled for that day. A "START" button is enabled if one or more exercises are scheduled.
+      -   **Interaction:** Clicking a day cell (but not the "START" button) opens the Workout Editor modal for that specific date.
+
+      ```plaintext
+      +-------------------------------------------------------------------------+
+      |  <- PREV WEEK         WEEK OF 2025-06-30         NEXT WEEK ->            |
+      +-------------------------------------------------------------------------+
+      | MONDAY 30      | TUESDAY 01     | WEDNESDAY 02   | THURSDAY 03    | ...  |
+      |----------------|----------------|----------------|----------------|------|
+      | 3 Exercises    | 0 Exercises    | 2 Exercises    | (No Workout)   |      |
+      |                |                |                |                |      |
+      | [   START   ]  |                | [   START   ]  |                |      |
+      +-------------------------------------------------------------------------+
+      ```
+
+      ### 2.2. Workout Editor (Modal System)
+
+      The editor is a modal system for managing a day's workout routine. It allows for the composition of exercises and configurable rest periods.
+
+      -   **Daily Workout Modal:**
+          -   Triggered by clicking a day cell.
+          -   Displays a list of items (exercises or rests) currently scheduled for the selected date.
+          -   Allows **removal** of any item from the list.
+          -   For "Rest" items, the duration is **editable inline**.
+          -   Contains an "Add Exercise" button to open the Exercise Library modal and an "Add Rest" button to insert a new rest period.
+      -   **Exercise Library Modal:**
+          -   Triggered by the "Add Exercise" button.
+          -   Displays a list of all **available exercises** from the application's library.
+
+      ```plaintext
+      // Stage 1: Daily Workout Modal with an editable Rest item.
+      +------------------------------------------+
+      | WORKOUT - MONDAY 30                      |
+      |------------------------------------------|
+      | - Squat (3x10)                 [Remove]  |
+      | - Rest: [ 60 ] seconds         [Remove]  |
+      | - Push-ups (3x12)              [Remove]  |
+      |                                          |
+      |    [Add Exercise] [+ Aggiungi Riposo]    |
+      +------------------------------------------+
+
+      // Stage 2: User clicks [Add Exercise] to open the library.
+      // Clicking [+ Aggiungi Riposo] directly adds a new rest item to the list above.
+      +----------------------------------+
+      | EXERCISE LIBRARY                 |
+      |----------------------------------|
+      | - Bench Press          [Add]     |
+      | - Deadlift             [Add]     |
+      | ... (scrollable) ...             |
+      |                        [Close]   |
+      +----------------------------------+
+      ```
+
+      ### 2.3. Interactive Trainer View
+
+      -   **Function:** An interactive, state-driven interface that guides the user through a scheduled workout in real-time. It features a large SVG Progress Ring for at-a-glance timer feedback. The phase name (e.g., UP, HOLD) and timer are displayed inside the ring. The exercise description is shown below it.
+      -   **Activation:** Triggered by clicking the "START" button on a day cell in the calendar.
+
+      ```plaintext
+      // State: Paused during a rest period.
+      +-----------------------------------------+
+      |  ** RIPOSO ** |
+      |  SERIES 1 / 3   |   REP 10 / 10         |
+      |-----------------------------------------|
+      |                                         |
+      |      /```\       PAUSA                  |
+      |     | ||| |      45s                    |
+      |      \___/                              |
+      |                                         |
+      |-----------------------------------------|
+      |  Recupera.                              |
+      |  [          RIPRENDI          ]         |
+      +-----------------------------------------+
+      ```
+
+      #### Trainer State Machine & Flow
+      The trainer operates as a state machine. The primary user flow is as follows:
+
+      1.  **Ready (`ready`):** The initial state. The trainer displays the first exercise and awaits user input to begin.
+      2.  **Preparing (`preparing`):** A 3-second countdown that runs **only once** at the very beginning of the workout to prepare the user.
+      3.  **Announcing (`announcing`):** Before every new action phase, this 0.75-second state is activated. It displays the name of the upcoming phase (e.g., "UP", "REST") with a flashing visual effect to alert the user.
+      4.  **Action (`action`):** The core execution phase.
+          -   For **`reps`**-based exercises, the trainer automatically cycles through timed phases (e.g., `up`, `hold`, `down`).
+          -   For **`time`**-based exercises, a single countdown for the specified `duration` is run.
+      5.  **Rest (`rest`):** This state is triggered when a "Rest" item is encountered. It runs a countdown for the user-defined duration.
+      6.  **Paused (`paused`):** The user can pause the workout at any time during `preparing`, `action`, or `rest`. The timer and animation freeze. The user must click "RIPRENDI" to continue.
+      7.  **Advancement:** After any state completes, the system automatically proceeds to the next item in the workout list.
+      8.  **Finished (`finished`):** Once all items in the routine are complete, the trainer automatically transitions to the Debriefing View.
+
+      ### 2.4. Debriefing View
+
+      -   **Activation:** Appears automatically when a workout is completed.
+      -   **Content:** Displays a summary of all exercises completed.
+      -   **Actions:** "Copy for Coach" and "Return to Calendar".
+
+      ```plaintext
+      +-----------------------------------------+
+      |  WORKOUT COMPLETED!                     |
+      |-----------------------------------------|
+      |  Summary:                               |
+      |   - Squat: 3 series completed           |
+      |   - Push-ups: 3 series completed        |
+      |                                         |
+      |  [ Copy for Coach ] [Return to Calendar] |
+      +-----------------------------------------+
+      ```
   - file: docs/05_STATUS.md
     content: |
       # Stato Attuale del Progetto
@@ -17,56 +146,227 @@ patches:
       - [x] announcing
       - [x] action
       - [x] rest
-      - [ ] **paused <-- PROSSIMO STEP**
+      - [x] **paused**
       - [ ] finished
 
       ### Altre Funzionalità:
       - [x] Calendar View
       - [x] Workout Editor (Completo)
       - [ ] Debriefing View
-  - file: src/views/WorkoutEditorView.js
+  - file: src/modules/store.js
     content: |
-      import store from '../modules/store.js';
+      import { saveToStorage } from './storage.js';
+      import { getExerciseById } from './exerciseRepository.js';
 
-      export function render(context) {
-          const { workouts } = store.getState();
-          const dateKey = `workout-${context.date}`;
-          const workoutItems = workouts[dateKey];
+      const WORKOUTS_STORAGE_KEY = 'workouts';
 
-          if (!workoutItems || workoutItems.length === 0) {
-              return '<div class="workout-editor-content"><p>Nessun allenamento programmato per questo giorno.</p></div>';
-          }
+      const cloneWorkouts = (workouts) => JSON.parse(JSON.stringify(workouts));
 
-          const itemsHtml = workoutItems.map(item => {
-              let infoContent = '', detailsContent = '';
-              switch (item.type) {
-                  case 'exercise':
-                      infoContent = `<span class="item-name">${item.name}</span>`;
-                      detailsContent = `<span class="item-details">${item.series || 1}x${item.reps}</span>`;
-                      break;
-                  case 'time':
-                      infoContent = `<span class="item-name">${item.name}</span>`;
-                      detailsContent = `<span class="item-details">${item.series || 1}x${item.duration}s</span>`;
-                      break;
-                  case 'rest':
-                      infoContent = `<span class="item-name">Riposo</span>`;
-                      detailsContent = `<input type="number" class="rest-duration-input" value="${item.duration}" data-item-id="${item.id}" /> s`;
-                      break;
+      function createStore() {
+        let state = {
+          currentView: 'calendar',
+          focusedDate: new Date(),
+          workouts: {},
+          isModalOpen: false,
+          modalContext: null,
+          activeWorkout: null,
+          trainerState: 'idle',
+          trainerContext: {},
+        };
+
+        const subscribers = new Set();
+        function notify() { subscribers.forEach(callback => callback()); }
+
+        function dispatch(action) {
+          const oldState = state;
+          switch (action.type) {
+            case 'CHANGE_VIEW': state = { ...state, currentView: action.payload }; break;
+            case 'PREV_WEEK': { const d=new Date(state.focusedDate); d.setDate(d.getDate()-7); state={...state, focusedDate:d}; break; }
+            case 'NEXT_WEEK': { const d=new Date(state.focusedDate); d.setDate(d.getDate()+7); state={...state, focusedDate:d}; break; }
+            case 'SET_WORKOUTS': state = { ...state, workouts: action.payload }; break;
+            case 'OPEN_MODAL': state = { ...state, isModalOpen: true, modalContext: action.payload }; break;
+            case 'CLOSE_MODAL': state = { ...state, isModalOpen: false, modalContext: null }; break;
+            case 'ADD_EXERCISE_ITEM': {
+                const { date, exerciseId } = action.payload;
+                const dateKey = `workout-${date}`;
+                const exercise = getExerciseById(exerciseId);
+                if (!exercise) break;
+
+                const newItem = {
+                    ...exercise,
+                    id: `item-${Date.now()}`,
+                    type: 'exercise',
+                    exerciseId: exercise.id,
+                };
+
+                const newWorkouts = cloneWorkouts(state.workouts);
+                const dayWorkout = newWorkouts[dateKey] || [];
+                dayWorkout.push(newItem);
+                newWorkouts[dateKey] = dayWorkout;
+                state = { ...state, workouts: newWorkouts, modalContext: { type: 'EDIT_WORKOUT', date } };
+                break;
+            }
+            case 'ADD_REST_ITEM': {
+                const { date } = action.payload;
+                const dateKey = `workout-${date}`;
+                const newItem = {
+                    id: `item-${Date.now()}`,
+                    type: 'rest',
+                    duration: 60
+                };
+                const newWorkouts = cloneWorkouts(state.workouts);
+                const dayWorkout = newWorkouts[dateKey] || [];
+                dayWorkout.push(newItem);
+                newWorkouts[dateKey] = dayWorkout;
+                state = { ...state, workouts: newWorkouts };
+                break;
+            }
+            case 'REMOVE_WORKOUT_ITEM': {
+                const { date, itemId } = action.payload;
+                const dateKey = `workout-${date}`;
+                const newWorkouts = cloneWorkouts(state.workouts);
+                const dayWorkout = newWorkouts[dateKey] || [];
+                newWorkouts[dateKey] = dayWorkout.filter(item => item.id !== itemId);
+                state = { ...state, workouts: newWorkouts };
+                break;
+            }
+            case 'UPDATE_REST_DURATION': {
+                const { date, itemId, newDuration } = action.payload;
+                const dateKey = `workout-${date}`;
+                const newWorkouts = cloneWorkouts(state.workouts);
+                const dayWorkout = newWorkouts[dateKey] || [];
+                const itemIndex = dayWorkout.findIndex(item => item.id === itemId);
+                if (itemIndex > -1 && dayWorkout[itemIndex].type === 'rest') {
+                    dayWorkout[itemIndex].duration = newDuration;
+                    newWorkouts[dateKey] = dayWorkout;
+                    state = { ...state, workouts: newWorkouts };
+                }
+                break;
+            }
+            case 'START_WORKOUT': {
+              const { date } = action.payload;
+              const dateKey = `workout-${date}`;
+              const workoutItems = state.workouts[dateKey];
+              if (!workoutItems || workoutItems.length === 0) break;
+              state = {
+                ...state,
+                currentView: 'trainer',
+                activeWorkout: { date, items: workoutItems },
+                trainerState: 'ready',
+                trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1 }
+              };
+              break;
+            }
+            case 'SET_TRAINER_STATE': {
+              state = { ...state, trainerState: action.payload };
+              break;
+            }
+            case 'PAUSE_TRAINER': {
+              if (state.trainerState === 'paused' || state.trainerState === 'ready' || state.trainerState === 'finished') break;
+              const { remaining, duration } = action.payload;
+              const stateBeforePause = state.trainerState;
+              state = {
+                ...state,
+                trainerState: 'paused',
+                trainerContext: { ...state.trainerContext, remaining, duration, stateBeforePause },
+              };
+              break;
+            }
+            case 'RESUME_TRAINER': {
+              if (state.trainerState !== 'paused') break;
+              const { stateBeforePause } = state.trainerContext;
+              state = { ...state, trainerState: stateBeforePause };
+              break;
+            }
+            case 'UPDATE_TRAINER_CONTEXT': {
+              state = { ...state, trainerContext: { ...state.trainerContext, ...action.payload }};
+              break;
+            }
+            case 'ADVANCE_TRAINER_LOGIC': {
+              const { activeWorkout, trainerContext } = state;
+              const currentItem = activeWorkout.items[trainerContext.itemIndex];
+              let nextContext = { ...trainerContext };
+              let nextState;
+
+              // Logica unificata per avanzare al prossimo item
+              const advanceToNextItem = () => {
+                  if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
+                      nextContext.itemIndex++;
+                      const nextItem = activeWorkout.items[nextContext.itemIndex];
+                      if (nextItem.type === 'exercise' || nextItem.type === 'time') {
+                          nextContext.currentSeries = 1;
+                          nextContext.currentRep = 1;
+                          nextState = 'announcing';
+                      } else { // rest
+                          nextContext.restDuration = nextItem.duration;
+                          nextState = 'rest';
+                      }
+                  } else {
+                      nextState = 'finished';
+                  }
+              };
+
+              // Logica per avanzamento in esercizi a tempo
+              if (currentItem.type === 'time') {
+                  if (nextContext.currentSeries < currentItem.series) {
+                      nextContext.currentSeries++;
+                      nextContext.restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60;
+                      nextState = 'rest';
+                  } else {
+                      advanceToNextItem();
+                  }
               }
-              return `
-                  <li class="workout-item workout-item--${item.type}">
-                      <div class="item-info">${infoContent}${detailsContent}</div>
-                      <button class="remove-item-btn" data-item-id="${item.id}" title="Rimuovi item">&times;</button>
-                  </li>`;
-          }).join('');
+              // Logica per avanzamento in esercizi a ripetizioni
+              else if (currentItem.type === 'exercise') {
+                  const maxReps = currentItem.reps || 1;
+                  const maxSeries = currentItem.series || 1;
 
-          return `<div class="workout-editor-content"><ul class="workout-item-list">${itemsHtml}</ul></div>`;
+                  if (nextContext.currentRep < maxReps) {
+                      nextContext.currentRep++;
+                      nextState = 'announcing';
+                  } else if (nextContext.currentSeries < maxSeries) {
+                      nextContext.currentSeries++;
+                      nextContext.currentRep = 1;
+                      nextContext.restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60;
+                      nextState = 'rest';
+                  } else {
+                      advanceToNextItem();
+                  }
+              }
+              // Logica per avanzare dopo un riposo
+              else if (currentItem.type === 'rest') {
+                  advanceToNextItem();
+              }
+
+              state = { ...state, trainerState: nextState, trainerContext: nextContext };
+              break;
+            }
+            default:
+              console.warn(`Azione non riconosciuta: ${action.type}`);
+              return;
+          }
+          if (state !== oldState) {
+            if (state.workouts !== oldState.workouts) {
+              saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
+            }
+            notify();
+          }
+        }
+        return {
+          getState: () => ({ ...state }),
+          subscribe: (callback) => { subscribers.add(callback); return () => subscribers.delete(callback); },
+          dispatch,
+        };
       }
+      const store = createStore();
+      export default store;
   - file: src/views/TrainerView.js
     content: |
       import store from '../modules/store.js';
 
       let animationFrameId = null;
+      let animationStartTime = null;
+      let animationPausedTime = null;
 
       function advanceTrainer() {
         store.dispatch({ type: 'ADVANCE_TRAINER_LOGIC' });
@@ -83,18 +383,19 @@ patches:
           runNextPhase() {
               const { activeWorkout, trainerContext } = store.getState();
               const currentExercise = activeWorkout.items[trainerContext.itemIndex];
-              if (currentExercise.type === 'time') {
-                  store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'action' });
+              // Gli esercizi 'time' ora seguono lo stesso flusso di 'announcing' -> 'action'
+              const isTimeBased = currentExercise.type === 'time';
+              if (isTimeBased) {
+                  store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'announcing' });
                   return;
               }
               const tempo = currentExercise.tempo || { up: 1, hold: 1, down: 2 };
               const phases = Object.keys(tempo);
-              const currentPhaseIndex = trainerContext.currentPhaseIndex;
-              if (currentPhaseIndex >= phases.length) {
+              if (trainerContext.currentPhaseIndex >= phases.length) {
                   advanceTrainer();
                   return;
               }
-              const phaseName = phases[currentPhaseIndex];
+              const phaseName = phases[trainerContext.currentPhaseIndex];
               store.dispatch({ type: 'UPDATE_TRAINER_CONTEXT', payload: { currentPhase: phaseName } });
               store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'announcing' });
           },
@@ -102,13 +403,17 @@ patches:
               const { activeWorkout, trainerContext } = store.getState();
               const currentItem = activeWorkout.items[trainerContext.itemIndex];
               let duration;
+              let onCompleteCallback;
+
               if (currentItem.type === 'time') {
                   duration = (currentItem.duration || 10) * 1000;
+                  onCompleteCallback = advanceTrainer;
               } else {
                   const tempo = currentItem.tempo || { up: 1, hold: 1, down: 2 };
                   duration = (tempo[trainerContext.currentPhase] || 1) * 1000;
+                  onCompleteCallback = () => this.runNextPhaseAfterAction(trainerContext);
               }
-              this.element.dispatchEvent(new CustomEvent('animateRing', { detail: { duration, onComplete: currentItem.type === 'time' ? advanceTrainer : () => this.runNextPhaseAfterAction(trainerContext) } }));
+              this.element.dispatchEvent(new CustomEvent('animateRing', { detail: { duration, onComplete: onCompleteCallback } }));
           },
           runNextPhaseAfterAction(prevContext) {
             store.dispatch({ type: 'UPDATE_TRAINER_CONTEXT', payload: { currentPhaseIndex: prevContext.currentPhaseIndex + 1 } });
@@ -121,9 +426,27 @@ patches:
           
           element.addEventListener('click', (event) => {
               const mainButton = event.target.closest('.trainer-main-btn');
-              if (mainButton) {
-                  const currentState = store.getState().trainerState;
-                  if (currentState === 'ready') store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'preparing' });
+              if (!mainButton) return;
+              
+              const { trainerState } = store.getState();
+              switch (trainerState) {
+                  case 'ready':
+                      store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'preparing' });
+                      break;
+                  case 'paused':
+                      store.dispatch({ type: 'RESUME_TRAINER' });
+                      break;
+                  case 'preparing':
+                  case 'action':
+                  case 'rest': {
+                      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                      const ringEl = element.querySelector('.progress-ring__foreground');
+                      const fullCirc = 2 * Math.PI * ringEl.r.baseVal.value;
+                      const elapsed = performance.now() - animationStartTime;
+                      const remaining = mainButton.dataset.duration - elapsed;
+                      store.dispatch({ type: 'PAUSE_TRAINER', payload: { remaining: remaining > 0 ? remaining : 0, duration: mainButton.dataset.duration } });
+                      break;
+                  }
               }
           });
 
@@ -133,15 +456,22 @@ patches:
               const timerEl = element.querySelector('.progress-ring__timer');
               if (!ringEl || !timerEl) return;
               const circumference = 2 * Math.PI * ringEl.r.baseVal.value;
-              let startTime = null;
-
+              const { trainerContext } = store.getState();
+              
+              const isResuming = trainerContext.stateBeforePause && trainerContext.remaining > 0;
+              const duration = isResuming ? trainerContext.remaining : detail.duration;
+              let startTime = performance.now();
+              animationStartTime = startTime;
+              if (isResuming) {
+                  store.dispatch({ type: 'UPDATE_TRAINER_CONTEXT', payload: { remaining: 0, stateBeforePause: null }});
+              }
+              
               const animationStep = (timestamp) => {
-                  if (!startTime) startTime = timestamp;
                   const elapsed = timestamp - startTime;
-                  const progress = Math.min(1, elapsed / detail.duration);
+                  const progress = Math.min(1, elapsed / duration);
                   ringEl.style.strokeDashoffset = circumference * (1 - progress);
-                  timerEl.textContent = Math.ceil((detail.duration - elapsed) / 1000);
-                  if (elapsed < detail.duration) {
+                  timerEl.textContent = Math.ceil((duration - elapsed) / 1000);
+                  if (elapsed < duration) {
                       animationFrameId = requestAnimationFrame(animationStep);
                   } else {
                       ringEl.style.strokeDashoffset = 0;
@@ -153,16 +483,26 @@ patches:
           });
 
           function runStateLogic() {
-              if (animationFrameId) cancelAnimationFrame(animationFrameId);
               const { trainerState, trainerContext } = store.getState();
+              
+              if (animationFrameId && trainerState !== 'paused') {
+                  cancelAnimationFrame(animationFrameId);
+                  animationFrameId = null;
+              }
+
               if (trainerState === 'preparing') {
-                  element.dispatchEvent(new CustomEvent('animateRing', { detail: { duration: 3000, onComplete: () => PhasedExerciseRunner.start() } }));
+                  element.dispatchEvent(new CustomEvent('animateRing', { detail: { duration: 3000, onComplete: advanceTrainer } }));
               } else if (trainerState === 'announcing') {
                   setTimeout(() => store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'action' }), 750);
               } else if (trainerState === 'action') {
                   PhasedExerciseRunner.execute();
               } else if (trainerState === 'rest') {
-                  element.dispatchEvent(new CustomEvent('animateRing', { detail: { duration: (trainerContext.restDuration || 60) * 1000, onComplete: advanceTrainer } }));
+                  const duration = (trainerContext.restDuration || 60) * 1000;
+                  element.dispatchEvent(new CustomEvent('animateRing', { detail: { duration, onComplete: advanceTrainer } }));
+              } else if (trainerState === 'paused') {
+                  if (trainerContext.stateBeforePause) {
+                    element.dispatchEvent(new CustomEvent('animateRing', { detail: { duration: trainerContext.duration } }));
+                  }
               }
           }
 
@@ -175,24 +515,36 @@ patches:
               let phaseText = '', instructionText = '', buttonText = '', timerText = '', phaseClass = '';
               let ringOffset = circumference;
               const isTimeBasedExercise = currentItem.type === 'time';
+              let currentDuration = 0;
+
               switch (trainerState) {
                   case 'ready':
                       phaseText = 'PRONTO'; instructionText = `Premi INIZIA per cominciare`; buttonText = 'INIZIA';
                       break;
                   case 'preparing':
-                      phaseText = 'PREPARATI'; instructionText = 'Inizia il movimento...'; buttonText = 'PAUSA'; timerText = '3';
+                      phaseText = 'PREPARATI'; instructionText = 'Inizia il movimento...'; buttonText = 'PAUSA'; timerText = '3'; currentDuration = 3000;
                       break;
                   case 'rest':
-                      phaseText = 'RIPOSO'; instructionText = 'Recupera'; buttonText = 'PAUSA'; timerText = trainerContext.restDuration || 60;
+                      phaseText = 'RIPOSO'; instructionText = 'Recupera'; buttonText = 'PAUSA'; timerText = trainerContext.restDuration || 60; currentDuration = (trainerContext.restDuration || 60) * 1000;
                       break;
                   case 'announcing':
-                      phaseText = isTimeBasedExercise ? 'ESEGUI' : (trainerContext.currentPhase?.toUpperCase() || '');
-                      instructionText = `Prossima fase: ${phaseText}`; buttonText = 'PAUSA';
-                      if (!isTimeBasedExercise) phaseClass = 'is-flashing';
+                      if (isTimeBasedExercise) phaseText = 'ESEGUI'; else phaseText = trainerContext.currentPhase?.toUpperCase() || '';
+                      instructionText = `Prossima fase: ${phaseText}`; buttonText = 'PAUSA'; phaseClass = 'is-flashing';
                       break;
                   case 'action':
-                      phaseText = isTimeBasedExercise ? 'ESEGUI' : (trainerContext.currentPhase?.toUpperCase() || '');
+                      if (isTimeBasedExercise) { phaseText = 'ESEGUI'; currentDuration = currentItem.duration * 1000; }
+                      else { phaseText = trainerContext.currentPhase?.toUpperCase() || ''; const tempo = currentItem.tempo || {}; currentDuration = (tempo[trainerContext.currentPhase] || 1) * 1000;}
                       instructionText = 'Esegui il movimento'; buttonText = 'PAUSA';
+                      break;
+                  case 'paused':
+                      const prevState = trainerContext.stateBeforePause;
+                      if(prevState === 'preparing') phaseText = 'PREPARATI';
+                      else if(prevState === 'rest') phaseText = 'RIPOSO';
+                      else if(isTimeBasedExercise) phaseText = 'ESEGUI';
+                      else phaseText = trainerContext.currentPhase?.toUpperCase() || '';
+                      instructionText = 'Pausa'; buttonText = 'RIPRENDI'; timerText = Math.ceil(trainerContext.remaining/1000);
+                      ringOffset = circumference * (1 - ( (trainerContext.duration - trainerContext.remaining) / trainerContext.duration) );
+                      currentDuration = trainerContext.duration;
                       break;
                   case 'finished':
                       phaseText = 'FINE'; instructionText = 'Workout completato!'; buttonText = 'DEBRIEFING';
@@ -200,7 +552,7 @@ patches:
                   default: phaseText = 'IDLE'; instructionText = 'Stato non riconosciuto'; buttonText = 'RESET';
               }
               const headerTitle = currentItem.name || 'Riposo';
-              const seriesText = `SERIE ${trainerContext.currentSeries} / ${currentItem.series || 1}`;
+              const seriesText = (isTimeBasedExercise || currentItem.type === 'exercise') ? `SERIE ${trainerContext.currentSeries} / ${currentItem.series || 1}` : '';
               const repsText = !isTimeBasedExercise ? `REP ${trainerContext.currentRep} / ${currentItem.reps || 1}` : '';
               element.innerHTML = `
                   <div class="trainer-container">
@@ -221,14 +573,17 @@ patches:
                       <footer class="trainer-footer">
                           <p class="trainer-instruction">${instructionText}</p>
                           <div class="trainer-controls">
-                              <button class="trainer-main-btn">${buttonText}</button>
+                              <button class="trainer-main-btn" data-duration="${currentDuration}">${buttonText}</button>
                           </div>
                       </footer>
                   </div>
               `;
-              runStateLogic();
+              if (trainerState !== 'paused') {
+                runStateLogic();
+              }
           }
           store.subscribe(render);
           render();
       }
-commands: []
+commands:
+  - "echo 'Funzionalità di Pausa/Ripresa e ottimizzazione del flusso implementate con successo.'"

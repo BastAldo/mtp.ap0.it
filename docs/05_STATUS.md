@@ -9,7 +9,7 @@
 - [x] announcing
 - [x] action
 - [x] rest
-- [ ] **paused <-- PROSSIMO STEP**
+- [x] **paused**
 - [ ] finished
 
 ### Altre Funzionalità:
