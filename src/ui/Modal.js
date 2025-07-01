@@ -45,4 +45,30 @@ export function init(element) {
                     break;
                 default:
                     headerContent = '<h3>Attenzione</h3>';
-                    bodyContent = '<p>Contenuto della modale non specificato.</p
+                    bodyContent = '<p>Contenuto della modale non specificato.</p>';
+            }
+            element.innerHTML = `
+                <div class="modal-content">
+                    <div class="modal-header">${headerContent}<button class="modal-close-btn">&times;</button></div>
+                    <div class="modal-body">${bodyContent}</div>
+                    ${actionsContent ? `<footer class="modal-actions">${actionsContent}</footer>` : ''}
+                </div>
+            `;
+            const closeButton = element.querySelector('.modal-close-btn');
+            if (closeButton) { closeButton.addEventListener('click', () => { store.dispatch({ type: 'CLOSE_MODAL' }); }); }
+
+            if (currentItemCount > previousItemCount) {
+                const modalBody = element.querySelector('.modal-body');
+                if (modalBody) { modalBody.scrollTop = modalBody.scrollHeight; }
+            }
+            previousItemCount = currentItemCount;
+
+        } else {
+            element.classList.remove('active');
+            element.innerHTML = '';
+            previousItemCount = 0;
+        }
+    }
+    store.subscribe(render);
+    render();
+}

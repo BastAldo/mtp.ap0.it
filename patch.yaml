@@ -149,4 +149,169 @@ patches:
                           break;
                       default:
                           headerContent = '<h3>Attenzione</h3>';
-                          bodyContent = '<p>Contenuto della modale non specificato.</p
+                          bodyContent = '<p>Contenuto della modale non specificato.</p>';
+                  }
+                  element.innerHTML = `
+                      <div class="modal-content">
+                          <div class="modal-header">${headerContent}<button class="modal-close-btn">&times;</button></div>
+                          <div class="modal-body">${bodyContent}</div>
+                          ${actionsContent ? `<footer class="modal-actions">${actionsContent}</footer>` : ''}
+                      </div>
+                  `;
+                  const closeButton = element.querySelector('.modal-close-btn');
+                  if (closeButton) { closeButton.addEventListener('click', () => { store.dispatch({ type: 'CLOSE_MODAL' }); }); }
+
+                  if (currentItemCount > previousItemCount) {
+                      const modalBody = element.querySelector('.modal-body');
+                      if (modalBody) { modalBody.scrollTop = modalBody.scrollHeight; }
+                  }
+                  previousItemCount = currentItemCount;
+
+              } else {
+                  element.classList.remove('active');
+                  element.innerHTML = '';
+                  previousItemCount = 0;
+              }
+          }
+          store.subscribe(render);
+          render();
+      }
+  - file: src/views/WorkoutEditorView.js
+    content: |
+      import store from '../modules/store.js';
+
+      export function render(context) {
+          const { workouts } = store.getState();
+          const dateKey = `workout-${context.date}`;
+          const workoutItems = workouts[dateKey];
+
+          if (!workoutItems || workoutItems.length === 0) {
+              return '<div class="workout-editor-content"><p>Nessun allenamento programmato per questo giorno.</p></div>';
+          }
+
+          const itemsHtml = workoutItems.map(item => {
+              let infoContent = '', detailsContent = '';
+              if (item.type === 'exercise') {
+                  infoContent = `<span class="item-name">${item.name}</span>`;
+                  detailsContent = `<span class="item-details">${item.series}x${item.reps}</span>`;
+              } else if (item.type === 'rest') {
+                  infoContent = `<span class="item-name">Riposo</span>`;
+                  detailsContent = `<input type="number" class="rest-duration-input" value="${item.duration}" data-item-id="${item.id}" /> s`;
+              }
+              return `
+                  <li class="workout-item workout-item--${item.type}">
+                      <div class="item-info">${infoContent}${detailsContent}</div>
+                      <button class="remove-item-btn" data-item-id="${item.id}" title="Rimuovi item">&times;</button>
+                  </li>`;
+          }).join('');
+
+          return `<div class="workout-editor-content"><ul class="workout-item-list">${itemsHtml}</ul></div>`;
+      }
+  - file: src/views/TrainerView.js
+    content: |
+      import store from '../modules/store.js';
+
+      // Variabile per tenere traccia del timer
+      let countdownTimer = null;
+
+      export function init(element) {
+          element.addEventListener('click', (event) => {
+              const mainButton = event.target.closest('.trainer-main-btn');
+              if (mainButton) {
+                  const currentState = store.getState().trainerState;
+                  if (currentState === 'ready') {
+                      store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'preparing' });
+                  }
+              }
+          });
+
+          function runStateLogic() {
+              const { trainerState } = store.getState();
+              // Pulisce sempre i timer precedenti quando lo stato cambia
+              if (countdownTimer) clearInterval(countdownTimer);
+
+              if (trainerState === 'preparing') {
+                  let countdown = 3;
+                  const timerEl = element.querySelector('.progress-ring__timer');
+                  if(timerEl) timerEl.textContent = countdown;
+
+                  countdownTimer = setInterval(() => {
+                      countdown--;
+                      if(timerEl) timerEl.textContent = countdown;
+                      if (countdown === 0) {
+                          clearInterval(countdownTimer);
+                          store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'announcing' });
+                      }
+                  }, 1000);
+              }
+          }
+
+          function render() {
+              const { activeWorkout, trainerState } = store.getState();
+              if (!activeWorkout) {
+                  element.innerHTML = '<h2>Nessun workout attivo.</h2>';
+                  return;
+              }
+
+              const currentExercise = activeWorkout.items.find(item => item.type === 'exercise') || { name: 'Workout' };
+              const radius = 90;
+              const circumference = 2 * Math.PI * radius;
+
+              let phaseText = '', instructionText = '', buttonText = '', timerText = '';
+
+              switch (trainerState) {
+                  case 'ready':
+                      phaseText = 'READY';
+                      instructionText = 'Premi INIZIA per cominciare';
+                      buttonText = 'INIZIA';
+                      break;
+                  case 'preparing':
+                      phaseText = 'PREP';
+                      instructionText = 'Preparati...';
+                      buttonText = 'PAUSA';
+                      break;
+                  case 'announcing':
+                      phaseText = 'UP'; // Esempio
+                      instructionText = 'Prossima fase: UP';
+                      buttonText = 'PAUSA';
+                      break;
+                  default:
+                      phaseText = 'IDLE';
+                      instructionText = 'Stato non riconosciuto';
+                      buttonText = 'RESET';
+              }
+
+              element.innerHTML = `
+                  <div class="trainer-container">
+                      <header class="trainer-header">
+                          <h2>${currentExercise.name}</h2>
+                          <p>SERIES 1 / ${currentExercise.series || 3}</p>
+                      </header>
+                      <div class="progress-ring">
+                          <svg>
+                              <circle class="progress-ring__background" stroke-width="10" r="${radius}" cx="50%" cy="50%"></circle>
+                              <circle class="progress-ring__foreground" stroke-width="10" r="${radius}" cx="50%" cy="50%"
+                                  stroke-dasharray="${circumference}"
+                                  stroke-dashoffset="${circumference}"
+                              ></circle>
+                          </svg>
+                          <div class="progress-ring__text">
+                              <div class="progress-ring__phase">${phaseText}</div>
+                              <div class="progress-ring__timer">${timerText}</div>
+                          </div>
+                      </div>
+                      <footer class="trainer-footer">
+                          <p class="trainer-instruction">${instructionText}</p>
+                          <div class="trainer-controls">
+                              <button class="trainer-main-btn">${buttonText}</button>
+                          </div>
+                      </footer>
+                  </div>
+              `;
+              // Esegui la logica dello stato DOPO aver renderizzato il DOM
+              runStateLogic();
+          }
+          store.subscribe(render);
+          render();
+      }
+commands: []
