@@ -25,6 +25,7 @@ The editor is a modal system for managing a day's workout routine. It allows for
 -   **Daily Workout Modal:**
     -   Triggered by clicking a day cell.
     -   Displays a list of items (exercises or rests) currently scheduled for the selected date.
+    -   **Items in this list can be reordered via drag-and-drop.**
 -   **Exercise Library Modal:**
     -   Triggered by the "Add Exercise" button.
     -   Displays a list of all **available exercises** from the application's library.

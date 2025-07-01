@@ -26,7 +26,7 @@ function createStore() {
       if (actionType.startsWith('@@')) return; // Silences internal actions if any
       const { activeWorkout, trainerState, trainerContext } = state;
       if (!activeWorkout) {
-        console.log(`%c[${actionType}]`, 'color: #88aaff; font-weight: bold;', 'No active workout.');
+        // console.log(`%c[${actionType}]`, 'color: #88aaff; font-weight: bold;', 'No active workout.');
         return;
       }
 
@@ -101,6 +101,23 @@ function createStore() {
           }
           break;
       }
+      case 'REORDER_WORKOUT_ITEMS': {
+          const { date, draggedItemId, targetItemId } = action.payload;
+          const dateKey = `workout-${date}`;
+          const newWorkouts = cloneWorkouts(state.workouts);
+          const items = newWorkouts[dateKey] || [];
+          
+          const draggedIndex = items.findIndex(item => item.id === draggedItemId);
+          const targetIndex = items.findIndex(item => item.id === targetItemId);
+
+          if (draggedIndex > -1 && targetIndex > -1) {
+              const [draggedItem] = items.splice(draggedIndex, 1);
+              items.splice(targetIndex, 0, draggedItem);
+              newWorkouts[dateKey] = items;
+              newState = { ...state, workouts: newWorkouts };
+          }
+          break;
+      }
       case 'START_WORKOUT': {
         const { date } = action.payload;
         const dateKey = `workout-${date}`;
@@ -151,10 +168,7 @@ function createStore() {
         break;
       }
       case 'TIMER_COMPLETE': {
-        // Critical Bug Fix: Guard against race conditions.
-        if (!state.activeWorkout) {
-          return;
-        }
+        if (!state.activeWorkout) return;
 
         const { trainerState, activeWorkout, trainerContext } = state;
         const currentItem = activeWorkout.items[trainerContext.itemIndex];
@@ -230,7 +244,6 @@ function createStore() {
           }
 
           case 'rest': {
-            // After an explicit rest, always advance to the next item
             const advance = advanceToNextItem();
             if (advance) { nextState = advance.newState; nextContext = { ...nextContext, ...advance.newContext }; }
             else { nextState = 'finished'; }
@@ -241,7 +254,7 @@ function createStore() {
         break;
       }
       default:
-        action.type = '@@UNKNOWN'; // Prevents logging for unknown actions
+        action.type = '@@UNKNOWN';
         break;
     }
     state = newState;

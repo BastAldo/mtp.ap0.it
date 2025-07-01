@@ -4,10 +4,8 @@ import { render as renderExerciseLibrary } from '../views/ExerciseLibraryView.js
 
 export function init(element) {
     let previousItemCount = 0;
+    let draggedItemId = null;
 
-    element.addEventListener('click', (event) => { /* ... (invariato, come precedente) ... */ });
-    element.addEventListener('change', (event) => { /* ... (invariato, come precedente) ... */ });
-    // ... (resto del codice invariato) ...
     element.addEventListener('click', (event) => {
         if (event.target === element) { store.dispatch({ type: 'CLOSE_MODAL' }); return; }
         const removeBtn = event.target.closest('.remove-item-btn');
@@ -19,9 +17,60 @@ export function init(element) {
         const addToWorkoutBtn = event.target.closest('.add-to-workout-btn');
         if (addToWorkoutBtn) { const { exerciseId } = addToWorkoutBtn.dataset; const { date } = store.getState().modalContext; store.dispatch({ type: 'ADD_EXERCISE_ITEM', payload: { date, exerciseId } }); return; }
     });
+
     element.addEventListener('change', (event) => {
         const restInput = event.target.closest('.rest-duration-input');
         if (restInput) { const { itemId } = restInput.dataset; const { date } = store.getState().modalContext; const newDuration = parseInt(restInput.value, 10); if (itemId && date && !isNaN(newDuration)) { store.dispatch({ type: 'UPDATE_REST_DURATION', payload: { date, itemId, newDuration } }); } }
+    });
+
+    // Drag and Drop listeners
+    element.addEventListener('dragstart', (event) => {
+        const target = event.target.closest('.workout-item');
+        if (!target) return;
+        draggedItemId = target.dataset.itemId;
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', draggedItemId);
+        setTimeout(() => target.classList.add('dragging'), 0);
+    });
+
+    element.addEventListener('dragend', (event) => {
+        draggedItemId = null;
+        const draggingElement = element.querySelector('.workout-item.dragging');
+        if (draggingElement) {
+            draggingElement.classList.remove('dragging');
+        }
+    });
+
+    element.addEventListener('dragover', (event) => {
+        event.preventDefault();
+        const target = event.target.closest('.workout-item');
+        if (target && target.dataset.itemId !== draggedItemId) {
+            const currentlyActive = element.querySelector('.drag-over-target');
+            if (currentlyActive) currentlyActive.classList.remove('drag-over-target');
+            target.classList.add('drag-over-target');
+        }
+    });
+
+    element.addEventListener('dragleave', (event) => {
+        const target = event.target.closest('.drag-over-target');
+        if(target) target.classList.remove('drag-over-target');
+    });
+
+    element.addEventListener('drop', (event) => {
+        event.preventDefault();
+        const target = event.target.closest('.workout-item');
+        const currentlyActive = element.querySelector('.drag-over-target');
+        if (currentlyActive) currentlyActive.classList.remove('drag-over-target');
+
+        const targetItemId = target ? target.dataset.itemId : null;
+
+        if (draggedItemId && targetItemId && draggedItemId !== targetItemId) {
+            const { date } = store.getState().modalContext;
+            store.dispatch({
+                type: 'REORDER_WORKOUT_ITEMS',
+                payload: { date, draggedItemId, targetItemId }
+            });
+        }
     });
 
     function render() {

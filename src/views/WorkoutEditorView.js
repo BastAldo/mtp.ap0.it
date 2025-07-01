@@ -26,7 +26,7 @@ export function render(context) {
                 break;
         }
         return `
-            <li class="workout-item workout-item--${item.type}">
+            <li class="workout-item workout-item--${item.type}" draggable="true" data-item-id="${item.id}">
                 <div class="item-info">${infoContent}${detailsContent}</div>
                 <button class="remove-item-btn" data-item-id="${item.id}" title="Rimuovi item">&times;</button>
             </li>`;

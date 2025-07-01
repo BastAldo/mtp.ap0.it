@@ -108,8 +108,10 @@ body::-webkit-scrollbar-thumb, .modal-body::-webkit-scrollbar-thumb { background
 
 /* --- WORKOUT EDITOR & LIBRARY STYLES --- */
 .workout-item-list, .exercise-library-list { list-style: none; padding: 0; margin: 0; }
-.workout-item { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0.5rem; border-bottom: 1px solid var(--border-color); }
+.workout-item { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0.5rem; border-bottom: 1px solid var(--border-color); cursor: grab; }
 .workout-item:last-child { border-bottom: none; }
+.workout-item.dragging { opacity: 0.4; background-color: var(--border-color); }
+.workout-item.drag-over-target { border-top: 2px solid var(--primary-color); }
 .item-info { display: flex; align-items: baseline; gap: 0.75rem; flex-grow: 1; }
 .item-info .item-name { font-weight: bold; }
 .item-info .item-details { color: var(--secondary-color); }
@@ -169,7 +171,7 @@ body::-webkit-scrollbar-thumb, .modal-body::-webkit-scrollbar-thumb { background
 }
 .debrief-item--completed { border-left-color: var(--success-color); }
 .debrief-item--terminated { border-left-color: var(--danger-color); font-weight: bold; }
-.debrief-item--skipped { border-left-color: var(--text-color-muted); opacity: 0.6; animation: none; /* Don't animate skipped items that are already transparent */}
+.debrief-item--skipped { opacity: 0.6; animation: none; }
 .debriefing-actions { display: flex; justify-content: center; gap: 1rem; }
 .debriefing-actions button { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.8rem 1.5rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
 .debriefing-actions button:hover { border-color: var(--primary-color); color: var(--primary-color); }
