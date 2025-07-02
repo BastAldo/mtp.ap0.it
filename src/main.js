@@ -8,6 +8,7 @@ import { loadFromStorage, saveToStorage } from './modules/storage.js';
 import { mockWorkouts } from './modules/_mockData.js';
 
 const WORKOUTS_STORAGE_KEY = 'workouts';
+const TICK_INTERVAL = 100;
 
 const views = {
     calendar: document.getElementById('calendar-view'),
@@ -40,19 +41,43 @@ function handleViewChange() {
     newActiveViewEl.classList.add('view--active');
     currentActiveView = newActiveViewEl;
 
-    // Inizializza la vista solo la prima volta che viene mostrata
     if (!initializedViews.has(currentView)) {
-      if (currentView === 'trainer') {
-        initTrainerView(views.trainer);
-      } else if (currentView === 'debriefing') {
-        initDebriefingView(views.debriefing);
-      }
-      // Aggiungere qui l'inizializzazione di altre viste future
+      if (currentView === 'trainer') initTrainerView(views.trainer);
+      else if (currentView === 'debriefing') initDebriefingView(views.debriefing);
       initializedViews.add(currentView);
     }
   }
 }
 
+// --- Side Effect Handler for Trainer Timers ---
+let timerInterval = null;
+let lastTrainerState = 'idle';
+
+function handleTrainerEffects() {
+    const { trainerState, trainerContext } = store.getState();
+
+    // State changed, so we always clear the existing timer first.
+    if (trainerState !== lastTrainerState) {
+        if (timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
+
+        const statesWithTimers = ['preparing', 'announcing', 'action', 'rest'];
+        if (statesWithTimers.includes(trainerState)) {
+            // Set initial remaining time when a new timed state starts
+            store.dispatch({ type: 'TIMER_TICK', payload: { tick: 0 } });
+
+            timerInterval = setInterval(() => {
+                store.dispatch({ type: 'TIMER_TICK', payload: { tick: TICK_INTERVAL } });
+            }, TICK_INTERVAL);
+        }
+    }
+    lastTrainerState = trainerState;
+}
+
 store.subscribe(handleViewChange);
+store.subscribe(handleTrainerEffects); // Subscribe the effect handler
+
 initializeApp();
 console.log('App "Mio Trainer Personale" inizializzata.');

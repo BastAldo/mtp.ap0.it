@@ -2,13 +2,9 @@ import { saveToStorage } from './storage.js';
 import { getExerciseById } from './exerciseRepository.js';
 
 const WORKOUTS_STORAGE_KEY = 'workouts';
-const TICK_INTERVAL = 100;
-
 const cloneWorkouts = (workouts) => JSON.parse(JSON.stringify(workouts));
 
 function createStore() {
-  let timerInterval = null;
-
   let state = {
     currentView: 'calendar',
     focusedDate: new Date(),
@@ -18,40 +14,12 @@ function createStore() {
     notice: null,
     activeWorkout: null,
     completedWorkout: null,
-    trainerState: 'idle',
+    trainerState: 'idle', // idle, ready, preparing, announcing, action, rest, paused, finished
     trainerContext: {},
   };
 
   const subscribers = new Set();
   function notify() { subscribers.forEach(callback => callback()); }
-
-  function logState(actionType, state) {
-      if (actionType.startsWith('@@')) return;
-      const { activeWorkout, trainerState, trainerContext } = state;
-      if (!activeWorkout) return;
-      const currentItem = activeWorkout.items[trainerContext.itemIndex];
-      const exerciseName = currentItem?.name || 'Riposo';
-      const series = `${trainerContext.currentSeries || '-'}/${currentItem?.series || '-'}`;
-      const reps = `${trainerContext.currentRep || '-'}/${currentItem?.reps || '-'}`;
-      let status = trainerState.toUpperCase();
-      if (trainerState === 'announcing' || trainerState === 'action') { status += ` (${trainerContext.currentPhase || 'N/A'})`; }
-      const logString = `Esercizio: ${exerciseName} | Serie: ${series} | Rep: ${reps} | Stato: ${status}`;
-      console.log(`%c[${actionType}]`, 'color: #88aaff; font-weight: bold;', logString);
-  }
-
-  const stopTimer = () => {
-    if (timerInterval) {
-      clearInterval(timerInterval);
-      timerInterval = null;
-    }
-  };
-
-  const startTimer = () => {
-    stopTimer();
-    timerInterval = setInterval(() => {
-      dispatch({ type: 'TIMER_TICK' });
-    }, TICK_INTERVAL);
-  };
 
   const dispatch = (action) => {
     const oldState = { ...state };
@@ -66,6 +34,8 @@ function createStore() {
       case 'OPEN_MODAL': newState = { ...state, isModalOpen: true, modalContext: action.payload }; break;
       case 'CLOSE_MODAL': newState = { ...state, isModalOpen: false, modalContext: null }; break;
       case 'SHOW_NOTICE': newState = { ...state, notice: { message: action.payload.message, id: Date.now() } }; break;
+
+      // WORKOUT EDITOR ACTIONS
       case 'ADD_EXERCISE_ITEM': {
           const { date, exerciseId } = action.payload;
           const dateKey = `workout-${date}`;
@@ -126,147 +96,134 @@ function createStore() {
           }
           break;
       }
+
+      // TRAINER LIFECYCLE ACTIONS
       case 'START_WORKOUT': {
         const { date } = action.payload;
         const dateKey = `workout-${date}`;
         const workoutItems = state.workouts[dateKey];
         if (!workoutItems || workoutItems.length === 0) break;
-        stopTimer();
         newState = {
           ...state,
           currentView: 'trainer',
           activeWorkout: { date, items: workoutItems, completed: false, fullPlan: workoutItems },
           completedWorkout: null,
           trainerState: 'ready',
-          trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0, duration: 0, remaining: 0 }
+          trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1 }
         };
         break;
       }
       case 'FINISH_WORKOUT': {
-        stopTimer();
         newState = { ...state, currentView: 'debriefing', completedWorkout: { ...state.activeWorkout, completed: true }, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
         break;
       }
       case 'TERMINATE_WORKOUT': {
-        stopTimer();
         const { activeWorkout, trainerContext } = state;
         const partialWorkout = { date: activeWorkout.date, fullPlan: activeWorkout.fullPlan, completed: false, terminationPoint: trainerContext };
         newState = { ...state, currentView: 'debriefing', completedWorkout: partialWorkout, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
         break;
       }
+      case 'START_TRAINER': {
+        if(state.trainerState === 'ready') {
+          const { itemIndex } = state.trainerContext;
+          const currentItem = state.activeWorkout.items[itemIndex];
+          newState = { ...state, trainerState: 'preparing', trainerContext: { ...state.trainerContext, duration: 3000, currentItem }};
+        }
+        break;
+      }
       case 'PAUSE_TRAINER': {
-        if (state.trainerState === 'paused' || state.trainerState === 'ready' || state.trainerState === 'finished') break;
-        stopTimer();
-        newState = { ...state, trainerState: 'paused', trainerContext: { ...state.trainerContext, stateBeforePause: state.trainerState } };
+        if (state.trainerState !== 'paused' && state.trainerState !== 'ready' && state.trainerState !== 'finished') {
+          newState = { ...state, trainerState: 'paused', trainerContext: { ...state.trainerContext, stateBeforePause: state.trainerState } };
+        }
         break;
       }
       case 'RESUME_TRAINER': {
-        if (state.trainerState !== 'paused') break;
-        newState = { ...state, trainerState: state.trainerContext.stateBeforePause };
-        startTimer();
+        if (state.trainerState === 'paused') {
+          newState = { ...state, trainerState: state.trainerContext.stateBeforePause };
+        }
         break;
       }
       case 'TIMER_TICK': {
         if (state.trainerState === 'paused') { shouldNotify = false; break; }
-        
-        const newRemaining = state.trainerContext.remaining - TICK_INTERVAL;
-
+        const newRemaining = (state.trainerContext.remaining || 0) - action.payload.tick;
         if (newRemaining > 0) {
-          newState = { ...state, trainerContext: { ...state.trainerContext, remaining: newRemaining } };
+          newState = { ...state, trainerContext: { ...state.trainerContext, remaining: newRemaining }};
         } else {
-          const { trainerState, activeWorkout, trainerContext } = state;
-          const currentItem = activeWorkout.items[trainerContext.itemIndex];
-          let nextState = trainerState;
-          let nextContext = { ...trainerContext };
-          let workoutFinished = false;
-
-          if (trainerState === 'preparing') {
-              const firstItem = activeWorkout.items[0];
-              nextState = firstItem.type === 'rest' ? 'rest' : 'announcing';
-              if (nextState === 'announcing') {
-                  nextContext.currentPhase = firstItem.type === 'time' ? 'Esegui' : (Object.keys(firstItem.tempo || {})[0] || 'up');
-              }
-          } else if (trainerState === 'announcing') {
-              nextState = 'action';
-          } else if (trainerState === 'action' || trainerState === 'rest') {
-              let itemIsComplete = false;
-              if (trainerState === 'rest') {
-                  itemIsComplete = true;
-              } else if (currentItem.type === 'time') {
-                  itemIsComplete = (nextContext.currentSeries >= currentItem.series);
-                  if (!itemIsComplete) nextContext.currentSeries++;
-              } else if (currentItem.type === 'exercise') {
-                  const tempo = currentItem.tempo || {};
-                  const phases = Object.keys(tempo);
-                  if (nextContext.currentPhaseIndex < phases.length - 1) {
-                      nextContext.currentPhaseIndex++;
-                      nextContext.currentPhase = phases[nextContext.currentPhaseIndex];
-                  } else {
-                      nextContext.currentPhaseIndex = 0;
-                      if (nextContext.currentRep < currentItem.reps) {
-                          nextContext.currentRep++;
-                          nextContext.currentPhase = phases[0] || 'up';
-                      } else if (nextContext.currentSeries < currentItem.series) {
-                          nextContext.currentSeries++;
-                          nextContext.currentRep = 1;
-                          nextContext.currentPhase = phases[0] || 'up';
-                      } else {
-                          itemIsComplete = true;
-                      }
-                  }
-              }
-              
-              if(itemIsComplete) {
-                  if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
-                      const nextItemIndex = trainerContext.itemIndex + 1;
-                      const nextItem = activeWorkout.items[nextItemIndex];
-                      nextContext = { itemIndex: nextItemIndex, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 };
-                      if(nextItem.type === 'rest') {
-                          nextState = 'rest';
-                      } else {
-                          nextState = 'announcing';
-                          nextContext.currentPhase = nextItem.type === 'time' ? 'Esegui' : (Object.keys(nextItem.tempo || {})[0] || 'up');
-                      }
-                  } else {
-                      workoutFinished = true;
-                  }
-              } else {
-                  nextState = 'announcing';
-              }
-          }
-
-          if (workoutFinished) {
-              dispatch({ type: 'SET_TRAINER_PHASE', payload: { nextState: 'finished', nextContext: {} } });
-          } else {
-              dispatch({ type: 'SET_TRAINER_PHASE', payload: { nextState, nextContext } });
-          }
-          shouldNotify = false;
+          dispatch({ type: 'ADVANCE_TRAINER_PHASE' });
+          shouldNotify = false; // Notification will be handled by the subsequent dispatch
         }
         break;
       }
-      case 'SET_TRAINER_PHASE': {
-          stopTimer(); // Regola d'oro: ferma sempre il timer prima di impostare una nuova fase.
-          const { nextState, nextContext } = action.payload;
-          let duration = 0;
+      case 'ADVANCE_TRAINER_PHASE': {
+        const { trainerState, activeWorkout, trainerContext } = state;
+        const currentItem = activeWorkout.items[trainerContext.itemIndex];
+        let nextState, nextContext = { ...trainerContext };
 
-          if (nextState !== 'finished' && state.activeWorkout) {
-              const itemForDuration = state.activeWorkout.items[nextContext.itemIndex];
-              switch(nextState) {
-                  case 'preparing': duration = 3000; break;
-                  case 'announcing': duration = 750; break;
-                  case 'action':
-                      if (itemForDuration.type === 'time') { duration = (itemForDuration.duration || 10) * 1000; }
-                      else { const tempo = itemForDuration.tempo || {}; duration = (tempo[nextContext.currentPhase] || 1) * 1000; }
-                      break;
-                  case 'rest':
-                      duration = (itemForDuration.duration || 60) * 1000;
-                      break;
-              }
-          }
-          
-          newState = { ...state, trainerState: nextState, trainerContext: { ...nextContext, duration, remaining: duration } };
-          if (duration > 0) startTimer();
-          break;
+        // Determine the next logical step based on the CURRENT state
+        if (trainerState === 'preparing') {
+            nextState = 'announcing';
+        }
+        else if (trainerState === 'announcing') {
+            nextState = 'action';
+        }
+        else if (trainerState === 'action' || trainerState === 'rest') {
+            let itemIsComplete = false;
+            if(trainerState === 'rest') {
+                itemIsComplete = true;
+            } else if (currentItem.type === 'time') {
+                if (nextContext.currentSeries < (currentItem.series || 1)) {
+                    nextContext.currentSeries++;
+                } else {
+                    itemIsComplete = true;
+                }
+            } else if (currentItem.type === 'exercise') {
+                if (nextContext.currentRep < (currentItem.reps || 1)) {
+                    nextContext.currentRep++;
+                } else if (nextContext.currentSeries < (currentItem.series || 1)) {
+                    nextContext.currentSeries++;
+                    nextContext.currentRep = 1;
+                } else {
+                    itemIsComplete = true;
+                }
+            }
+
+            if (itemIsComplete) {
+                if (nextContext.itemIndex < activeWorkout.items.length - 1) {
+                    nextContext = { itemIndex: nextContext.itemIndex + 1, currentSeries: 1, currentRep: 1 };
+                } else {
+                    nextState = 'finished';
+                }
+            }
+            if(nextState !== 'finished') {
+                nextState = 'announcing';
+            }
+        }
+
+        // Determine the properties of the NEW state
+        if (nextState !== 'finished') {
+            const newItem = activeWorkout.items[nextContext.itemIndex];
+            nextContext.currentItem = newItem;
+            let duration = 0;
+
+            // If the next item is a rest, we switch state to 'rest'
+            if (newItem.type === 'rest' && trainerState !== 'rest') {
+                nextState = 'rest';
+            }
+
+            switch(nextState) {
+                case 'announcing': duration = 750; break;
+                case 'action':
+                    if(newItem.type === 'time') { duration = (newItem.duration || 10) * 1000; }
+                    else { duration = (newItem.tempo?.down || 1) * 1000; } // Simplified: only 'down' phase for now
+                    break;
+                case 'rest':
+                    duration = (newItem.duration || 60) * 1000;
+                    break;
+            }
+            nextContext.duration = duration;
+        }
+        newState = { ...state, trainerState: nextState || state.trainerState, trainerContext: nextContext };
+        break;
       }
       default:
         action.type = '@@UNKNOWN';
@@ -276,7 +233,6 @@ function createStore() {
 
     state = newState;
     if (shouldNotify && state !== oldState) {
-      logState(action.type, state);
       if (state.workouts !== oldState.workouts) {
         saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
       }
@@ -290,5 +246,6 @@ function createStore() {
     dispatch,
   };
 }
+
 const store = createStore();
 export default store;

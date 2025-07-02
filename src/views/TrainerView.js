@@ -7,47 +7,45 @@ function render(element) {
         return;
     }
 
-    const currentItem = activeWorkout.items[trainerContext.itemIndex];
+    const currentItem = trainerContext.currentItem || activeWorkout.items[trainerContext.itemIndex];
     const radius = 90;
     const circumference = 2 * Math.PI * radius;
+    const { duration, remaining, stateBeforePause } = trainerContext;
 
-    let phaseText = '', instructionText = '', buttonText = '', timerText = '', phaseClass = '';
     let ringOffset = circumference;
-    const isExercise = currentItem.type === 'exercise' || currentItem.type === 'time';
-    let terminateButtonHidden = trainerState === 'finished' || trainerState === 'ready';
-
-    const { duration, remaining } = trainerContext;
     if (duration > 0 && remaining >= 0) {
         const progress = (duration - remaining) / duration;
         ringOffset = circumference * (1 - progress);
     }
+
+    let phaseText = '', instructionText = '', buttonText = '', timerText = '', isFlashing = false;
+    const terminateButtonHidden = trainerState === 'finished' || trainerState === 'ready';
+    const isExercise = currentItem.type === 'exercise' || currentItem.type === 'time';
+    const currentPhase = currentItem.type === 'time' ? 'Esegui' : (currentItem.tempo ? 'Fase' : 'Azione');
 
     switch (trainerState) {
         case 'ready':
             phaseText = 'PRONTO'; instructionText = `Premi INIZIA per cominciare`; buttonText = 'INIZIA';
             break;
         case 'preparing':
-            phaseText = 'PREPARATI'; instructionText = 'Inizia il movimento...'; buttonText = 'PAUSA'; timerText = Math.ceil(remaining / 1000);
+            phaseText = 'PREPARATI'; instructionText = 'Si parte...'; buttonText = 'PAUSA'; timerText = Math.ceil(remaining / 1000);
             break;
         case 'rest':
-            phaseText = 'RIPOSO'; instructionText = 'Recupera'; buttonText = 'PAUSA'; timerText = Math.ceil(remaining / 1000);
+            phaseText = 'RIPOSO'; instructionText = 'Recupera le forze'; buttonText = 'PAUSA'; timerText = Math.ceil(remaining / 1000);
             break;
         case 'announcing':
-            phaseText = trainerContext.currentPhase?.toUpperCase() || ''; instructionText = `Prossima fase: ${phaseText}`; buttonText = 'PAUSA'; phaseClass = 'is-flashing';
+            phaseText = currentItem.name; instructionText = `Prossimo Esercizio`; buttonText = 'PAUSA'; isFlashing = true;
             break;
         case 'action':
-            phaseText = trainerContext.currentPhase?.toUpperCase() || ''; instructionText = 'Esegui il movimento'; buttonText = 'PAUSA'; timerText = Math.ceil(remaining / 1000);
+            phaseText = currentPhase.toUpperCase(); instructionText = 'Esegui il movimento'; buttonText = 'PAUSA'; timerText = Math.ceil(remaining / 1000);
             break;
         case 'paused':
-            const prevState = trainerContext.stateBeforePause;
-            if(prevState === 'preparing') { phaseText = 'PREPARATI'; }
-            else if(prevState === 'rest') { phaseText = 'RIPOSO'; }
-            else if(prevState === 'announcing' || prevState === 'action') {
-                phaseText = trainerContext.currentPhase?.toUpperCase() || '';
-                if (prevState === 'announcing') { phaseClass = 'is-flashing'; }
-            }
+            const pausedState = stateBeforePause || 'action';
+            if (pausedState === 'rest') { phaseText = 'RIPOSO'; }
+            else if(pausedState === 'announcing') { phaseText = currentItem.name; isFlashing = true; }
+            else { phaseText = (pausedState === 'preparing') ? 'PREPARATI' : currentPhase.toUpperCase(); }
             instructionText = 'Pausa'; buttonText = 'RIPRENDI';
-            if(prevState !== 'announcing') { timerText = Math.ceil(remaining / 1000); }
+            if(pausedState !== 'announcing') { timerText = Math.ceil(remaining / 1000); }
             break;
         case 'finished':
             phaseText = 'FINE'; instructionText = 'Workout completato!'; buttonText = 'DEBRIEFING';
@@ -57,8 +55,8 @@ function render(element) {
     }
 
     const headerTitle = currentItem.name || 'Riposo';
-    const seriesText = isExercise ? `SERIE ${trainerContext.currentSeries} / ${currentItem.series || 1}` : '';
-    const repsText = currentItem.type === 'exercise' ? `REP ${trainerContext.currentRep} / ${currentItem.reps || 1}` : '';
+    const seriesText = isExercise ? `SERIE ${trainerContext.currentSeries || 1} / ${currentItem.series || 1}` : '';
+    const repsText = currentItem.type === 'exercise' ? `REP ${trainerContext.currentRep || 1} / ${currentItem.reps || 1}` : '';
 
     element.innerHTML = `
         <div class="trainer-container">
@@ -72,7 +70,7 @@ function render(element) {
                     <circle class="progress-ring__foreground" style="stroke-dashoffset: ${ringOffset};" stroke-width="10" r="${radius}" cx="50%" cy="50%" stroke-dasharray="${circumference}"></circle>
                 </svg>
                 <div class="progress-ring__text">
-                    <div class="progress-ring__phase ${phaseClass}">${phaseText}</div>
+                    <div class="progress-ring__phase ${isFlashing ? 'is-flashing' : ''}">${phaseText}</div>
                     <div class="progress-ring__timer">${timerText}</div>
                 </div>
             </div>
@@ -99,29 +97,18 @@ export function init(element) {
         }
 
         if (!mainButton) return;
+        const { trainerState } = store.getState();
 
-        const { trainerState, trainerContext } = store.getState();
         switch (trainerState) {
-            case 'ready':
-                store.dispatch({ type: 'SET_TRAINER_PHASE', payload: { nextState: 'preparing', nextContext: trainerContext } });
-                break;
-            case 'paused':
-                store.dispatch({ type: 'RESUME_TRAINER' });
-                break;
-            case 'finished':
-                store.dispatch({ type: 'FINISH_WORKOUT' });
-                break;
-            case 'preparing':
-            case 'action':
-            case 'rest':
-            case 'announcing':
-                store.dispatch({ type: 'PAUSE_TRAINER' });
-                break;
+            case 'ready': store.dispatch({ type: 'START_TRAINER' }); break;
+            case 'paused': store.dispatch({ type: 'RESUME_TRAINER' }); break;
+            case 'finished': store.dispatch({ type: 'FINISH_WORKOUT' }); break;
+            default: store.dispatch({ type: 'PAUSE_TRAINER' }); break;
         }
     });
 
     store.subscribe(() => {
-        if(element.classList.contains('view--active')) {
+        if (element.classList.contains('view--active')) {
             render(element);
         }
     });
