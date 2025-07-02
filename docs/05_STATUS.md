@@ -1,25 +1,20 @@
 # Stato Attuale del Progetto
-*Ultimo aggiornamento: 2025-07-01*
+*Ultimo aggiornamento: 2025-07-02*
 
-## Focus Corrente: Risoluzione Bug Critico nel Trainer
+## Stato Critico: Due Bug Bloccano il Trainer
 
-### Problema Attuale
-È stato identificato un **bug critico** nel flusso di stati del Trainer. La logica di avanzamento, specialmente dopo i periodi di riposo, causa un loop e una progressione errata delle serie/ripetizioni.
+### Problemi Attuali
+Durante i test sono stati identificati **due bug critici** che rendono il Trainer instabile e inutilizzabile. Qualsiasi sviluppo è bloccato finché non verranno risolti.
 
-La causa principale è una scorretta distribuzione delle responsabilità tra `TrainerView.js` (la View) e `store.js` (lo Store), che porta a chiamate di azioni multiple e a race condition. Il sistema è attualmente **instabile**.
+1.  **Bug #1: Loop Infinito su Pausa/Riprendi**
+    -   **Scenario**: Eseguendo la sequenza `Inizia` -> `Pausa` -> `Riprendi`.
+    -   **Comportamento**: L'applicazione va in crash a causa di un errore `Maximum call stack size exceeded`.
+    -   **Causa**: Esiste un loop ricorsivo nel file `src/views/TrainerView.js`, dove la funzione di rendering (`render`) e quella che gestisce i timer (`runStateBasedTimer`) si richiamano a vicenda all'infinito.
 
-### Prossimo Step Obbligatorio: Refactoring Architetturale
-Per ripristinare la stabilità, è necessario un refactoring che centralizzi tutta la logica di avanzamento del trainer. Il piano d'azione è il seguente:
+2.  **Bug #2: Il Modale "Termina" non Mette in Pausa**
+    -   **Scenario**: Durante un allenamento attivo (es. `preparing` o `action`), si clicca sul pulsante "Termina".
+    -   **Comportamento**: Appare correttamente il modale di conferma, ma il timer dell'esercizio continua a scorrere in background.
+    -   **Causa**: L'azione che apre il modale non invia contestualmente l'azione per mettere in pausa lo stato del trainer.
 
-1.  **Semplificare la View (`TrainerView.js`)**:
-    * La View deve diventare un componente "stupido" che si limita a renderizzare lo stato.
-    * Al termine di ogni timer (`preparing`, `announcing`, `action`, `rest`), la View deve dispatchare una **singola e unica azione**: `TIMER_COMPLETE`.
-
-2.  **Centralizzare la Logica (`store.js`)**:
-    * Creare un nuovo gestore per l'azione `TIMER_COMPLETE`.
-    * Questo gestore diventerà il "cervello" del trainer e conterrà **tutta la logica decisionale** per determinare lo stato successivo in base allo stato corrente.
-
-3.  **Verificare il Logger**:
-    * Assicurarsi che il logger schematico implementato funzioni correttamente con la nuova logica centralizzata.
-
-Questo intervento è prioritario e blocca ogni altro sviluppo sulla funzionalità del trainer.
+### Prossimo Step Obbligatorio
+Il prossimo, inderogabile passo è risolvere entrambi i bug sopra elencati. La soluzione richiederà una ristrutturazione mirata della logica di gestione degli eventi e dei timer all'interno di `TrainerView.js`.
