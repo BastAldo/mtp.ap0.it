@@ -21,6 +21,23 @@ function createStore() {
   const subscribers = new Set();
   function notify() { subscribers.forEach(callback => callback()); }
 
+  // --- FUNZIONE DI LOGGING RIPRISTINATA ---
+  function logState(actionType, state) {
+      if (actionType.startsWith('@@')) return;
+      const { activeWorkout, trainerState, trainerContext } = state;
+      if (!activeWorkout || !trainerContext.currentItem) {
+          console.log(`%c[${actionType}]`, 'color: #88aaff; font-weight: bold;', `View: ${state.currentView}`);
+          return;
+      };
+      const { currentItem, currentSeries, currentRep } = trainerContext;
+      const exerciseName = currentItem.name || 'Riposo';
+      const series = `${currentSeries || '-'}/${currentItem.series || '-'}`;
+      const reps = `${currentRep || '-'}/${currentItem.reps || '-'}`;
+      let status = trainerState.toUpperCase();
+      const logString = `Esercizio: ${exerciseName} | Serie: ${series} | Rep: ${reps} | Stato: ${status}`;
+      console.log(`%c[${actionType}]`, 'color: #88aaff; font-weight: bold;', logString);
+  }
+
   const dispatch = (action) => {
     const oldState = { ...state };
     let newState = { ...state };
@@ -35,7 +52,6 @@ function createStore() {
       case 'CLOSE_MODAL': newState = { ...state, isModalOpen: false, modalContext: null }; break;
       case 'SHOW_NOTICE': newState = { ...state, notice: { message: action.payload.message, id: Date.now() } }; break;
 
-      // WORKOUT EDITOR ACTIONS
       case 'ADD_EXERCISE_ITEM': {
           const { date, exerciseId } = action.payload;
           const dateKey = `workout-${date}`;
@@ -109,7 +125,7 @@ function createStore() {
           activeWorkout: { date, items: workoutItems, completed: false, fullPlan: workoutItems },
           completedWorkout: null,
           trainerState: 'ready',
-          trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1 }
+          trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1, currentItem: workoutItems[0] }
         };
         break;
       }
@@ -125,9 +141,8 @@ function createStore() {
       }
       case 'START_TRAINER': {
         if(state.trainerState === 'ready') {
-          const { itemIndex } = state.trainerContext;
-          const currentItem = state.activeWorkout.items[itemIndex];
-          newState = { ...state, trainerState: 'preparing', trainerContext: { ...state.trainerContext, duration: 3000, currentItem }};
+          const duration = 3000;
+          newState = { ...state, trainerState: 'preparing', trainerContext: { ...state.trainerContext, duration, remaining: duration }};
         }
         break;
       }
@@ -150,79 +165,54 @@ function createStore() {
           newState = { ...state, trainerContext: { ...state.trainerContext, remaining: newRemaining }};
         } else {
           dispatch({ type: 'ADVANCE_TRAINER_PHASE' });
-          shouldNotify = false; // Notification will be handled by the subsequent dispatch
+          shouldNotify = false;
         }
         break;
       }
       case 'ADVANCE_TRAINER_PHASE': {
         const { trainerState, activeWorkout, trainerContext } = state;
-        const currentItem = activeWorkout.items[trainerContext.itemIndex];
-        let nextState, nextContext = { ...trainerContext };
+        let nextState = trainerState;
+        let nextContext = { ...trainerContext };
 
-        // Determine the next logical step based on the CURRENT state
-        if (trainerState === 'preparing') {
-            nextState = 'announcing';
-        }
-        else if (trainerState === 'announcing') {
-            nextState = 'action';
-        }
+        if (trainerState === 'preparing') { nextState = 'announcing'; }
+        else if (trainerState === 'announcing') { nextState = 'action'; }
         else if (trainerState === 'action' || trainerState === 'rest') {
             let itemIsComplete = false;
-            if(trainerState === 'rest') {
-                itemIsComplete = true;
-            } else if (currentItem.type === 'time') {
-                if (nextContext.currentSeries < (currentItem.series || 1)) {
-                    nextContext.currentSeries++;
-                } else {
-                    itemIsComplete = true;
-                }
+            const currentItem = trainerContext.currentItem;
+            if(trainerState === 'rest') { itemIsComplete = true; }
+            else if (currentItem.type === 'time') {
+                if (nextContext.currentSeries < (currentItem.series || 1)) { nextContext.currentSeries++; } else { itemIsComplete = true; }
             } else if (currentItem.type === 'exercise') {
-                if (nextContext.currentRep < (currentItem.reps || 1)) {
-                    nextContext.currentRep++;
-                } else if (nextContext.currentSeries < (currentItem.series || 1)) {
-                    nextContext.currentSeries++;
-                    nextContext.currentRep = 1;
-                } else {
-                    itemIsComplete = true;
-                }
+                if (nextContext.currentRep < (currentItem.reps || 1)) { nextContext.currentRep++; }
+                else if (nextContext.currentSeries < (currentItem.series || 1)) { nextContext.currentSeries++; nextContext.currentRep = 1; }
+                else { itemIsComplete = true; }
             }
-
             if (itemIsComplete) {
                 if (nextContext.itemIndex < activeWorkout.items.length - 1) {
                     nextContext = { itemIndex: nextContext.itemIndex + 1, currentSeries: 1, currentRep: 1 };
-                } else {
-                    nextState = 'finished';
-                }
-            }
-            if(nextState !== 'finished') {
-                nextState = 'announcing';
-            }
+                    nextState = 'announcing';
+                } else { nextState = 'finished'; }
+            } else { nextState = 'announcing'; }
         }
 
-        // Determine the properties of the NEW state
-        if (nextState !== 'finished') {
+        if (nextState !== 'finished' && nextState !== state.trainerState) {
             const newItem = activeWorkout.items[nextContext.itemIndex];
             nextContext.currentItem = newItem;
             let duration = 0;
-
-            // If the next item is a rest, we switch state to 'rest'
-            if (newItem.type === 'rest' && trainerState !== 'rest') {
-                nextState = 'rest';
-            }
+            if (newItem.type === 'rest' && trainerState !== 'rest') { nextState = 'rest'; }
 
             switch(nextState) {
+                case 'preparing': duration = 3000; break;
                 case 'announcing': duration = 750; break;
                 case 'action':
-                    if(newItem.type === 'time') { duration = (newItem.duration || 10) * 1000; }
-                    else { duration = (newItem.tempo?.down || 1) * 1000; } // Simplified: only 'down' phase for now
+                    duration = (newItem.type === 'time') ? (newItem.duration || 10) * 1000 : (newItem.tempo?.down || 1) * 1000;
                     break;
-                case 'rest':
-                    duration = (newItem.duration || 60) * 1000;
-                    break;
+                case 'rest': duration = (newItem.duration || 60) * 1000; break;
             }
             nextContext.duration = duration;
+            nextContext.remaining = duration; // --- FIX: Inizializza anche remaining ---
         }
-        newState = { ...state, trainerState: nextState || state.trainerState, trainerContext: nextContext };
+        newState = { ...state, trainerState: nextState, trainerContext: nextContext };
         break;
       }
       default:
@@ -233,9 +223,13 @@ function createStore() {
 
     state = newState;
     if (shouldNotify && state !== oldState) {
+      logState(action.type, state); // --- CHIAMATA AL LOGGER RIPRISTINATA ---
       if (state.workouts !== oldState.workouts) {
         saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
       }
+      notify();
+    } else if (action.type === 'TIMER_TICK') {
+      // Notifica comunque per aggiornare il timer nella UI, ma senza log
       notify();
     }
   };
