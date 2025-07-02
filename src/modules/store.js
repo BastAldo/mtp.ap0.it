@@ -39,7 +39,6 @@ function createStore() {
       console.log(`%c[${actionType}]`, 'color: #88aaff; font-weight: bold;', logString);
   }
 
-  // --- Timer Logic ---
   const stopTimer = () => {
     if (timerInterval) {
       clearInterval(timerInterval);
@@ -132,6 +131,7 @@ function createStore() {
         const dateKey = `workout-${date}`;
         const workoutItems = state.workouts[dateKey];
         if (!workoutItems || workoutItems.length === 0) break;
+        stopTimer();
         newState = {
           ...state,
           currentView: 'trainer',
@@ -156,9 +156,9 @@ function createStore() {
       }
       case 'SET_TRAINER_STATE': {
           const nextTrainerState = action.payload;
+          let duration = 0;
           const { activeWorkout, trainerContext } = state;
           const currentItem = activeWorkout.items[trainerContext.itemIndex];
-          let duration = 0;
 
           switch(nextTrainerState) {
               case 'preparing': duration = 3000; break;
@@ -173,6 +173,7 @@ function createStore() {
           }
           newState = { ...state, trainerState: nextTrainerState, trainerContext: { ...state.trainerContext, duration, remaining: duration, stateBeforePause: null } };
           if (duration > 0) startTimer();
+          else stopTimer();
           break;
       }
       case 'PAUSE_TRAINER': {
@@ -191,8 +192,8 @@ function createStore() {
         if (state.trainerState === 'paused') { shouldNotify = false; break; }
         const newRemaining = state.trainerContext.remaining - TICK_INTERVAL;
         if (newRemaining <= 0) {
-          stopTimer();
           dispatch({ type: 'TIMER_COMPLETE' });
+          shouldNotify = false;
         } else {
           newState = { ...state, trainerContext: { ...state.trainerContext, remaining: newRemaining } };
         }
@@ -200,6 +201,9 @@ function createStore() {
       }
       case 'TIMER_COMPLETE': {
         if (!state.activeWorkout) return;
+
+        stopTimer();
+
         const { trainerState, activeWorkout, trainerContext } = state;
         const currentItem = activeWorkout.items[trainerContext.itemIndex];
 
@@ -219,6 +223,7 @@ function createStore() {
 
         let nextState = trainerState;
         let nextContext = { ...trainerContext };
+        let nextDuration = 0;
 
         switch (trainerState) {
           case 'preparing': {
@@ -278,9 +283,24 @@ function createStore() {
             break;
           }
         }
-        // Immediately dispatch the next state change
-        dispatch({ type: 'SET_TRAINER_STATE', payload: nextState });
-        newState = { ...state, trainerContext: nextContext };
+
+        const nextItemForDuration = activeWorkout.items[nextContext.itemIndex];
+        switch(nextState) {
+          case 'announcing': nextDuration = 750; break;
+          case 'action':
+              if (nextItemForDuration.type === 'time') { nextDuration = (nextItemForDuration.duration || 10) * 1000; }
+              else { const tempo = nextItemForDuration.tempo || {}; nextDuration = (tempo[nextContext.currentPhase] || 1) * 1000; }
+              break;
+          case 'rest':
+              nextDuration = (nextItemForDuration.duration || 60) * 1000;
+              break;
+        }
+
+        nextContext.duration = nextDuration;
+        nextContext.remaining = nextDuration;
+
+        newState = { ...state, trainerState: nextState, trainerContext: nextContext };
+        if (nextDuration > 0) startTimer();
         break;
       }
       default:

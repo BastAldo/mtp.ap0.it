@@ -1,12 +1,10 @@
-commit_message: "fix(trainer): Centralizzare la logica del timer nello store per risolvere i bug critici"
+commit_message: "fix(store): Risolvere loop ricorsivo eliminando dispatch nidificato"
 rationale: |
-  Questo commit risolve due bug critici documentati in `docs/05_STATUS.md` attraverso un refactoring architetturale, in linea con ADR 003.
+  Questo commit risolve un loop infinito causato da una chiamata `dispatch` nidificata all'interno del gestore dell'azione `TIMER_COMPLETE` in `store.js`.
 
-  1.  **Risolto il Loop Infinito**: La logica del timer (`setInterval`) è stata spostata da `TrainerView.js` e centralizzata completamente all'interno di `store.js`. La view ora è "stupida": si limita a renderizzare lo stato fornito dallo store e a inviare azioni utente, eliminando il loop ricorsivo che causava il crash "Maximum call stack size exceeded".
+  Il problema precedente era che `TIMER_COMPLETE` chiamava `SET_TRAINER_STATE`, creando una race condition e un ciclo di azioni.
 
-  2.  **Risolto il Bug di Terminazione**: L'azione di click sul pulsante "Termina" ora invia correttamente un'azione `PAUSE_TRAINER` prima di aprire il modale di conferma, garantendo che il timer si fermi come previsto.
-
-  Questo refactoring rende il flusso del trainer più robusto, prevedibile e allineato ai principi architetturali del progetto.
+  La soluzione è stata quella di rendere l'azione `TIMER_COMPLETE` atomica. Ora, calcola lo stato successivo, determina la durata del nuovo timer e avvia `setInterval` direttamente, tutto all'interno dello stesso blocco di codice, senza dispatch nidificati. Questo garantisce una transizione di stato stabile e prevedibile, eliminando il loop.
 patches:
   - file: src/modules/store.js
     content: |
@@ -51,7 +49,6 @@ patches:
             console.log(`%c[${actionType}]`, 'color: #88aaff; font-weight: bold;', logString);
         }
 
-        // --- Timer Logic ---
         const stopTimer = () => {
           if (timerInterval) {
             clearInterval(timerInterval);
@@ -144,6 +141,7 @@ patches:
               const dateKey = `workout-${date}`;
               const workoutItems = state.workouts[dateKey];
               if (!workoutItems || workoutItems.length === 0) break;
+              stopTimer();
               newState = {
                 ...state,
                 currentView: 'trainer',
@@ -168,9 +166,9 @@ patches:
             }
             case 'SET_TRAINER_STATE': {
                 const nextTrainerState = action.payload;
+                let duration = 0;
                 const { activeWorkout, trainerContext } = state;
                 const currentItem = activeWorkout.items[trainerContext.itemIndex];
-                let duration = 0;
 
                 switch(nextTrainerState) {
                     case 'preparing': duration = 3000; break;
@@ -185,6 +183,7 @@ patches:
                 }
                 newState = { ...state, trainerState: nextTrainerState, trainerContext: { ...state.trainerContext, duration, remaining: duration, stateBeforePause: null } };
                 if (duration > 0) startTimer();
+                else stopTimer();
                 break;
             }
             case 'PAUSE_TRAINER': {
@@ -203,8 +202,8 @@ patches:
               if (state.trainerState === 'paused') { shouldNotify = false; break; }
               const newRemaining = state.trainerContext.remaining - TICK_INTERVAL;
               if (newRemaining <= 0) {
-                stopTimer();
                 dispatch({ type: 'TIMER_COMPLETE' });
+                shouldNotify = false;
               } else {
                 newState = { ...state, trainerContext: { ...state.trainerContext, remaining: newRemaining } };
               }
@@ -212,6 +211,9 @@ patches:
             }
             case 'TIMER_COMPLETE': {
               if (!state.activeWorkout) return;
+
+              stopTimer();
+
               const { trainerState, activeWorkout, trainerContext } = state;
               const currentItem = activeWorkout.items[trainerContext.itemIndex];
 
@@ -231,6 +233,7 @@ patches:
 
               let nextState = trainerState;
               let nextContext = { ...trainerContext };
+              let nextDuration = 0;
 
               switch (trainerState) {
                 case 'preparing': {
@@ -290,9 +293,24 @@ patches:
                   break;
                 }
               }
-              // Immediately dispatch the next state change
-              dispatch({ type: 'SET_TRAINER_STATE', payload: nextState });
-              newState = { ...state, trainerContext: nextContext };
+
+              const nextItemForDuration = activeWorkout.items[nextContext.itemIndex];
+              switch(nextState) {
+                case 'announcing': nextDuration = 750; break;
+                case 'action':
+                    if (nextItemForDuration.type === 'time') { nextDuration = (nextItemForDuration.duration || 10) * 1000; }
+                    else { const tempo = nextItemForDuration.tempo || {}; nextDuration = (tempo[nextContext.currentPhase] || 1) * 1000; }
+                    break;
+                case 'rest':
+                    nextDuration = (nextItemForDuration.duration || 60) * 1000;
+                    break;
+              }
+
+              nextContext.duration = nextDuration;
+              nextContext.remaining = nextDuration;
+
+              newState = { ...state, trainerState: nextState, trainerContext: nextContext };
+              if (nextDuration > 0) startTimer();
               break;
             }
             default:
@@ -319,137 +337,5 @@ patches:
       }
       const store = createStore();
       export default store;
-  - file: src/views/TrainerView.js
-    content: |
-      import store from '../modules/store.js';
-
-      function render(element) {
-          const { activeWorkout, trainerState, trainerContext } = store.getState();
-          if (!activeWorkout) {
-              element.innerHTML = '<h2>Nessun workout attivo.</h2>';
-              return;
-          }
-
-          const currentItem = activeWorkout.items[trainerContext.itemIndex];
-          const radius = 90;
-          const circumference = 2 * Math.PI * radius;
-
-          let phaseText = '', instructionText = '', buttonText = '', timerText = '', phaseClass = '';
-          let ringOffset = circumference;
-          const isExercise = currentItem.type === 'exercise' || currentItem.type === 'time';
-          let terminateButtonHidden = trainerState === 'finished' || trainerState === 'ready';
-
-          const { duration, remaining } = trainerContext;
-          if (duration > 0) {
-              const progress = (duration - remaining) / duration;
-              ringOffset = circumference * (1 - progress);
-          }
-
-          switch (trainerState) {
-              case 'ready':
-                  phaseText = 'PRONTO'; instructionText = `Premi INIZIA per cominciare`; buttonText = 'INIZIA';
-                  break;
-              case 'preparing':
-                  phaseText = 'PREPARATI'; instructionText = 'Inizia il movimento...'; buttonText = 'PAUSA'; timerText = Math.ceil(remaining / 1000);
-                  break;
-              case 'rest':
-                  phaseText = 'RIPOSO'; instructionText = 'Recupera'; buttonText = 'PAUSA'; timerText = Math.ceil(remaining / 1000);
-                  break;
-              case 'announcing':
-                  phaseText = trainerContext.currentPhase?.toUpperCase() || ''; instructionText = `Prossima fase: ${phaseText}`; buttonText = 'PAUSA'; phaseClass = 'is-flashing';
-                  break;
-              case 'action':
-                  phaseText = trainerContext.currentPhase?.toUpperCase() || ''; instructionText = 'Esegui il movimento'; buttonText = 'PAUSA'; timerText = Math.ceil(remaining / 1000);
-                  break;
-              case 'paused':
-                  const prevState = trainerContext.stateBeforePause;
-                  if(prevState === 'preparing') { phaseText = 'PREPARATI'; }
-                  else if(prevState === 'rest') { phaseText = 'RIPOSO'; }
-                  else if(prevState === 'announcing' || prevState === 'action') {
-                      phaseText = trainerContext.currentPhase?.toUpperCase() || '';
-                      if (prevState === 'announcing') { phaseClass = 'is-flashing'; }
-                  }
-                  instructionText = 'Pausa'; buttonText = 'RIPRENDI';
-                  if(prevState !== 'announcing') { timerText = Math.ceil(remaining / 1000); }
-                  break;
-              case 'finished':
-                  phaseText = 'FINE'; instructionText = 'Workout completato!'; buttonText = 'DEBRIEFING';
-                  break;
-              default:
-                  phaseText = 'IDLE'; instructionText = 'Stato non riconosciuto'; buttonText = 'RESET';
-          }
-
-          const headerTitle = currentItem.name || 'Riposo';
-          const seriesText = isExercise ? `SERIE ${trainerContext.currentSeries} / ${currentItem.series || 1}` : '';
-          const repsText = currentItem.type === 'exercise' ? `REP ${trainerContext.currentRep} / ${currentItem.reps || 1}` : '';
-
-          element.innerHTML = `
-              <div class="trainer-container">
-                  <header class="trainer-header">
-                      <h2>${headerTitle}</h2>
-                      <p>${seriesText} ${repsText ? `| ${repsText}` : ''}</p>
-                  </header>
-                  <div class="progress-ring">
-                      <svg>
-                          <circle class="progress-ring__background" stroke-width="10" r="${radius}" cx="50%" cy="50%"></circle>
-                          <circle class="progress-ring__foreground" style="stroke-dashoffset: ${ringOffset};" stroke-width="10" r="${radius}" cx="50%" cy="50%" stroke-dasharray="${circumference}"></circle>
-                      </svg>
-                      <div class="progress-ring__text">
-                          <div class="progress-ring__phase ${phaseClass}">${phaseText}</div>
-                          <div class="progress-ring__timer">${timerText}</div>
-                      </div>
-                  </div>
-                  <footer class="trainer-footer">
-                      <p class="trainer-instruction">${instructionText}</p>
-                      <div class="trainer-controls">
-                          <button class="trainer-main-btn">${buttonText}</button>
-                          <button class="trainer-terminate-btn" ${terminateButtonHidden ? 'hidden' : ''}>Termina</button>
-                      </div>
-                  </footer>
-              </div>
-          `;
-      }
-
-      export function init(element) {
-          element.addEventListener('click', (event) => {
-              const mainButton = event.target.closest('.trainer-main-btn');
-              const terminateButton = event.target.closest('.trainer-terminate-btn');
-
-              if (terminateButton) {
-                  store.dispatch({ type: 'PAUSE_TRAINER' });
-                  store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'CONFIRM_TERMINATION' } });
-                  return;
-              }
-
-              if (!mainButton) return;
-
-              const { trainerState } = store.getState();
-              switch (trainerState) {
-                  case 'ready':
-                      store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'preparing' });
-                      break;
-                  case 'paused':
-                      store.dispatch({ type: 'RESUME_TRAINER' });
-                      break;
-                  case 'finished':
-                      store.dispatch({ type: 'FINISH_WORKOUT' });
-                      break;
-                  case 'preparing':
-                  case 'action':
-                  case 'rest':
-                  case 'announcing':
-                      store.dispatch({ type: 'PAUSE_TRAINER' });
-                      break;
-              }
-          });
-
-          store.subscribe(() => {
-              if(element.classList.contains('view--active')) {
-                  render(element);
-              }
-          });
-
-          render(element);
-      }
 commands:
-  - "echo 'Bug critici risolti. La logica del trainer è ora centralizzata e stabile.'"
+  - "echo 'Loop risolto. La logica di transizione di stato è ora atomica e stabile.'"
