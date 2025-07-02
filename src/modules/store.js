@@ -155,7 +155,7 @@ function createStore() {
         break;
       }
       case 'PAUSE_TRAINER': {
-        if (state.trainerState === 'paused') break;
+        if (state.trainerState === 'paused' || state.trainerState === 'ready' || state.trainerState === 'finished') break;
         stopTimer();
         newState = { ...state, trainerState: 'paused', trainerContext: { ...state.trainerContext, stateBeforePause: state.trainerState } };
         break;
@@ -170,86 +170,109 @@ function createStore() {
         if (state.trainerState === 'paused' || !state.activeWorkout) { shouldNotify = false; break; }
         const newRemaining = state.trainerContext.remaining - TICK_INTERVAL;
         if (newRemaining <= 0) {
-          stopTimer();
-          dispatch({ type: 'ADVANCE_TRAINER_STATE' });
-          shouldNotify = false; // L'azione di avanzamento notificherà
+          dispatch({ type: 'TIMER_EXPIRED' });
+          shouldNotify = false;
         } else {
           newState = { ...state, trainerContext: { ...state.trainerContext, remaining: newRemaining } };
         }
         break;
       }
-      case 'ADVANCE_TRAINER_STATE': {
+      case 'TIMER_EXPIRED': {
           stopTimer();
           const { trainerState, activeWorkout, trainerContext } = state;
           if (!activeWorkout) break;
           
           const currentItem = activeWorkout.items[trainerContext.itemIndex];
-          
-          const getNextStateInfo = () => {
-              const currentState = trainerState === 'ready' ? 'preparing' : trainerState;
-              switch (currentState) {
-                  case 'preparing': {
-                      const firstItem = activeWorkout.items[0];
-                      const nextState = firstItem.type === 'rest' ? 'rest' : 'announcing';
-                      const nextContext = { ...trainerContext };
-                      if (nextState === 'announcing') {
-                          nextContext.currentPhase = firstItem.type === 'time' ? 'Esegui' : (Object.keys(firstItem.tempo || {})[0] || 'up');
-                      }
-                      return { nextState, nextContext };
-                  }
-                  case 'announcing':
-                      return { nextState: 'action', nextContext: { ...trainerContext } };
-                  case 'action': {
-                      let nextContext = { ...trainerContext };
-                      if (currentItem.type === 'exercise') {
-                          const tempo = currentItem.tempo || {};
-                          const phases = Object.keys(tempo);
-                          if (nextContext.currentPhaseIndex < phases.length - 1) {
-                              nextContext.currentPhaseIndex++;
-                              nextContext.currentPhase = phases[nextContext.currentPhaseIndex];
-                              return { nextState: 'announcing', nextContext };
-                          } else {
-                              nextContext.currentPhaseIndex = 0;
-                              if (nextContext.currentRep < currentItem.reps) {
-                                  nextContext.currentRep++;
-                                  nextContext.currentPhase = phases[0] || 'up';
-                                  return { nextState: 'announcing', nextContext };
-                              } else if (nextContext.currentSeries < currentItem.series) {
-                                  nextContext.currentSeries++;
-                                  nextContext.currentRep = 1;
-                                  nextContext.currentPhase = phases[0] || 'up';
-                                  return { nextState: 'announcing', nextContext };
+          let nextState = trainerState;
+          let nextContext = { ...trainerContext };
+
+          if (trainerState === 'preparing') {
+              const firstItem = activeWorkout.items[0];
+              nextState = firstItem.type === 'rest' ? 'rest' : 'announcing';
+              if (nextState === 'announcing') {
+                  nextContext.currentPhase = firstItem.type === 'time' ? 'Esegui' : (Object.keys(firstItem.tempo || {})[0] || 'up');
+              }
+          } else if (trainerState === 'announcing') {
+              nextState = 'action';
+          } else if (trainerState === 'action') {
+              if (currentItem.type === 'exercise') {
+                  const tempo = currentItem.tempo || {};
+                  const phases = Object.keys(tempo);
+                  if (nextContext.currentPhaseIndex < phases.length - 1) {
+                      nextState = 'announcing';
+                      nextContext.currentPhaseIndex++;
+                      nextContext.currentPhase = phases[nextContext.currentPhaseIndex];
+                  } else {
+                      nextContext.currentPhaseIndex = 0;
+                      if (nextContext.currentRep < currentItem.reps) {
+                          nextState = 'announcing';
+                          nextContext.currentRep++;
+                          nextContext.currentPhase = phases[0] || 'up';
+                      } else if (nextContext.currentSeries < currentItem.series) {
+                          nextState = 'announcing';
+                          nextContext.currentSeries++;
+                          nextContext.currentRep = 1;
+                          nextContext.currentPhase = phases[0] || 'up';
+                      } else {
+                          // Exercise complete, advance to next item
+                          if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
+                              const nextItemIndex = trainerContext.itemIndex + 1;
+                              const nextItem = activeWorkout.items[nextItemIndex];
+                              nextState = nextItem.type === 'rest' ? 'rest' : 'announcing';
+                              nextContext = { itemIndex: nextItemIndex, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 };
+                              if (nextState === 'announcing') {
+                                  nextContext.currentPhase = nextItem.type === 'time' ? 'Esegui' : (Object.keys(nextItem.tempo || {})[0] || 'up');
                               }
-                          }
-                      } else if (currentItem.type === 'time') {
-                          if (nextContext.currentSeries < currentItem.series) {
-                              nextContext.currentSeries++;
-                              return { nextState: 'announcing', nextContext };
+                          } else {
+                              nextState = 'finished';
                           }
                       }
-                      // Fallthrough to advance item
                   }
-                  case 'rest': {
+              } else if (currentItem.type === 'time') {
+                  if (nextContext.currentSeries < currentItem.series) {
+                      nextState = 'announcing';
+                      nextContext.currentSeries++;
+                  } else {
                       if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
                           const nextItemIndex = trainerContext.itemIndex + 1;
                           const nextItem = activeWorkout.items[nextItemIndex];
-                          const nextState = nextItem.type === 'rest' ? 'rest' : 'announcing';
-                          const nextContext = { itemIndex: nextItemIndex, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 };
+                          nextState = nextItem.type === 'rest' ? 'rest' : 'announcing';
+                          nextContext = { itemIndex: nextItemIndex, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 };
                           if (nextState === 'announcing') {
                               nextContext.currentPhase = nextItem.type === 'time' ? 'Esegui' : (Object.keys(nextItem.tempo || {})[0] || 'up');
                           }
-                          return { nextState, nextContext };
+                      } else {
+                          nextState = 'finished';
                       }
                   }
               }
-              return { nextState: 'finished', nextContext: { ...trainerContext } };
-          };
-          
-          const { nextState, nextContext } = getNextStateInfo();
-          
+          } else if (trainerState === 'rest') {
+              if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
+                  const nextItemIndex = trainerContext.itemIndex + 1;
+                  const nextItem = activeWorkout.items[nextItemIndex];
+                  nextState = nextItem.type === 'rest' ? 'rest' : 'announcing';
+                  nextContext = { itemIndex: nextItemIndex, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 };
+                  if (nextState === 'announcing') {
+                     nextContext.currentPhase = nextItem.type === 'time' ? 'Esegui' : (Object.keys(nextItem.tempo || {})[0] || 'up');
+                  }
+              } else {
+                  nextState = 'finished';
+              }
+          }
+          dispatch({ type: 'SET_TRAINER_PHASE', payload: { nextState, nextContext } });
+          shouldNotify = false;
+          break;
+      }
+      case 'START_TRAINING_PREPARATION': {
+          dispatch({ type: 'SET_TRAINER_PHASE', payload: { nextState: 'preparing', nextContext: state.trainerContext } });
+          shouldNotify = false;
+          break;
+      }
+      case 'SET_TRAINER_PHASE': {
+          const { nextState, nextContext } = action.payload;
           let duration = 0;
           if (nextState !== 'finished') {
-              const itemForDuration = activeWorkout.items[nextContext.itemIndex];
+              const itemForDuration = state.activeWorkout.items[nextContext.itemIndex];
               switch(nextState) {
                   case 'preparing': duration = 3000; break;
                   case 'announcing': duration = 750; break;
@@ -262,11 +285,8 @@ function createStore() {
                       break;
               }
           }
-
           newState = { ...state, trainerState: nextState, trainerContext: { ...nextContext, duration, remaining: duration } };
-          if (duration > 0) {
-              startTimer();
-          }
+          if (duration > 0) startTimer();
           break;
       }
       default:
