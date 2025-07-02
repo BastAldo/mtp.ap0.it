@@ -61,13 +61,12 @@ body::-webkit-scrollbar-thumb, .modal-body::-webkit-scrollbar-thumb { background
 .view--active { display: block; }
 
 /* --- KEYFRAMES --- */
-@keyframes pulse-fade {
-    0% { opacity: 0.5; transform: scale(0.95); }
-    50% { opacity: 1; transform: scale(1.05); }
-    100% { opacity: 0; transform: scale(0.95); }
+@keyframes soft-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
 }
 .is-flashing {
-    animation: pulse-fade 0.75s ease-in-out forwards;
+  animation: soft-flash 0.75s ease-in-out;
 }
 @keyframes fade-slide-up {
     from {

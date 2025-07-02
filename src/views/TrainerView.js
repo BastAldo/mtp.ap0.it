@@ -103,7 +103,7 @@ export function init(element) {
         const { trainerState } = store.getState();
         switch (trainerState) {
             case 'ready':
-                store.dispatch({ type: 'SET_TRAINER_STATE', payload: 'preparing' });
+                store.dispatch({ type: 'ADVANCE_TRAINER_STATE' });
                 break;
             case 'paused':
                 store.dispatch({ type: 'RESUME_TRAINER' });
@@ -125,6 +125,5 @@ export function init(element) {
             render(element);
         }
     });
-
     render(element);
 }

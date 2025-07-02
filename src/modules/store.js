@@ -2,7 +2,7 @@ import { saveToStorage } from './storage.js';
 import { getExerciseById } from './exerciseRepository.js';
 
 const WORKOUTS_STORAGE_KEY = 'workouts';
-const TICK_INTERVAL = 100; // ms
+const TICK_INTERVAL = 100;
 
 const cloneWorkouts = (workouts) => JSON.parse(JSON.stringify(workouts));
 
@@ -20,7 +20,6 @@ function createStore() {
     completedWorkout: null,
     trainerState: 'idle',
     trainerContext: {},
-    _isPausedGuard: false, // Guardia per la pausa
   };
 
   const subscribers = new Set();
@@ -61,8 +60,8 @@ function createStore() {
 
     switch (action.type) {
       case 'CHANGE_VIEW': newState = { ...state, currentView: action.payload }; break;
-      case 'PREV_WEEK': { const d=new Date(state.focusedDate); d.setDate(d.getDate()-7); newState={...state, focusedDate:d}; break; }
-      case 'NEXT_WEEK': { const d=new Date(state.focusedDate); d.setDate(d.getDate()+7); newState={...state, focusedDate:d}; break; }
+      case 'PREV_WEEK': { const d = new Date(state.focusedDate); d.setDate(d.getDate() - 7); newState = { ...state, focusedDate: d }; break; }
+      case 'NEXT_WEEK': { const d = new Date(state.focusedDate); d.setDate(d.getDate() + 7); newState = { ...state, focusedDate: d }; break; }
       case 'SET_WORKOUTS': newState = { ...state, workouts: action.payload }; break;
       case 'OPEN_MODAL': newState = { ...state, isModalOpen: true, modalContext: action.payload }; break;
       case 'CLOSE_MODAL': newState = { ...state, isModalOpen: false, modalContext: null }; break;
@@ -139,170 +138,136 @@ function createStore() {
           activeWorkout: { date, items: workoutItems, completed: false, fullPlan: workoutItems },
           completedWorkout: null,
           trainerState: 'ready',
-          trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0, duration: 0, remaining: 0 },
-          _isPausedGuard: false
+          trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0, duration: 0, remaining: 0 }
         };
         break;
       }
       case 'FINISH_WORKOUT': {
         stopTimer();
-        newState = { ...state, currentView: 'debriefing', completedWorkout: { ...state.activeWorkout, completed: true }, activeWorkout: null, trainerState: 'idle', trainerContext: {}, _isPausedGuard: false };
+        newState = { ...state, currentView: 'debriefing', completedWorkout: { ...state.activeWorkout, completed: true }, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
         break;
       }
       case 'TERMINATE_WORKOUT': {
         stopTimer();
         const { activeWorkout, trainerContext } = state;
         const partialWorkout = { date: activeWorkout.date, fullPlan: activeWorkout.fullPlan, completed: false, terminationPoint: trainerContext };
-        newState = { ...state, currentView: 'debriefing', completedWorkout: partialWorkout, activeWorkout: null, trainerState: 'idle', trainerContext: {}, _isPausedGuard: false };
+        newState = { ...state, currentView: 'debriefing', completedWorkout: partialWorkout, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
         break;
       }
-      case 'SET_TRAINER_STATE': {
-          const nextTrainerState = action.payload;
-          let duration = 0;
-          const { activeWorkout, trainerContext } = state;
-          const currentItem = activeWorkout.items[trainerContext.itemIndex];
-          newState = { ...state, _isPausedGuard: false }; // Reset della guardia
-
-          switch(nextTrainerState) {
-              case 'preparing': duration = 3000; break;
-              case 'announcing': duration = 750; break;
-              case 'action':
-                  if (currentItem.type === 'time') { duration = (currentItem.duration || 10) * 1000; }
-                  else { const tempo = currentItem.tempo || {}; duration = (tempo[trainerContext.currentPhase] || 1) * 1000; }
-                  break;
-              case 'rest':
-                  duration = (currentItem.duration || 60) * 1000;
-                  break;
-          }
-          newState = { ...newState, trainerState: nextTrainerState, trainerContext: { ...newState.trainerContext, duration, remaining: duration, stateBeforePause: null } };
-          if (duration > 0) startTimer();
-          else stopTimer();
-          break;
-      }
       case 'PAUSE_TRAINER': {
-        if (['paused', 'ready', 'finished'].includes(state.trainerState)) break;
+        if (state.trainerState === 'paused') break;
         stopTimer();
-        newState = { ...state, trainerState: 'paused', trainerContext: { ...state.trainerContext, stateBeforePause: state.trainerState }, _isPausedGuard: true };
+        newState = { ...state, trainerState: 'paused', trainerContext: { ...state.trainerContext, stateBeforePause: state.trainerState } };
         break;
       }
       case 'RESUME_TRAINER': {
         if (state.trainerState !== 'paused') break;
-        newState = { ...state, trainerState: state.trainerContext.stateBeforePause, _isPausedGuard: false };
+        newState = { ...state, trainerState: state.trainerContext.stateBeforePause };
         startTimer();
         break;
       }
       case 'TIMER_TICK': {
-        if (state._isPausedGuard || state.trainerState === 'paused' || !state.activeWorkout) { shouldNotify = false; break; }
-
+        if (state.trainerState === 'paused' || !state.activeWorkout) { shouldNotify = false; break; }
         const newRemaining = state.trainerContext.remaining - TICK_INTERVAL;
-
-        if (newRemaining > 0) {
-          newState = { ...state, trainerContext: { ...state.trainerContext, remaining: newRemaining } };
-        } else {
+        if (newRemaining <= 0) {
           stopTimer();
-          if (state._isPausedGuard) { shouldNotify = false; break; }
-
-          const { trainerState, activeWorkout, trainerContext } = state;
-          const currentItem = activeWorkout.items[trainerContext.itemIndex];
-
-          const advanceToNextItem = () => {
-            if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
-              const nextItemIndex = trainerContext.itemIndex + 1;
-              const nextItem = activeWorkout.items[nextItemIndex];
-              const newContext = { itemIndex: nextItemIndex, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 };
-              const newState = nextItem.type === 'rest' ? 'rest' : 'announcing';
-              if (nextItem.type !== 'rest') {
-                  newContext.currentPhase = nextItem.type === 'time' ? 'Esegui' : (Object.keys(nextItem.tempo || {})[0] || 'up');
-              }
-              return { newState, newContext };
-            }
-            return null;
-          };
-
-          let nextState = trainerState;
-          let nextContext = { ...trainerContext };
-          let nextDuration = 0;
-
-          switch (trainerState) {
-            case 'preparing': {
-              const firstItem = activeWorkout.items[0];
-              if (firstItem.type === 'rest') { nextState = 'rest'; }
-              else {
-                  nextState = 'announcing';
-                  if (firstItem.type === 'time') { nextContext.currentPhase = 'Esegui'; }
-                  else { const tempo = firstItem.tempo || {}; nextContext.currentPhase = Object.keys(tempo)[0] || 'up'; }
-              }
-              break;
-            }
-            case 'announcing': nextState = 'action'; break;
-            case 'action': {
-              if (currentItem.type === 'exercise') {
-                const tempo = currentItem.tempo || {};
-                const phases = Object.keys(tempo);
-                const nextPhaseIndex = trainerContext.currentPhaseIndex + 1;
-                if (nextPhaseIndex < phases.length) {
-                  nextState = 'announcing';
-                  nextContext.currentPhaseIndex = nextPhaseIndex;
-                  nextContext.currentPhase = phases[nextPhaseIndex];
-                } else {
-                  nextContext.currentPhaseIndex = 0;
-                  if (trainerContext.currentRep < currentItem.reps) {
-                    nextContext.currentRep++;
-                    nextState = 'announcing';
-                    nextContext.currentPhase = phases[0] || 'up';
-                  } else if (trainerContext.currentSeries < currentItem.series) {
-                    nextContext.currentSeries++;
-                    nextContext.currentRep = 1;
-                    nextState = 'announcing';
-                    nextContext.currentPhase = phases[0] || 'up';
-                  } else {
-                    const advance = advanceToNextItem();
-                    if (advance) { nextState = advance.newState; nextContext = { ...nextContext, ...advance.newContext }; }
-                    else { nextState = 'finished'; }
-                  }
-                }
-              } else if (currentItem.type === 'time') {
-                  if (trainerContext.currentSeries < currentItem.series) {
-                      nextContext.currentSeries++;
-                      nextState = 'announcing';
-                      nextContext.currentPhase = 'Esegui';
-                  } else {
-                      const advance = advanceToNextItem();
-                      if (advance) { nextState = advance.newState; nextContext = { ...nextContext, ...advance.newContext }; }
-                      else { nextState = 'finished'; }
-                  }
-              }
-              break;
-            }
-            case 'rest': {
-              const advance = advanceToNextItem();
-              if (advance) { nextState = advance.newState; nextContext = { ...nextContext, ...advance.newContext }; }
-              else { nextState = 'finished'; }
-              break;
-            }
-          }
-
-          const nextItemForDuration = activeWorkout.items[nextContext.itemIndex];
-          if (nextState !== 'finished') {
-              switch(nextState) {
-                  case 'announcing': nextDuration = 750; break;
-                  case 'action':
-                      if (nextItemForDuration.type === 'time') { nextDuration = (nextItemForDuration.duration || 10) * 1000; }
-                      else { const tempo = nextItemForDuration.tempo || {}; nextDuration = (tempo[nextContext.currentPhase] || 1) * 1000; }
-                      break;
-                  case 'rest':
-                      nextDuration = (nextItemForDuration.duration || 60) * 1000;
-                      break;
-              }
-          }
-
-          nextContext.duration = nextDuration;
-          nextContext.remaining = nextDuration;
-
-          newState = { ...state, trainerState: nextState, trainerContext: nextContext, _isPausedGuard: false };
-          if (nextDuration > 0) startTimer();
+          dispatch({ type: 'ADVANCE_TRAINER_STATE' });
+          shouldNotify = false; // L'azione di avanzamento notificherà
+        } else {
+          newState = { ...state, trainerContext: { ...state.trainerContext, remaining: newRemaining } };
         }
         break;
+      }
+      case 'ADVANCE_TRAINER_STATE': {
+          stopTimer();
+          const { trainerState, activeWorkout, trainerContext } = state;
+          if (!activeWorkout) break;
+          
+          const currentItem = activeWorkout.items[trainerContext.itemIndex];
+          
+          const getNextStateInfo = () => {
+              const currentState = trainerState === 'ready' ? 'preparing' : trainerState;
+              switch (currentState) {
+                  case 'preparing': {
+                      const firstItem = activeWorkout.items[0];
+                      const nextState = firstItem.type === 'rest' ? 'rest' : 'announcing';
+                      const nextContext = { ...trainerContext };
+                      if (nextState === 'announcing') {
+                          nextContext.currentPhase = firstItem.type === 'time' ? 'Esegui' : (Object.keys(firstItem.tempo || {})[0] || 'up');
+                      }
+                      return { nextState, nextContext };
+                  }
+                  case 'announcing':
+                      return { nextState: 'action', nextContext: { ...trainerContext } };
+                  case 'action': {
+                      let nextContext = { ...trainerContext };
+                      if (currentItem.type === 'exercise') {
+                          const tempo = currentItem.tempo || {};
+                          const phases = Object.keys(tempo);
+                          if (nextContext.currentPhaseIndex < phases.length - 1) {
+                              nextContext.currentPhaseIndex++;
+                              nextContext.currentPhase = phases[nextContext.currentPhaseIndex];
+                              return { nextState: 'announcing', nextContext };
+                          } else {
+                              nextContext.currentPhaseIndex = 0;
+                              if (nextContext.currentRep < currentItem.reps) {
+                                  nextContext.currentRep++;
+                                  nextContext.currentPhase = phases[0] || 'up';
+                                  return { nextState: 'announcing', nextContext };
+                              } else if (nextContext.currentSeries < currentItem.series) {
+                                  nextContext.currentSeries++;
+                                  nextContext.currentRep = 1;
+                                  nextContext.currentPhase = phases[0] || 'up';
+                                  return { nextState: 'announcing', nextContext };
+                              }
+                          }
+                      } else if (currentItem.type === 'time') {
+                          if (nextContext.currentSeries < currentItem.series) {
+                              nextContext.currentSeries++;
+                              return { nextState: 'announcing', nextContext };
+                          }
+                      }
+                      // Fallthrough to advance item
+                  }
+                  case 'rest': {
+                      if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
+                          const nextItemIndex = trainerContext.itemIndex + 1;
+                          const nextItem = activeWorkout.items[nextItemIndex];
+                          const nextState = nextItem.type === 'rest' ? 'rest' : 'announcing';
+                          const nextContext = { itemIndex: nextItemIndex, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 };
+                          if (nextState === 'announcing') {
+                              nextContext.currentPhase = nextItem.type === 'time' ? 'Esegui' : (Object.keys(nextItem.tempo || {})[0] || 'up');
+                          }
+                          return { nextState, nextContext };
+                      }
+                  }
+              }
+              return { nextState: 'finished', nextContext: { ...trainerContext } };
+          };
+          
+          const { nextState, nextContext } = getNextStateInfo();
+          
+          let duration = 0;
+          if (nextState !== 'finished') {
+              const itemForDuration = activeWorkout.items[nextContext.itemIndex];
+              switch(nextState) {
+                  case 'preparing': duration = 3000; break;
+                  case 'announcing': duration = 750; break;
+                  case 'action':
+                      if (itemForDuration.type === 'time') { duration = (itemForDuration.duration || 10) * 1000; }
+                      else { const tempo = itemForDuration.tempo || {}; duration = (tempo[nextContext.currentPhase] || 1) * 1000; }
+                      break;
+                  case 'rest':
+                      duration = (itemForDuration.duration || 60) * 1000;
+                      break;
+              }
+          }
+
+          newState = { ...state, trainerState: nextState, trainerContext: { ...nextContext, duration, remaining: duration } };
+          if (duration > 0) {
+              startTimer();
+          }
+          break;
       }
       default:
         action.type = '@@UNKNOWN';
