@@ -167,24 +167,18 @@ function createStore() {
         break;
       }
       case 'TIMER_TICK': {
-        if (state.trainerState === 'paused' || !state.activeWorkout) { shouldNotify = false; break; }
+        if (state.trainerState === 'paused') { shouldNotify = false; break; }
+        
         const newRemaining = state.trainerContext.remaining - TICK_INTERVAL;
-        if (newRemaining <= 0) {
-          dispatch({ type: 'TIMER_EXPIRED' });
-          shouldNotify = false;
-        } else {
+
+        if (newRemaining > 0) {
           newState = { ...state, trainerContext: { ...state.trainerContext, remaining: newRemaining } };
-        }
-        break;
-      }
-      case 'TIMER_EXPIRED': {
-          stopTimer();
+        } else {
           const { trainerState, activeWorkout, trainerContext } = state;
-          if (!activeWorkout) break;
-          
           const currentItem = activeWorkout.items[trainerContext.itemIndex];
           let nextState = trainerState;
           let nextContext = { ...trainerContext };
+          let workoutFinished = false;
 
           if (trainerState === 'preparing') {
               const firstItem = activeWorkout.items[0];
@@ -194,84 +188,68 @@ function createStore() {
               }
           } else if (trainerState === 'announcing') {
               nextState = 'action';
-          } else if (trainerState === 'action') {
-              if (currentItem.type === 'exercise') {
+          } else if (trainerState === 'action' || trainerState === 'rest') {
+              let itemIsComplete = false;
+              if (trainerState === 'rest') {
+                  itemIsComplete = true;
+              } else if (currentItem.type === 'time') {
+                  itemIsComplete = (nextContext.currentSeries >= currentItem.series);
+                  if (!itemIsComplete) nextContext.currentSeries++;
+              } else if (currentItem.type === 'exercise') {
                   const tempo = currentItem.tempo || {};
                   const phases = Object.keys(tempo);
                   if (nextContext.currentPhaseIndex < phases.length - 1) {
-                      nextState = 'announcing';
                       nextContext.currentPhaseIndex++;
                       nextContext.currentPhase = phases[nextContext.currentPhaseIndex];
                   } else {
                       nextContext.currentPhaseIndex = 0;
                       if (nextContext.currentRep < currentItem.reps) {
-                          nextState = 'announcing';
                           nextContext.currentRep++;
                           nextContext.currentPhase = phases[0] || 'up';
                       } else if (nextContext.currentSeries < currentItem.series) {
-                          nextState = 'announcing';
                           nextContext.currentSeries++;
                           nextContext.currentRep = 1;
                           nextContext.currentPhase = phases[0] || 'up';
                       } else {
-                          // Exercise complete, advance to next item
-                          if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
-                              const nextItemIndex = trainerContext.itemIndex + 1;
-                              const nextItem = activeWorkout.items[nextItemIndex];
-                              nextState = nextItem.type === 'rest' ? 'rest' : 'announcing';
-                              nextContext = { itemIndex: nextItemIndex, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 };
-                              if (nextState === 'announcing') {
-                                  nextContext.currentPhase = nextItem.type === 'time' ? 'Esegui' : (Object.keys(nextItem.tempo || {})[0] || 'up');
-                              }
-                          } else {
-                              nextState = 'finished';
-                          }
-                      }
-                  }
-              } else if (currentItem.type === 'time') {
-                  if (nextContext.currentSeries < currentItem.series) {
-                      nextState = 'announcing';
-                      nextContext.currentSeries++;
-                  } else {
-                      if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
-                          const nextItemIndex = trainerContext.itemIndex + 1;
-                          const nextItem = activeWorkout.items[nextItemIndex];
-                          nextState = nextItem.type === 'rest' ? 'rest' : 'announcing';
-                          nextContext = { itemIndex: nextItemIndex, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 };
-                          if (nextState === 'announcing') {
-                              nextContext.currentPhase = nextItem.type === 'time' ? 'Esegui' : (Object.keys(nextItem.tempo || {})[0] || 'up');
-                          }
-                      } else {
-                          nextState = 'finished';
+                          itemIsComplete = true;
                       }
                   }
               }
-          } else if (trainerState === 'rest') {
-              if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
-                  const nextItemIndex = trainerContext.itemIndex + 1;
-                  const nextItem = activeWorkout.items[nextItemIndex];
-                  nextState = nextItem.type === 'rest' ? 'rest' : 'announcing';
-                  nextContext = { itemIndex: nextItemIndex, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 };
-                  if (nextState === 'announcing') {
-                     nextContext.currentPhase = nextItem.type === 'time' ? 'Esegui' : (Object.keys(nextItem.tempo || {})[0] || 'up');
+              
+              if(itemIsComplete) {
+                  if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
+                      const nextItemIndex = trainerContext.itemIndex + 1;
+                      const nextItem = activeWorkout.items[nextItemIndex];
+                      nextContext = { itemIndex: nextItemIndex, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 };
+                      if(nextItem.type === 'rest') {
+                          nextState = 'rest';
+                      } else {
+                          nextState = 'announcing';
+                          nextContext.currentPhase = nextItem.type === 'time' ? 'Esegui' : (Object.keys(nextItem.tempo || {})[0] || 'up');
+                      }
+                  } else {
+                      workoutFinished = true;
                   }
               } else {
-                  nextState = 'finished';
+                  nextState = 'announcing';
               }
           }
-          dispatch({ type: 'SET_TRAINER_PHASE', payload: { nextState, nextContext } });
+
+          if (workoutFinished) {
+              dispatch({ type: 'SET_TRAINER_PHASE', payload: { nextState: 'finished', nextContext: {} } });
+          } else {
+              dispatch({ type: 'SET_TRAINER_PHASE', payload: { nextState, nextContext } });
+          }
           shouldNotify = false;
-          break;
-      }
-      case 'START_TRAINING_PREPARATION': {
-          dispatch({ type: 'SET_TRAINER_PHASE', payload: { nextState: 'preparing', nextContext: state.trainerContext } });
-          shouldNotify = false;
-          break;
+        }
+        break;
       }
       case 'SET_TRAINER_PHASE': {
+          stopTimer(); // Regola d'oro: ferma sempre il timer prima di impostare una nuova fase.
           const { nextState, nextContext } = action.payload;
           let duration = 0;
-          if (nextState !== 'finished') {
+
+          if (nextState !== 'finished' && state.activeWorkout) {
               const itemForDuration = state.activeWorkout.items[nextContext.itemIndex];
               switch(nextState) {
                   case 'preparing': duration = 3000; break;
@@ -285,6 +263,7 @@ function createStore() {
                       break;
               }
           }
+          
           newState = { ...state, trainerState: nextState, trainerContext: { ...nextContext, duration, remaining: duration } };
           if (duration > 0) startTimer();
           break;

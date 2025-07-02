@@ -17,7 +17,7 @@ function render(element) {
     let terminateButtonHidden = trainerState === 'finished' || trainerState === 'ready';
 
     const { duration, remaining } = trainerContext;
-    if (duration > 0) {
+    if (duration > 0 && remaining >= 0) {
         const progress = (duration - remaining) / duration;
         ringOffset = circumference * (1 - progress);
     }
@@ -100,10 +100,10 @@ export function init(element) {
 
         if (!mainButton) return;
 
-        const { trainerState } = store.getState();
+        const { trainerState, trainerContext } = store.getState();
         switch (trainerState) {
             case 'ready':
-                store.dispatch({ type: 'START_TRAINING_PREPARATION' });
+                store.dispatch({ type: 'SET_TRAINER_PHASE', payload: { nextState: 'preparing', nextContext: trainerContext } });
                 break;
             case 'paused':
                 store.dispatch({ type: 'RESUME_TRAINER' });
