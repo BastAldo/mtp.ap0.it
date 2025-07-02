@@ -20,6 +20,7 @@ function createStore() {
     completedWorkout: null,
     trainerState: 'idle',
     trainerContext: {},
+    _isPausedGuard: false, // Guardia per la pausa
   };
 
   const subscribers = new Set();
@@ -138,20 +139,21 @@ function createStore() {
           activeWorkout: { date, items: workoutItems, completed: false, fullPlan: workoutItems },
           completedWorkout: null,
           trainerState: 'ready',
-          trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0, duration: 0, remaining: 0 }
+          trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0, duration: 0, remaining: 0 },
+          _isPausedGuard: false
         };
         break;
       }
       case 'FINISH_WORKOUT': {
         stopTimer();
-        newState = { ...state, currentView: 'debriefing', completedWorkout: { ...state.activeWorkout, completed: true }, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
+        newState = { ...state, currentView: 'debriefing', completedWorkout: { ...state.activeWorkout, completed: true }, activeWorkout: null, trainerState: 'idle', trainerContext: {}, _isPausedGuard: false };
         break;
       }
       case 'TERMINATE_WORKOUT': {
         stopTimer();
         const { activeWorkout, trainerContext } = state;
         const partialWorkout = { date: activeWorkout.date, fullPlan: activeWorkout.fullPlan, completed: false, terminationPoint: trainerContext };
-        newState = { ...state, currentView: 'debriefing', completedWorkout: partialWorkout, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
+        newState = { ...state, currentView: 'debriefing', completedWorkout: partialWorkout, activeWorkout: null, trainerState: 'idle', trainerContext: {}, _isPausedGuard: false };
         break;
       }
       case 'SET_TRAINER_STATE': {
@@ -159,6 +161,7 @@ function createStore() {
           let duration = 0;
           const { activeWorkout, trainerContext } = state;
           const currentItem = activeWorkout.items[trainerContext.itemIndex];
+          newState = { ...state, _isPausedGuard: false }; // Reset della guardia
 
           switch(nextTrainerState) {
               case 'preparing': duration = 3000; break;
@@ -171,7 +174,7 @@ function createStore() {
                   duration = (currentItem.duration || 60) * 1000;
                   break;
           }
-          newState = { ...state, trainerState: nextTrainerState, trainerContext: { ...state.trainerContext, duration, remaining: duration, stateBeforePause: null } };
+          newState = { ...newState, trainerState: nextTrainerState, trainerContext: { ...newState.trainerContext, duration, remaining: duration, stateBeforePause: null } };
           if (duration > 0) startTimer();
           else stopTimer();
           break;
@@ -179,25 +182,26 @@ function createStore() {
       case 'PAUSE_TRAINER': {
         if (['paused', 'ready', 'finished'].includes(state.trainerState)) break;
         stopTimer();
-        newState = { ...state, trainerState: 'paused', trainerContext: { ...state.trainerContext, stateBeforePause: state.trainerState } };
+        newState = { ...state, trainerState: 'paused', trainerContext: { ...state.trainerContext, stateBeforePause: state.trainerState }, _isPausedGuard: true };
         break;
       }
       case 'RESUME_TRAINER': {
         if (state.trainerState !== 'paused') break;
-        newState = { ...state, trainerState: state.trainerContext.stateBeforePause };
+        newState = { ...state, trainerState: state.trainerContext.stateBeforePause, _isPausedGuard: false };
         startTimer();
         break;
       }
       case 'TIMER_TICK': {
-        if (state.trainerState === 'paused' || !state.activeWorkout) { shouldNotify = false; break; }
+        if (state._isPausedGuard || state.trainerState === 'paused' || !state.activeWorkout) { shouldNotify = false; break; }
 
         const newRemaining = state.trainerContext.remaining - TICK_INTERVAL;
 
         if (newRemaining > 0) {
           newState = { ...state, trainerContext: { ...state.trainerContext, remaining: newRemaining } };
         } else {
-          // Timer finished, transition to the next state
           stopTimer();
+          if (state._isPausedGuard) { shouldNotify = false; break; }
+
           const { trainerState, activeWorkout, trainerContext } = state;
           const currentItem = activeWorkout.items[trainerContext.itemIndex];
 
@@ -295,7 +299,7 @@ function createStore() {
           nextContext.duration = nextDuration;
           nextContext.remaining = nextDuration;
 
-          newState = { ...state, trainerState: nextState, trainerContext: nextContext };
+          newState = { ...state, trainerState: nextState, trainerContext: nextContext, _isPausedGuard: false };
           if (nextDuration > 0) startTimer();
         }
         break;

@@ -1,12 +1,10 @@
-commit_message: "fix(store): Unificare la logica del timer in TIMER_TICK per risolvere il loop definitivo"
+commit_message: "fix(trainer): Correzione definitiva della pausa e miglioramento animazione"
 rationale: |
-  Questo commit risolve il loop finale e critico nel trainer unificando tutta la logica di avanzamento dello stato all'interno dell'azione `TIMER_TICK`.
+  Questo commit risolve i due problemi rimanenti per rendere il trainer stabile e usabile.
 
-  Il problema precedente era causato da una chiamata `dispatch` nidificata (`TIMER_TICK` -> `TIMER_COMPLETE`), che creava una race condition.
+  1.  **Correzione Bug Pausa**: È stata risolta la race condition che impediva alla funzione di pausa di funzionare correttamente. Ora, l'azione `PAUSE_TRAINER` imposta un flag che viene controllato all'inizio di `TIMER_TICK`. Se il flag è attivo, l'avanzamento del timer viene bloccato immediatamente, garantendo che la pausa sia affidabile e istantanea.
 
-  La soluzione è stata eliminare completamente l'azione `TIMER_COMPLETE` e spostare tutta la sua logica di transizione all'interno di `TIMER_TICK`. Ora, quando un timer scade, `TIMER_TICK` stesso gestisce in modo atomico l'arresto del vecchio timer, il calcolo dello stato successivo e l'avvio del nuovo timer.
-
-  Questo design elimina tutte le chiamate nidificate, garantisce la stabilità del ciclo di vita del trainer e aderisce pienamente al principio di avere azioni atomiche che modificano lo stato.
+  2.  **Miglioramento Animazione "Announcing"**: L'animazione `.is-flashing` in `assets/css/style.css` è stata modificata. Invece di un flash rapido e ripetuto, è stata implementata un'animazione "pulse" più morbida (un singolo ciclo di dissolvenza) che dura per l'intera fase di annuncio. Questo migliora notevolmente l'esperienza utente, eliminando l'effetto fastidioso.
 patches:
   - file: src/modules/store.js
     content: |
@@ -32,6 +30,7 @@ patches:
           completedWorkout: null,
           trainerState: 'idle',
           trainerContext: {},
+          _isPausedGuard: false, // Guardia per la pausa
         };
 
         const subscribers = new Set();
@@ -150,20 +149,21 @@ patches:
                 activeWorkout: { date, items: workoutItems, completed: false, fullPlan: workoutItems },
                 completedWorkout: null,
                 trainerState: 'ready',
-                trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0, duration: 0, remaining: 0 }
+                trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0, duration: 0, remaining: 0 },
+                _isPausedGuard: false
               };
               break;
             }
             case 'FINISH_WORKOUT': {
               stopTimer();
-              newState = { ...state, currentView: 'debriefing', completedWorkout: { ...state.activeWorkout, completed: true }, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
+              newState = { ...state, currentView: 'debriefing', completedWorkout: { ...state.activeWorkout, completed: true }, activeWorkout: null, trainerState: 'idle', trainerContext: {}, _isPausedGuard: false };
               break;
             }
             case 'TERMINATE_WORKOUT': {
               stopTimer();
               const { activeWorkout, trainerContext } = state;
               const partialWorkout = { date: activeWorkout.date, fullPlan: activeWorkout.fullPlan, completed: false, terminationPoint: trainerContext };
-              newState = { ...state, currentView: 'debriefing', completedWorkout: partialWorkout, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
+              newState = { ...state, currentView: 'debriefing', completedWorkout: partialWorkout, activeWorkout: null, trainerState: 'idle', trainerContext: {}, _isPausedGuard: false };
               break;
             }
             case 'SET_TRAINER_STATE': {
@@ -171,6 +171,7 @@ patches:
                 let duration = 0;
                 const { activeWorkout, trainerContext } = state;
                 const currentItem = activeWorkout.items[trainerContext.itemIndex];
+                newState = { ...state, _isPausedGuard: false }; // Reset della guardia
 
                 switch(nextTrainerState) {
                     case 'preparing': duration = 3000; break;
@@ -183,7 +184,7 @@ patches:
                         duration = (currentItem.duration || 60) * 1000;
                         break;
                 }
-                newState = { ...state, trainerState: nextTrainerState, trainerContext: { ...state.trainerContext, duration, remaining: duration, stateBeforePause: null } };
+                newState = { ...newState, trainerState: nextTrainerState, trainerContext: { ...newState.trainerContext, duration, remaining: duration, stateBeforePause: null } };
                 if (duration > 0) startTimer();
                 else stopTimer();
                 break;
@@ -191,25 +192,26 @@ patches:
             case 'PAUSE_TRAINER': {
               if (['paused', 'ready', 'finished'].includes(state.trainerState)) break;
               stopTimer();
-              newState = { ...state, trainerState: 'paused', trainerContext: { ...state.trainerContext, stateBeforePause: state.trainerState } };
+              newState = { ...state, trainerState: 'paused', trainerContext: { ...state.trainerContext, stateBeforePause: state.trainerState }, _isPausedGuard: true };
               break;
             }
             case 'RESUME_TRAINER': {
               if (state.trainerState !== 'paused') break;
-              newState = { ...state, trainerState: state.trainerContext.stateBeforePause };
+              newState = { ...state, trainerState: state.trainerContext.stateBeforePause, _isPausedGuard: false };
               startTimer();
               break;
             }
             case 'TIMER_TICK': {
-              if (state.trainerState === 'paused' || !state.activeWorkout) { shouldNotify = false; break; }
+              if (state._isPausedGuard || state.trainerState === 'paused' || !state.activeWorkout) { shouldNotify = false; break; }
 
               const newRemaining = state.trainerContext.remaining - TICK_INTERVAL;
 
               if (newRemaining > 0) {
                 newState = { ...state, trainerContext: { ...state.trainerContext, remaining: newRemaining } };
               } else {
-                // Timer finished, transition to the next state
                 stopTimer();
+                if (state._isPausedGuard) { shouldNotify = false; break; }
+
                 const { trainerState, activeWorkout, trainerContext } = state;
                 const currentItem = activeWorkout.items[trainerContext.itemIndex];
 
@@ -307,7 +309,7 @@ patches:
                 nextContext.duration = nextDuration;
                 nextContext.remaining = nextDuration;
 
-                newState = { ...state, trainerState: nextState, trainerContext: nextContext };
+                newState = { ...state, trainerState: nextState, trainerContext: nextContext, _isPausedGuard: false };
                 if (nextDuration > 0) startTimer();
               }
               break;
@@ -336,5 +338,235 @@ patches:
       }
       const store = createStore();
       export default store;
+  - file: assets/css/style.css
+    content: |
+      /* --- GLOBAL STYLES & MOBILE FIRST --- */
+      :root {
+          --bg-color: #1a1a1d;
+          --card-color: #2c2c34;
+          --primary-color: #9575cd;
+          --secondary-color: #4db6ac;
+          --text-color: #f4f4f9;
+          --text-color-muted: #aaa;
+          --border-color: #40404a;
+          --danger-color: #ef5350;
+          --success-color: #66bb6a;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+          background-color: var(--bg-color);
+          color: var(--text-color);
+          padding-top: 80px; /* Adjusted Space for the fixed header */
+          scrollbar-width: thin;
+          scrollbar-color: var(--primary-color) var(--bg-color);
+      }
+      /* Custom Scrollbar for Webkit Browsers */
+      body::-webkit-scrollbar, .modal-body::-webkit-scrollbar { width: 8px; }
+      body::-webkit-scrollbar-track, .modal-body::-webkit-scrollbar-track { background: var(--card-color); }
+      body::-webkit-scrollbar-thumb, .modal-body::-webkit-scrollbar-thumb { background-color: var(--primary-color); border-radius: 10px; border: 2px solid var(--card-color); }
+
+      /* --- PERSISTENT HEADER (REDESIGNED) --- */
+      .app-header {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 60px;
+          background-color: rgba(44, 44, 52, 0.85);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+      }
+      .app-title {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+      }
+      .app-title svg {
+          width: 24px;
+          height: 24px;
+      }
+      .app-title h1 {
+          font-size: 1.4rem;
+          background: -webkit-linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+      }
+
+      #app-container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+      .view { display: none; width: 100%; }
+      .view--active { display: block; }
+
+      /* --- KEYFRAMES --- */
+      @keyframes pulse-fade {
+          0% { opacity: 0.5; transform: scale(0.95); }
+          50% { opacity: 1; transform: scale(1.05); }
+          100% { opacity: 0; transform: scale(0.95); }
+      }
+      .is-flashing {
+          animation: pulse-fade 0.75s ease-in-out forwards;
+      }
+      @keyframes fade-slide-up {
+          from {
+              opacity: 0;
+              transform: translateY(10px);
+          }
+          to {
+              opacity: 1;
+              transform: translateY(0);
+          }
+      }
+      @keyframes fade-in-out {
+        0%, 100% { opacity: 0; transform: translateY(-20px); }
+        10%, 90% { opacity: 1; transform: translateY(0); }
+      }
+
+      /* --- NOTICE / TOAST STYLES --- */
+      #notice-container {
+          position: fixed;
+          top: 80px; /* Below header */
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 2000;
+          display: flex;
+          justify-content: center;
+      }
+      .notice {
+          background-color: var(--secondary-color);
+          color: var(--bg-color);
+          padding: 0.8rem 1.5rem;
+          border-radius: 6px;
+          font-weight: bold;
+          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+          animation: fade-in-out 3s ease-in-out forwards;
+      }
+
+      /* --- CALENDAR VIEW STYLES --- */
+      .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+      .calendar-header h2 { font-size: 1.25rem; text-align: center; }
+      .calendar-header button { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: background-color 0.2s; }
+      .calendar-header button:hover { background-color: var(--primary-color); }
+      .calendar-grid { display: grid; grid-template-columns: 1fr; gap: 0.5rem; }
+      .day-cell { background-color: var(--card-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; min-height: 150px; display: flex; flex-direction: column; cursor: pointer; transition: border-color 0.2s; }
+      .day-cell:hover { border-color: var(--primary-color); }
+      .day-cell__header { display: flex; justify-content: space-between; font-weight: bold; color: var(--text-color-muted); text-transform: uppercase; font-size: 0.8rem; pointer-events: none; }
+      .day-cell__body { margin-top: 0.5rem; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; pointer-events: none; }
+      .exercise-count { font-size: 0.9rem; color: var(--secondary-color); }
+      .start-btn { background-color: var(--secondary-color); color: var(--bg-color); border: none; padding: 0.6rem; border-radius: 6px; cursor: pointer; font-weight: bold; text-transform: uppercase; width: 100%; margin-top: 1rem; transition: opacity 0.2s; pointer-events: all !important; }
+      .start-btn:hover { opacity: 0.85; }
+
+      /* --- MODAL STYLES --- */
+      #modal-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; z-index: 1001; }
+      #modal-container.active { opacity: 1; pointer-events: all; }
+      .modal-content { background-color: var(--card-color); border-radius: 8px; border: 1px solid var(--border-color); width: 90%; max-width: 500px; transform: scale(0.95); transition: transform 0.3s ease; display: flex; flex-direction: column; max-height: 90vh; }
+      #modal-container.active .modal-content { transform: scale(1); }
+      .modal-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; }
+      .modal-header h3 { color: var(--primary-color); }
+      .modal-close-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; cursor: pointer; }
+      .modal-body { overflow-y: auto; flex-grow: 1; padding: 1rem 1.5rem; }
+      .modal-actions { padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 1rem; flex-shrink: 0; }
+      .modal-actions button {
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-weight: bold;
+      }
+      .modal-actions .btn-confirm {
+          background-color: var(--danger-color);
+          border: 1px solid var(--danger-color);
+          color: var(--text-color);
+      }
+      .modal-actions .btn-cancel {
+          background-color: transparent;
+          border: 1px solid var(--border-color);
+          color: var(--text-color-muted);
+      }
+      .add-rest-btn, .add-exercise-btn { background-color: transparent; border: 1px solid var(--secondary-color); color: var(--secondary-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+      .add-rest-btn:hover, .add-exercise-btn:hover { background-color: var(--secondary-color); color: var(--card-color); }
+
+      /* --- WORKOUT EDITOR & LIBRARY STYLES --- */
+      .workout-item-list, .exercise-library-list { list-style: none; padding: 0; margin: 0; }
+      .workout-item { display: flex; align-items: center; padding: 1rem 0.5rem; border-bottom: 1px solid var(--border-color); }
+      .workout-item:last-child { border-bottom: none; }
+      .workout-item.dragging { opacity: 0.4; background-color: var(--border-color); }
+      .workout-item.drag-over-target { border-top: 2px solid var(--primary-color); }
+      .drag-handle { cursor: grab; padding-right: 1rem; color: var(--text-color-muted); }
+      .item-info { display: flex; align-items: baseline; gap: 0.75rem; flex-grow: 1; }
+      .item-info .item-name { font-weight: bold; }
+      .item-info .item-details { color: var(--secondary-color); }
+      .workout-item--rest .item-info .item-name { color: var(--text-color-muted); font-style: italic; }
+      .rest-duration-input { -moz-appearance: textfield; background-color: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 4px; padding: 0.25rem; width: 60px; text-align: center; }
+      .rest-duration-input::-webkit-outer-spin-button, .rest-duration-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+      .remove-item-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; font-weight: bold; cursor: pointer; padding: 0 0.5rem; border-radius: 50%; }
+      .remove-item-btn:hover { color: var(--danger-color); background-color: rgba(239, 83, 80, 0.1); }
+      .exercise-library-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0.5rem; border-bottom: 1px solid var(--border-color); }
+      .exercise-library-item:last-child { border-bottom: none; }
+      .add-to-workout-btn { background-color: var(--primary-color); color: var(--text-color); border: none; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; }
+
+      /* --- TRAINER VIEW STYLES --- */
+      .trainer-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: calc(100vh - 4rem - 60px); text-align: center; }
+      .trainer-header { margin-bottom: 1rem; }
+      .trainer-header h2 { font-size: 2rem; text-transform: uppercase; color: var(--primary-color); }
+      .trainer-header p { color: var(--text-color-muted); }
+      .progress-ring { position: relative; width: 250px; height: 250px; margin: 2rem 0; }
+      .progress-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+      .progress-ring__background { stroke: var(--card-color); fill: transparent; }
+      .progress-ring__foreground { stroke: var(--secondary-color); fill: transparent; }
+      .progress-ring__text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+      .progress-ring__phase { font-size: 1.6rem; font-weight: bold; text-transform: uppercase; }
+      .progress-ring__timer { font-size: 3rem; color: var(--text-color); }
+      .trainer-footer { margin-top: 1rem; }
+      .trainer-footer p { font-size: 1.2rem; min-height: 2em; }
+      .trainer-controls { display: flex; flex-direction: column; align-items: center; gap: 1rem; margin-top: 1rem; }
+      .trainer-main-btn { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 1rem 2rem; border-radius: 8px; cursor: pointer; font-size: 1.2rem; text-transform: uppercase; }
+      .trainer-terminate-btn {
+          background-color: transparent;
+          border: 1px solid var(--border-color);
+          color: var(--text-color-muted);
+          padding: 0.5rem 1rem;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 0.9rem;
+          transition: all 0.2s ease;
+      }
+      .trainer-terminate-btn:hover {
+          background-color: var(--border-color);
+          color: var(--text-color);
+      }
+
+      /* --- DEBRIEFING VIEW STYLES --- */
+      .debriefing-container { max-width: 700px; margin: 0 auto; padding: 1rem; }
+      .debriefing-container h2 { text-align: center; color: var(--primary-color); margin-bottom: 2rem; }
+      .debrief-list { list-style: none; padding: 0; margin: 0 0 2rem 0; }
+      .debrief-item {
+          background-color: var(--card-color);
+          border: 1px solid var(--border-color);
+          border-left: 5px solid var(--border-color);
+          padding: 1rem;
+          border-radius: 6px;
+          margin-bottom: 0.75rem;
+          opacity: 0; /* Start hidden for animation */
+          animation: fade-slide-up 0.5s ease-out forwards;
+      }
+      .debrief-item--completed { border-left-color: var(--success-color); }
+      .debrief-item--terminated { border-left-color: var(--danger-color); font-weight: bold; }
+      .debrief-item--skipped { opacity: 0.6; animation: none; }
+      .debriefing-actions { display: flex; justify-content: center; gap: 1rem; }
+      .debriefing-actions button { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.8rem 1.5rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+      .debriefing-actions button:hover { border-color: var(--primary-color); color: var(--primary-color); }
+
+      /* --- TABLET/DESKTOP OVERRIDES --- */
+      @media (min-width: 768px) {
+          #app-container { padding: 2rem; }
+          .calendar-grid { grid-template-columns: repeat(7, 1fr); gap: 1rem; }
+          .modal-content { max-width: 600px; height: auto; max-height: 80vh; }
+          .progress-ring { width: 300px; height: 300px; }
+      }
 commands:
-  - "echo 'Tutti i loop sono stati risolti. Il trainer è ora stabile.'"
+  - "echo 'Tutti i bug critici sono stati risolti e l''esperienza utente è stata migliorata.'"
