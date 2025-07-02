@@ -1,1006 +1,13 @@
-commit_message: "feat(ui): Replace native pop-ups with custom modal and notice system"
+commit_message: "fix(trainer): Resolve critical bugs related to pause and render loop"
 rationale: |
-  This commit replaces all native browser pop-ups (`confirm`, `alert`) with custom, in-app UI components, fulfilling the 'ADR 001: No Native Pop-ups' architectural rule and enhancing the user experience.
+  This commit fixes two critical bugs that were causing application instability: one where the confirmation modal didn't pause the workout, and a second that caused an infinite render loop.
 
-  1.  **Confirmation Modal**: The `confirm()` call in the `TrainerView` has been replaced by a new, custom confirmation modal. This is handled by adding a `CONFIRM_TERMINATION` case to `Modal.js`, providing a controlled and consistently styled user interaction for critical decisions.
+  1.  **Modal Pauses Timer**: The event handler for the "Terminate" button in `TrainerView.js` has been corrected. It now dispatches a `PAUSE_TRAINER` action *before* opening the confirmation modal. This ensures the timer freezes immediately while the user makes a decision.
 
-  2.  **Notification System ("Toasts")**: A new, non-intrusive notification system has been implemented.
-      - A dedicated `src/ui/Notice.js` module now manages showing and automatically hiding "toast" notifications.
-      - A `#notice-container` has been added to `index.html` and styled in `assets/css/style.css`.
-      - The `alert()` in the `DebriefingView` is now replaced by dispatching a `SHOW_NOTICE` action, which triggers a timed, self-dismissing message.
-
-  3.  **State Management**: A new `notice` state has been added to the store to manage the content and visibility of notifications.
-
-  4.  **Documentation**: `01_FUNCTIONALITY.md` and `functionality_spec.md` have been updated to reflect the removal of native pop-ups and the implementation of the new UI components.
+  2.  **Render Loop Fixed**: The core logic in `TrainerView.js` has been refactored to break the "Maximum call stack size exceeded" recursive loop.
+      - The `runStateBasedTimer` function is no longer called directly from within the `render` function.
+      - Instead, the `store.subscribe` callback now intelligently compares the previous state with the current state. `runStateBasedTimer` is now only invoked when there's a meaningful change in the trainer's state, decoupling the rendering logic from the timer-starting logic and ensuring stability.
 patches:
-  - file: assets/css/style.css
-    content: |
-      /* --- GLOBAL STYLES & MOBILE FIRST --- */
-      :root {
-          --bg-color: #1a1a1d;
-          --card-color: #2c2c34;
-          --primary-color: #9575cd;
-          --secondary-color: #4db6ac;
-          --text-color: #f4f4f9;
-          --text-color-muted: #aaa;
-          --border-color: #40404a;
-          --danger-color: #ef5350;
-          --success-color: #66bb6a;
-      }
-      * { box-sizing: border-box; margin: 0; padding: 0; }
-      body {
-          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-          background-color: var(--bg-color);
-          color: var(--text-color);
-          padding-top: 80px; /* Adjusted Space for the fixed header */
-          scrollbar-width: thin;
-          scrollbar-color: var(--primary-color) var(--bg-color);
-      }
-      /* Custom Scrollbar for Webkit Browsers */
-      body::-webkit-scrollbar, .modal-body::-webkit-scrollbar { width: 8px; }
-      body::-webkit-scrollbar-track, .modal-body::-webkit-scrollbar-track { background: var(--card-color); }
-      body::-webkit-scrollbar-thumb, .modal-body::-webkit-scrollbar-thumb { background-color: var(--primary-color); border-radius: 10px; border: 2px solid var(--card-color); }
-      
-      /* --- PERSISTENT HEADER (REDESIGNED) --- */
-      .app-header {
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 60px;
-          background-color: rgba(44, 44, 52, 0.85);
-          backdrop-filter: blur(10px);
-          -webkit-backdrop-filter: blur(10px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-      }
-      .app-title {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-      }
-      .app-title svg {
-          width: 24px;
-          height: 24px;
-      }
-      .app-title h1 {
-          font-size: 1.4rem;
-          background: -webkit-linear-gradient(45deg, var(--primary-color), var(--secondary-color));
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-      }
-
-      #app-container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
-      .view { display: none; width: 100%; }
-      .view--active { display: block; }
-
-      /* --- KEYFRAMES --- */
-      @keyframes flash {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.2; }
-      }
-      .is-flashing {
-          animation: flash 0.25s 3;
-      }
-      @keyframes fade-slide-up {
-          from {
-              opacity: 0;
-              transform: translateY(10px);
-          }
-          to {
-              opacity: 1;
-              transform: translateY(0);
-          }
-      }
-      @keyframes fade-in-out {
-        0%, 100% { opacity: 0; transform: translateY(-20px); }
-        10%, 90% { opacity: 1; transform: translateY(0); }
-      }
-
-      /* --- NOTICE / TOAST STYLES --- */
-      #notice-container {
-          position: fixed;
-          top: 80px; /* Below header */
-          left: 50%;
-          transform: translateX(-50%);
-          z-index: 2000;
-          display: flex;
-          justify-content: center;
-      }
-      .notice {
-          background-color: var(--secondary-color);
-          color: var(--bg-color);
-          padding: 0.8rem 1.5rem;
-          border-radius: 6px;
-          font-weight: bold;
-          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-          animation: fade-in-out 3s ease-in-out forwards;
-      }
-
-      /* --- CALENDAR VIEW STYLES --- */
-      .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-      .calendar-header h2 { font-size: 1.25rem; text-align: center; }
-      .calendar-header button { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: background-color 0.2s; }
-      .calendar-header button:hover { background-color: var(--primary-color); }
-      .calendar-grid { display: grid; grid-template-columns: 1fr; gap: 0.5rem; }
-      .day-cell { background-color: var(--card-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; min-height: 150px; display: flex; flex-direction: column; cursor: pointer; transition: border-color 0.2s; }
-      .day-cell:hover { border-color: var(--primary-color); }
-      .day-cell__header { display: flex; justify-content: space-between; font-weight: bold; color: var(--text-color-muted); text-transform: uppercase; font-size: 0.8rem; pointer-events: none; }
-      .day-cell__body { margin-top: 0.5rem; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; pointer-events: none; }
-      .exercise-count { font-size: 0.9rem; color: var(--secondary-color); }
-      .start-btn { background-color: var(--secondary-color); color: var(--bg-color); border: none; padding: 0.6rem; border-radius: 6px; cursor: pointer; font-weight: bold; text-transform: uppercase; width: 100%; margin-top: 1rem; transition: opacity 0.2s; pointer-events: all !important; }
-      .start-btn:hover { opacity: 0.85; }
-
-      /* --- MODAL STYLES --- */
-      #modal-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; z-index: 1001; }
-      #modal-container.active { opacity: 1; pointer-events: all; }
-      .modal-content { background-color: var(--card-color); border-radius: 8px; border: 1px solid var(--border-color); width: 90%; max-width: 500px; transform: scale(0.95); transition: transform 0.3s ease; display: flex; flex-direction: column; max-height: 90vh; }
-      #modal-container.active .modal-content { transform: scale(1); }
-      .modal-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; }
-      .modal-header h3 { color: var(--primary-color); }
-      .modal-close-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; cursor: pointer; }
-      .modal-body { overflow-y: auto; flex-grow: 1; padding: 1rem 1.5rem; }
-      .modal-actions { padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 1rem; flex-shrink: 0; }
-      .modal-actions button {
-        padding: 0.5rem 1rem;
-        border-radius: 6px;
-        cursor: pointer;
-        transition: all 0.2s;
-        font-weight: bold;
-      }
-      .modal-actions .btn-confirm {
-          background-color: var(--danger-color);
-          border: 1px solid var(--danger-color);
-          color: var(--text-color);
-      }
-      .modal-actions .btn-cancel {
-          background-color: transparent;
-          border: 1px solid var(--border-color);
-          color: var(--text-color-muted);
-      }
-      .add-rest-btn, .add-exercise-btn { background-color: transparent; border: 1px solid var(--secondary-color); color: var(--secondary-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
-      .add-rest-btn:hover, .add-exercise-btn:hover { background-color: var(--secondary-color); color: var(--card-color); }
-
-      /* --- WORKOUT EDITOR & LIBRARY STYLES --- */
-      .workout-item-list, .exercise-library-list { list-style: none; padding: 0; margin: 0; }
-      .workout-item { display: flex; align-items: center; padding: 1rem 0.5rem; border-bottom: 1px solid var(--border-color); }
-      .workout-item:last-child { border-bottom: none; }
-      .workout-item.dragging { opacity: 0.4; background-color: var(--border-color); }
-      .workout-item.drag-over-target { border-top: 2px solid var(--primary-color); }
-      .drag-handle { cursor: grab; padding-right: 1rem; color: var(--text-color-muted); }
-      .item-info { display: flex; align-items: baseline; gap: 0.75rem; flex-grow: 1; }
-      .item-info .item-name { font-weight: bold; }
-      .item-info .item-details { color: var(--secondary-color); }
-      .workout-item--rest .item-info .item-name { color: var(--text-color-muted); font-style: italic; }
-      .rest-duration-input { -moz-appearance: textfield; background-color: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 4px; padding: 0.25rem; width: 60px; text-align: center; }
-      .rest-duration-input::-webkit-outer-spin-button, .rest-duration-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-      .remove-item-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; font-weight: bold; cursor: pointer; padding: 0 0.5rem; border-radius: 50%; }
-      .remove-item-btn:hover { color: var(--danger-color); background-color: rgba(239, 83, 80, 0.1); }
-      .exercise-library-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0.5rem; border-bottom: 1px solid var(--border-color); }
-      .exercise-library-item:last-child { border-bottom: none; }
-      .add-to-workout-btn { background-color: var(--primary-color); color: var(--text-color); border: none; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; }
-
-      /* --- TRAINER VIEW STYLES --- */
-      .trainer-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: calc(100vh - 4rem - 60px); text-align: center; }
-      .trainer-header { margin-bottom: 1rem; }
-      .trainer-header h2 { font-size: 2rem; text-transform: uppercase; color: var(--primary-color); }
-      .trainer-header p { color: var(--text-color-muted); }
-      .progress-ring { position: relative; width: 250px; height: 250px; margin: 2rem 0; }
-      .progress-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-      .progress-ring__background { stroke: var(--card-color); fill: transparent; }
-      .progress-ring__foreground { stroke: var(--secondary-color); fill: transparent; }
-      .progress-ring__text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
-      .progress-ring__phase { font-size: 1.6rem; font-weight: bold; text-transform: uppercase; }
-      .progress-ring__timer { font-size: 3rem; color: var(--text-color); }
-      .trainer-footer { margin-top: 1rem; }
-      .trainer-footer p { font-size: 1.2rem; min-height: 2em; }
-      .trainer-controls { display: flex; flex-direction: column; align-items: center; gap: 1rem; margin-top: 1rem; }
-      .trainer-main-btn { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 1rem 2rem; border-radius: 8px; cursor: pointer; font-size: 1.2rem; text-transform: uppercase; }
-      .trainer-terminate-btn {
-          background-color: transparent;
-          border: 1px solid var(--border-color);
-          color: var(--text-color-muted);
-          padding: 0.5rem 1rem;
-          border-radius: 6px;
-          cursor: pointer;
-          font-size: 0.9rem;
-          transition: all 0.2s ease;
-      }
-      .trainer-terminate-btn:hover {
-          background-color: var(--border-color);
-          color: var(--text-color);
-      }
-      
-      /* --- DEBRIEFING VIEW STYLES --- */
-      .debriefing-container { max-width: 700px; margin: 0 auto; padding: 1rem; }
-      .debriefing-container h2 { text-align: center; color: var(--primary-color); margin-bottom: 2rem; }
-      .debrief-list { list-style: none; padding: 0; margin: 0 0 2rem 0; }
-      .debrief-item {
-          background-color: var(--card-color);
-          border: 1px solid var(--border-color);
-          border-left: 5px solid var(--border-color);
-          padding: 1rem;
-          border-radius: 6px;
-          margin-bottom: 0.75rem;
-          opacity: 0; /* Start hidden for animation */
-          animation: fade-slide-up 0.5s ease-out forwards;
-      }
-      .debrief-item--completed { border-left-color: var(--success-color); }
-      .debrief-item--terminated { border-left-color: var(--danger-color); font-weight: bold; }
-      .debrief-item--skipped { opacity: 0.6; animation: none; }
-      .debriefing-actions { display: flex; justify-content: center; gap: 1rem; }
-      .debriefing-actions button { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.8rem 1.5rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
-      .debriefing-actions button:hover { border-color: var(--primary-color); color: var(--primary-color); }
-
-      /* --- TABLET/DESKTOP OVERRIDES --- */
-      @media (min-width: 768px) {
-          #app-container { padding: 2rem; }
-          .calendar-grid { grid-template-columns: repeat(7, 1fr); gap: 1rem; }
-          .modal-content { max-width: 600px; height: auto; max-height: 80vh; }
-          .progress-ring { width: 300px; height: 300px; }
-      }
-  - file: docs/01_FUNCTIONALITY.md
-    content: |
-      # App Functionality Specification
-
-      This document outlines the core features and operational logic of the "Mio Trainer Personale" web application.
-
-      ## 1. Core Concept
-
-      The application is a single-page app (SPA) designed for users to schedule, execute, and track workouts. It features a persistent header for consistent branding. All user data is persisted locally in the browser's `localStorage`. All user interactions, such as confirmations and notifications, are handled through custom, non-native UI elements.
-
-      ## 2. Main Views
-
-      The application operates using three primary, mutually exclusive views: `Calendar`, `Trainer`, and `Debriefing`.
-
-      ### 2.1. Calendar View
-
-      -   **Function:** The main dashboard and default view of the application.
-      -   **Display:** It presents a weekly grid layout.
-      -   **Navigation:** Users can navigate to the previous or next week.
-      -   **Day Cells:** Each cell represents a day and displays a summary of the number of exercises scheduled for that day. A "START" button is enabled if one or more exercises are scheduled.
-      -   **Interaction:** Clicking a day cell (but not the "START" button) opens the Workout Editor modal for that specific date.
-
-      ### 2.2. Workout Editor (Modal System)
-
-      The editor is a modal system for managing a day's workout routine. It allows for the composition of exercises and configurable rest periods.
-
-      -   **Daily Workout Modal:**
-          -   Triggered by clicking a day cell.
-          -   Displays a list of items (exercises or rests) currently scheduled for the selected date.
-          -   Items in this list feature a **visual handle** and can be reordered via drag-and-drop.
-      -   **Exercise Library Modal:**
-          -   Triggered by the "Add Exercise" button.
-          -   Displays a list of all **available exercises** from the application's library.
-      -   **Confirmation Modal**: A custom modal is used to confirm critical actions, such as terminating a workout.
-
-      ### 2.3. Interactive Trainer View
-
-      -   **Function:** An interactive, state-driven interface that guides the user through a scheduled workout in real-time.
-      -   **Activation:** Triggered by clicking the "START" button on a day cell in the calendar.
-      -   **Controls:** Includes a main button for starting/pausing/resuming and a secondary button to **terminate** the workout at any time (which opens a confirmation modal).
-
-      #### Trainer State Machine & Flow
-      The trainer operates as a state machine. The primary user flow is as follows:
-
-      1.  **Ready (`ready`):** The initial state.
-      2.  **Preparing (`preparing`):** A 3-second countdown that runs once.
-      3.  **Announcing (`announcing`):** A 0.75-second state to alert the user of the next phase.
-      4.  **Action (`action`):** The core execution phase.
-      5.  **Rest (`rest`):** A timed countdown for user-defined rest blocks.
-      6.  **Paused (`paused`):** The user can pause the workout at any time.
-      7.  **Advancement Logic:** The trainer advances through phases, reps, and series automatically.
-      8.  **Finished (`finished`):** After all items are complete, the main button transitions to "DEBRIEFING".
-      9.  **Terminated (`terminate`):** If the user confirms termination via the modal, the workout stops.
-
-      ### 2.4. Debriefing View
-
-      -   **Activation:** Appears after a workout is finished or terminated.
-      -   **Content:** Displays a visually styled list representing the entire workout plan.
-      -   **Actions:**
-          - **"Copy for Coach"**: Copies a summary to the clipboard and shows a temporary, non-blocking notification ("toast") on success.
-          - **"Return to Calendar"**: Navigates back to the main calendar view.
-  - file: functionality_spec.md
-    content: |
-      # App Functionality Specification
-
-      This document outlines the core features and operational logic of the "Mio Trainer Personale" web application.
-
-      ## 1. Core Concept
-
-      The application is a single-page app (SPA) designed for users to schedule, execute, and track workouts. It features a persistent header for consistent branding. All user data is persisted locally in the browser's `localStorage`. All user interactions, such as confirmations and notifications, are handled through custom, non-native UI elements.
-
-      ## 2. Main Views
-
-      The application operates using three primary, mutually exclusive views: `Calendar`, `Trainer`, and `Debriefing`.
-
-      ### 2.1. Calendar View
-      - **Function:** The main dashboard and default view of the application.
-      - **Display:** It presents a weekly grid layout.
-      - **Interaction:** Opens the Workout Editor modal.
-
-      ### 2.2. Workout Editor (Modal System)
-      The editor is a multi-stage modal system.
-      - **Daily Workout Modal:**
-          - Displays a list of exercises.
-          - Items in this list feature a **visual handle** and can be reordered via drag-and-drop.
-      - **Exercise Library Modal:**
-          - Allows adding exercises to the routine.
-      - **Confirmation Modal**: A custom modal is used to confirm critical actions, such as terminating a workout.
-
-      ### 2.3. Interactive Trainer View
-      - **Function:** An interactive, state-driven interface that guides the user through a scheduled workout.
-      - **Controls:** Includes a main button for flow control and a secondary button to **terminate** the workout, which opens a confirmation modal.
-
-      #### Trainer State Machine & Flow
-      The trainer operates as a state machine with the following states: `ready`, `preparing`, `announcing`, `action`, `rest`, `paused`, `finished`.
-
-      ### 2.4. Debriefing View
-      - **Activation:** Appears automatically when a workout is completed or manually terminated.
-      - **Content:**
-          - **Summary:** Displays a visually styled list representing the entire workout plan.
-          - **Text Report:** Generates a pre-formatted, multi-line string summarizing the workout.
-      - **Actions:**
-          - **Copy for Coach:** Copies the text report and shows a temporary, non-blocking notification ("toast") on success.
-          - **Return to Calendar:** Switches the view back to the main Calendar.
-  - file: index.html
-    content: |
-      <!DOCTYPE html>
-      <html lang="it">
-      <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Mio Trainer Personale</title>
-          <link rel="stylesheet" href="assets/css/style.css">
-      </head>
-      <body>
-
-          <header class="app-header">
-              <div class="app-title">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zM8.293 16.707l1.414-1.414L12 17.586l2.293-2.293 1.414 1.414L12 20.414l-3.707-3.707zM12 3.586l2.293 2.293-1.414 1.414L12 5l-2.293 2.293-1.414-1.414L12 3.586z"></path></svg>
-                  <h1>Mio Trainer Personale</h1>
-              </div>
-          </header>
-
-          <div id="app-container">
-              <div id="calendar-view" class="view view--active">
-                  </div>
-              <div id="trainer-view" class="view">
-                  </div>
-              <div id="debriefing-view" class="view">
-                  </div>
-          </div>
-
-          <div id="modal-container">
-              </div>
-          
-          <div id="notice-container">
-              </div>
-
-          <script src="src/main.js" type="module"></script>
-      </body>
-      </html>
-  - file: src/main.js
-    content: |
-      import store from './modules/store.js';
-      import { init as initCalendarView } from './views/CalendarView.js';
-      import { init as initTrainerView } from './views/TrainerView.js';
-      import { init as initDebriefingView } from './views/DebriefingView.js';
-      import { init as initModal } from './ui/Modal.js';
-      import { init as initNotice } from './ui/Notice.js';
-      import { loadFromStorage, saveToStorage } from './modules/storage.js';
-      import { mockWorkouts } from './modules/_mockData.js';
-
-      const WORKOUTS_STORAGE_KEY = 'workouts';
-
-      const views = {
-          calendar: document.getElementById('calendar-view'),
-          trainer: document.getElementById('trainer-view'),
-          debriefing: document.getElementById('debriefing-view'),
-      };
-      const initializedViews = new Set();
-
-      function initializeApp() {
-        let workouts = loadFromStorage(WORKOUTS_STORAGE_KEY);
-        if (!workouts) {
-          saveToStorage(WORKOUTS_STORAGE_KEY, mockWorkouts);
-          workouts = mockWorkouts;
-        }
-        store.dispatch({ type: 'SET_WORKOUTS', payload: workouts });
-
-        initCalendarView(views.calendar);
-        initializedViews.add('calendar');
-        initModal(document.getElementById('modal-container'));
-        initNotice(document.getElementById('notice-container'));
-      }
-
-      let currentActiveView = views.calendar;
-      function handleViewChange() {
-        const { currentView } = store.getState();
-        const newActiveViewEl = views[currentView];
-
-        if (currentActiveView !== newActiveViewEl) {
-          currentActiveView.classList.remove('view--active');
-          newActiveViewEl.classList.add('view--active');
-          currentActiveView = newActiveViewEl;
-
-          // Inizializza la vista solo la prima volta che viene mostrata
-          if (!initializedViews.has(currentView)) {
-            if (currentView === 'trainer') {
-              initTrainerView(views.trainer);
-            } else if (currentView === 'debriefing') {
-              initDebriefingView(views.debriefing);
-            }
-            // Aggiungere qui l'inizializzazione di altre viste future
-            initializedViews.add(currentView);
-          }
-        }
-      }
-
-      store.subscribe(handleViewChange);
-      initializeApp();
-      console.log('App "Mio Trainer Personale" inizializzata.');
-  - file: src/modules/store.js
-    content: |
-      import { saveToStorage } from './storage.js';
-      import { getExerciseById } from './exerciseRepository.js';
-
-      const WORKOUTS_STORAGE_KEY = 'workouts';
-
-      const cloneWorkouts = (workouts) => JSON.parse(JSON.stringify(workouts));
-
-      function createStore() {
-        let state = {
-          currentView: 'calendar',
-          focusedDate: new Date(),
-          workouts: {},
-          isModalOpen: false,
-          modalContext: null,
-          notice: null, // { message: '...' }
-          activeWorkout: null,
-          completedWorkout: null,
-          trainerState: 'idle',
-          trainerContext: {},
-        };
-
-        const subscribers = new Set();
-        function notify() { subscribers.forEach(callback => callback()); }
-
-        // Custom Logger Function
-        function logState(actionType, state) {
-            if (actionType.startsWith('@@')) return;
-            const { activeWorkout, trainerState, trainerContext } = state;
-            if (!activeWorkout) {
-              return;
-            }
-
-            const currentItem = activeWorkout.items[trainerContext.itemIndex];
-            const exerciseName = currentItem?.name || 'Riposo';
-            const series = `${trainerContext.currentSeries || '-'}/${currentItem?.series || '-'}`;
-            const reps = `${trainerContext.currentRep || '-'}/${currentItem?.reps || '-'}`;
-            let status = trainerState.toUpperCase();
-            if (trainerState === 'announcing' || trainerState === 'action') {
-                status += ` (${trainerContext.currentPhase || 'N/A'})`;
-            }
-            const logString = `Esercizio: ${exerciseName} | Serie: ${series} | Rep: ${reps} | Stato: ${status}`;
-            console.log(`%c[${actionType}]`, 'color: #88aaff; font-weight: bold;', logString);
-        }
-
-        function dispatch(action) {
-          const oldState = { ...state };
-          let newState = { ...state };
-
-          switch (action.type) {
-            case 'CHANGE_VIEW': newState = { ...state, currentView: action.payload }; break;
-            case 'PREV_WEEK': { const d=new Date(state.focusedDate); d.setDate(d.getDate()-7); newState={...state, focusedDate:d}; break; }
-            case 'NEXT_WEEK': { const d=new Date(state.focusedDate); d.setDate(d.getDate()+7); newState={...state, focusedDate:d}; break; }
-            case 'SET_WORKOUTS': newState = { ...state, workouts: action.payload }; break;
-            case 'OPEN_MODAL': newState = { ...state, isModalOpen: true, modalContext: action.payload }; break;
-            case 'CLOSE_MODAL': newState = { ...state, isModalOpen: false, modalContext: null }; break;
-            case 'SHOW_NOTICE': newState = { ...state, notice: { message: action.payload.message, id: Date.now() } }; break;
-            case 'ADD_EXERCISE_ITEM': {
-                const { date, exerciseId } = action.payload;
-                const dateKey = `workout-${date}`;
-                const exercise = getExerciseById(exerciseId);
-                if (!exercise) break;
-                const newItem = { ...exercise, id: `item-${Date.now()}`, type: exercise.type || 'exercise', exerciseId: exercise.id };
-                const newWorkouts = cloneWorkouts(state.workouts);
-                const dayWorkout = newWorkouts[dateKey] || [];
-                dayWorkout.push(newItem);
-                newWorkouts[dateKey] = dayWorkout;
-                newState = { ...state, workouts: newWorkouts, modalContext: { type: 'EDIT_WORKOUT', date } };
-                break;
-            }
-            case 'ADD_REST_ITEM': {
-                const { date } = action.payload;
-                const dateKey = `workout-${date}`;
-                const newItem = { id: `item-${Date.now()}`, type: 'rest', duration: 60 };
-                const newWorkouts = cloneWorkouts(state.workouts);
-                const dayWorkout = newWorkouts[dateKey] || [];
-                dayWorkout.push(newItem);
-                newWorkouts[dateKey] = dayWorkout;
-                newState = { ...state, workouts: newWorkouts };
-                break;
-            }
-            case 'REMOVE_WORKOUT_ITEM': {
-                const { date, itemId } = action.payload;
-                const dateKey = `workout-${date}`;
-                const newWorkouts = cloneWorkouts(state.workouts);
-                newWorkouts[dateKey] = (newWorkouts[dateKey] || []).filter(item => item.id !== itemId);
-                newState = { ...state, workouts: newWorkouts };
-                break;
-            }
-            case 'UPDATE_REST_DURATION': {
-                const { date, itemId, newDuration } = action.payload;
-                const dateKey = `workout-${date}`;
-                const newWorkouts = cloneWorkouts(state.workouts);
-                const dayWorkout = newWorkouts[dateKey] || [];
-                const itemIndex = dayWorkout.findIndex(item => item.id === itemId);
-                if (itemIndex > -1 && dayWorkout[itemIndex].type === 'rest') {
-                    dayWorkout[itemIndex].duration = newDuration;
-                    newWorkouts[dateKey] = dayWorkout;
-                    newState = { ...state, workouts: newWorkouts };
-                }
-                break;
-            }
-            case 'REORDER_WORKOUT_ITEMS': {
-                const { date, draggedItemId, targetItemId } = action.payload;
-                const dateKey = `workout-${date}`;
-                const newWorkouts = cloneWorkouts(state.workouts);
-                const items = newWorkouts[dateKey] || [];
-                
-                const draggedIndex = items.findIndex(item => item.id === draggedItemId);
-                const targetIndex = items.findIndex(item => item.id === targetItemId);
-
-                if (draggedIndex > -1 && targetIndex > -1) {
-                    const [draggedItem] = items.splice(draggedIndex, 1);
-                    items.splice(targetIndex, 0, draggedItem);
-                    newWorkouts[dateKey] = items;
-                    newState = { ...state, workouts: newWorkouts };
-                }
-                break;
-            }
-            case 'START_WORKOUT': {
-              const { date } = action.payload;
-              const dateKey = `workout-${date}`;
-              const workoutItems = state.workouts[dateKey];
-              if (!workoutItems || workoutItems.length === 0) break;
-              newState = {
-                ...state,
-                currentView: 'trainer',
-                activeWorkout: { date, items: workoutItems, completed: false, fullPlan: workoutItems },
-                completedWorkout: null,
-                trainerState: 'ready',
-                trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 }
-              };
-              break;
-            }
-            case 'FINISH_WORKOUT': {
-              newState = { ...state, currentView: 'debriefing', completedWorkout: { ...state.activeWorkout, completed: true }, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
-              break;
-            }
-            case 'TERMINATE_WORKOUT': {
-              const { activeWorkout, trainerContext } = state;
-              const partialWorkout = {
-                date: activeWorkout.date,
-                fullPlan: activeWorkout.fullPlan,
-                completed: false,
-                terminationPoint: trainerContext,
-              };
-              newState = { ...state, currentView: 'debriefing', completedWorkout: partialWorkout, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
-              break;
-            }
-            case 'SET_TRAINER_STATE': {
-              newState = { ...state, trainerState: action.payload };
-              break;
-            }
-            case 'PAUSE_TRAINER': {
-              if (['paused', 'ready', 'finished'].includes(state.trainerState)) break;
-              const { remaining, duration } = action.payload;
-              newState = {
-                ...state,
-                trainerState: 'paused',
-                trainerContext: { ...state.trainerContext, remaining, duration, stateBeforePause: state.trainerState },
-              };
-              break;
-            }
-            case 'RESUME_TRAINER': {
-              if (state.trainerState !== 'paused') break;
-              newState = { ...state, trainerState: state.trainerContext.stateBeforePause };
-              break;
-            }
-            case 'TIMER_COMPLETE': {
-              if (!state.activeWorkout) return;
-
-              const { trainerState, activeWorkout, trainerContext } = state;
-              const currentItem = activeWorkout.items[trainerContext.itemIndex];
-
-              const advanceToNextItem = () => {
-                if (trainerContext.itemIndex < activeWorkout.items.length - 1) {
-                  const nextItemIndex = trainerContext.itemIndex + 1;
-                  const nextItem = activeWorkout.items[nextItemIndex];
-                  const newContext = { itemIndex: nextItemIndex, currentSeries: 1, currentRep: 1, currentPhaseIndex: 0 };
-                  const newState = nextItem.type === 'rest' ? 'rest' : 'announcing';
-                  if (nextItem.type !== 'rest') {
-                      newContext.currentPhase = nextItem.type === 'time' ? 'Esegui' : (Object.keys(nextItem.tempo || {})[0] || 'up');
-                  }
-                  return { newState, newContext };
-                }
-                return null; // Signals workout is finished
-              };
-
-              let nextState = trainerState;
-              let nextContext = { ...trainerContext };
-
-              switch (trainerState) {
-                case 'preparing':
-                  const firstItem = activeWorkout.items[0];
-                  if (firstItem.type === 'rest') {
-                      nextState = 'rest';
-                  } else {
-                      nextState = 'announcing';
-                      if (firstItem.type === 'time') { nextContext.currentPhase = 'Esegui'; }
-                      else { const tempo = firstItem.tempo || {}; nextContext.currentPhase = Object.keys(tempo)[0] || 'up'; }
-                  }
-                  break;
-
-                case 'announcing':
-                  nextState = 'action';
-                  break;
-
-                case 'action': {
-                  if (currentItem.type === 'exercise') {
-                    const tempo = currentItem.tempo || {};
-                    const phases = Object.keys(tempo);
-                    const nextPhaseIndex = trainerContext.currentPhaseIndex + 1;
-
-                    if (nextPhaseIndex < phases.length) {
-                      nextState = 'announcing';
-                      nextContext.currentPhaseIndex = nextPhaseIndex;
-                      nextContext.currentPhase = phases[nextPhaseIndex];
-                    } else {
-                      nextContext.currentPhaseIndex = 0;
-                      if (trainerContext.currentRep < currentItem.reps) {
-                        nextContext.currentRep++;
-                        nextState = 'announcing';
-                        nextContext.currentPhase = phases[0] || 'up';
-                      } else if (trainerContext.currentSeries < currentItem.series) {
-                        nextContext.currentSeries++;
-                        nextContext.currentRep = 1;
-                        nextState = 'announcing';
-                        nextContext.currentPhase = phases[0] || 'up';
-                      } else {
-                        const advance = advanceToNextItem();
-                        if (advance) { nextState = advance.newState; nextContext = { ...nextContext, ...advance.newContext }; }
-                        else { nextState = 'finished'; }
-                      }
-                    }
-                  } else if (currentItem.type === 'time') {
-                      if (trainerContext.currentSeries < currentItem.series) {
-                          nextContext.currentSeries++;
-                          nextState = 'announcing';
-                          nextContext.currentPhase = 'Esegui';
-                      } else {
-                          const advance = advanceToNextItem();
-                          if (advance) { nextState = advance.newState; nextContext = { ...nextContext, ...advance.newContext }; }
-                          else { nextState = 'finished'; }
-                      }
-                  }
-                  break;
-                }
-
-                case 'rest': {
-                  const advance = advanceToNextItem();
-                  if (advance) { nextState = advance.newState; nextContext = { ...nextContext, ...advance.newContext }; }
-                  else { nextState = 'finished'; }
-                  break;
-                }
-              }
-              newState = { ...state, trainerState: nextState, trainerContext: nextContext };
-              break;
-            }
-            default:
-              action.type = '@@UNKNOWN';
-              break;
-          }
-          state = newState;
-          if (state !== oldState) {
-            logState(action.type, state);
-            if (state.workouts !== oldState.workouts) {
-              saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
-            }
-            notify();
-          }
-        }
-        return {
-          getState: () => ({ ...state }),
-          subscribe: (callback) => { subscribers.add(callback); return () => subscribers.delete(callback); },
-          dispatch,
-        };
-      }
-      const store = createStore();
-      export default store;
-  - file: src/ui/Modal.js
-    content: |
-      import store from '../modules/store.js';
-      import { render as renderWorkoutEditor } from '../views/WorkoutEditorView.js';
-      import { render as renderExerciseLibrary } from '../views/ExerciseLibraryView.js';
-
-      export function init(element) {
-          let previousItemCount = 0;
-          let draggedItemId = null;
-
-          element.addEventListener('click', (event) => {
-              if (event.target === element) { store.dispatch({ type: 'CLOSE_MODAL' }); return; }
-              const removeBtn = event.target.closest('.remove-item-btn');
-              if (removeBtn) { const { itemId } = removeBtn.dataset; const { date } = store.getState().modalContext; store.dispatch({ type: 'REMOVE_WORKOUT_ITEM', payload: { date, itemId } }); return; }
-              const addRestBtn = event.target.closest('.add-rest-btn');
-              if (addRestBtn) { const { date } = store.getState().modalContext; store.dispatch({ type: 'ADD_REST_ITEM', payload: { date } }); return; }
-              const addExerciseBtn = event.target.closest('.add-exercise-btn');
-              if (addExerciseBtn) { const { date } = store.getState().modalContext; store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'CHOOSE_EXERCISE', date } }); return; }
-              const addToWorkoutBtn = event.target.closest('.add-to-workout-btn');
-              if (addToWorkoutBtn) { const { exerciseId } = addToWorkoutBtn.dataset; const { date } = store.getState().modalContext; store.dispatch({ type: 'ADD_EXERCISE_ITEM', payload: { date, exerciseId } }); return; }
-              const confirmBtn = event.target.closest('.btn-confirm');
-              if(confirmBtn) { store.dispatch({type: 'TERMINATE_WORKOUT'}); store.dispatch({type: 'CLOSE_MODAL'}); return; }
-              const cancelBtn = event.target.closest('.btn-cancel');
-              if(cancelBtn) { store.dispatch({type: 'CLOSE_MODAL'}); return; }
-          });
-
-          element.addEventListener('change', (event) => {
-              const restInput = event.target.closest('.rest-duration-input');
-              if (restInput) { const { itemId } = restInput.dataset; const { date } = store.getState().modalContext; const newDuration = parseInt(restInput.value, 10); if (itemId && date && !isNaN(newDuration)) { store.dispatch({ type: 'UPDATE_REST_DURATION', payload: { date, itemId, newDuration } }); } }
-          });
-
-          // Drag and Drop listeners
-          element.addEventListener('dragstart', (event) => {
-              const target = event.target.closest('.workout-item');
-              if (!target) return;
-              draggedItemId = target.dataset.itemId;
-              event.dataTransfer.effectAllowed = 'move';
-              event.dataTransfer.setData('text/plain', draggedItemId);
-              setTimeout(() => target.classList.add('dragging'), 0);
-          });
-
-          element.addEventListener('dragend', (event) => {
-              draggedItemId = null;
-              const draggingElement = element.querySelector('.workout-item.dragging');
-              if (draggingElement) draggingElement.classList.remove('dragging');
-          });
-
-          element.addEventListener('dragover', (event) => {
-              event.preventDefault();
-              const target = event.target.closest('.workout-item');
-              if (target && target.dataset.itemId !== draggedItemId) {
-                  const currentlyActive = element.querySelector('.drag-over-target');
-                  if (currentlyActive) currentlyActive.classList.remove('drag-over-target');
-                  target.classList.add('drag-over-target');
-              }
-          });
-
-          element.addEventListener('dragleave', (event) => {
-              const target = event.target.closest('.drag-over-target');
-              if(target) target.classList.remove('drag-over-target');
-          });
-
-          element.addEventListener('drop', (event) => {
-              event.preventDefault();
-              const target = event.target.closest('.workout-item');
-              const currentlyActive = element.querySelector('.drag-over-target');
-              if (currentlyActive) currentlyActive.classList.remove('drag-over-target');
-
-              const targetItemId = target ? target.dataset.itemId : null;
-
-              if (draggedItemId && targetItemId && draggedItemId !== targetItemId) {
-                  const { date } = store.getState().modalContext;
-                  store.dispatch({
-                      type: 'REORDER_WORKOUT_ITEMS',
-                      payload: { date, draggedItemId, targetItemId }
-                  });
-              }
-          });
-
-          function render() {
-              const { isModalOpen, modalContext, workouts } = store.getState();
-              if (isModalOpen) {
-                  const dateKey = modalContext.date ? `workout-${modalContext.date}` : null;
-                  const currentItemCount = dateKey ? (workouts[dateKey]?.length || 0) : 0;
-
-                  element.classList.add('active');
-                  let headerContent = '', bodyContent = '', actionsContent = '';
-
-                  switch (modalContext?.type) {
-                      case 'EDIT_WORKOUT':
-                          headerContent = `<h3>Editor Workout - ${modalContext.date}</h3>`;
-                          bodyContent = renderWorkoutEditor(modalContext);
-                          actionsContent = `<button class="add-exercise-btn">+ Add Exercise</button><button class="add-rest-btn">+ Aggiungi Riposo</button>`;
-                          break;
-                      case 'CHOOSE_EXERCISE':
-                          headerContent = `<h3>Libreria Esercizi</h3>`;
-                          bodyContent = renderExerciseLibrary(modalContext);
-                          break;
-                      case 'CONFIRM_TERMINATION':
-                          headerContent = `<h3>Terminare l'allenamento?</h3>`;
-                          bodyContent = `<p>Sei sicuro di voler terminare la sessione corrente? I progressi verranno salvati nel riepilogo.</p>`;
-                          actionsContent = `<button class="btn-cancel">Annulla</button><button class="btn-confirm">Conferma</button>`;
-                          break;
-                      default:
-                          headerContent = '<h3>Attenzione</h3>';
-                          bodyContent = '<p>Contenuto della modale non specificato.</p>';
-                  }
-                  element.innerHTML = `
-                      <div class="modal-content">
-                          <div class="modal-header">${headerContent}<button class="modal-close-btn">&times;</button></div>
-                          <div class="modal-body">${bodyContent}</div>
-                          ${actionsContent ? `<footer class="modal-actions">${actionsContent}</footer>` : ''}
-                      </div>
-                  `;
-                  const closeButton = element.querySelector('.modal-close-btn');
-                  if (closeButton) { closeButton.addEventListener('click', () => { store.dispatch({ type: 'CLOSE_MODAL' }); }); }
-
-                  if (currentItemCount > previousItemCount) {
-                      const modalBody = element.querySelector('.modal-body');
-                      if (modalBody) { modalBody.scrollTop = modalBody.scrollHeight; }
-                  }
-                  previousItemCount = currentItemCount;
-
-              } else {
-                  element.classList.remove('active');
-                  element.innerHTML = '';
-                  previousItemCount = 0;
-              }
-          }
-          store.subscribe(render);
-          render();
-      }
-  - file: src/ui/Notice.js
-    content: |
-      import store from '../modules/store.js';
-
-      export function init(element) {
-          let lastNoticeId = null;
-
-          store.subscribe(() => {
-              const { notice } = store.getState();
-              if (notice && notice.id !== lastNoticeId) {
-                  lastNoticeId = notice.id;
-                  const noticeEl = document.createElement('div');
-                  noticeEl.className = 'notice';
-                  noticeEl.textContent = notice.message;
-                  element.appendChild(noticeEl);
-
-                  setTimeout(() => {
-                      element.removeChild(noticeEl);
-                  }, 3000); // The notice will disappear after 3 seconds (matching CSS animation)
-              }
-          });
-      }
-  - file: src/views/DebriefingView.js
-    content: |
-      import store from '../modules/store.js';
-
-      function generateSummaryHtml(completedWorkout) {
-          if (!completedWorkout) return '<p>Nessun dato di allenamento disponibile.</p>';
-
-          const title = completedWorkout.completed
-              ? '<h2>Workout Completato!</h2>'
-              : '<h2>Workout Interrotto</h2>';
-
-          const termPoint = completedWorkout.terminationPoint;
-
-          const itemsHtml = completedWorkout.fullPlan.map((item, index) => {
-              let itemClass = 'debrief-item';
-              let statusText = '';
-              let animationDelay = `style="animation-delay: ${index * 50}ms;"`;
-
-              if (completedWorkout.completed) {
-                  itemClass += ' debrief-item--completed';
-              } else {
-                  if (index < termPoint.itemIndex) {
-                      itemClass += ' debrief-item--completed';
-                  } else if (index === termPoint.itemIndex) {
-                      itemClass += ' debrief-item--terminated';
-                      const currentSeries = termPoint.currentSeries || 1;
-                      statusText = `(interrotto alla serie ${currentSeries})`;
-                  } else {
-                      itemClass += ' debrief-item--skipped';
-                      animationDelay = ''; // Don't animate skipped items
-                  }
-              }
-
-              let mainText = '';
-              if (item.type === 'rest') {
-                  mainText = `Riposo: ${item.duration}s`;
-              } else {
-                  const series = item.series || 1;
-                  const reps = item.reps ? `${item.reps} reps` : `${item.duration}s`;
-                  mainText = `${item.name}: ${series}x${reps} ${statusText}`;
-              }
-
-              return `<li class="${itemClass}" ${animationDelay}>${mainText}</li>`;
-          }).join('');
-
-          return `${title}<ul class="debrief-list">${itemsHtml}</ul>`;
-      }
-
-      function generateTextForCoach(completedWorkout) {
-          if (!completedWorkout) return 'Nessun dato disponibile.';
-          const date = new Date(completedWorkout.date).toLocaleDateString('it-IT');
-          const status = completedWorkout.completed ? 'Completato' : 'Interrotto';
-          let report = `Report Allenamento - ${date} (${status})\n====================\n\n`;
-
-          const termPoint = completedWorkout.terminationPoint;
-
-          completedWorkout.fullPlan.forEach((item, index) => {
-              let statusTag = '';
-              if (!completedWorkout.completed) {
-                  if (index < termPoint.itemIndex) statusTag = '[✓]';
-                  else if (index === termPoint.itemIndex) statusTag = '[✗]';
-                  else statusTag = '[-]';
-              } else {
-                  statusTag = '[✓]';
-              }
-
-              if (item.type === 'rest') {
-                  report += `${statusTag} Riposo: ${item.duration}s\n`;
-              } else {
-                  const series = item.series || 1;
-                  const reps = item.reps ? `${item.reps} reps` : `${item.duration}s`;
-                  let terminationInfo = '';
-                  if (statusTag === '[✗]') {
-                      terminationInfo = ` (interrotto alla serie ${termPoint.currentSeries}/${series})`;
-                  }
-                  report += `${statusTag} ${item.name}: ${series}x${reps}${terminationInfo}\n`;
-              }
-          });
-          return report;
-      }
-
-
-      function render(element) {
-          const { completedWorkout } = store.getState();
-          const summaryHtml = generateSummaryHtml(completedWorkout);
-          const actionsHtml = `
-              <div class="debriefing-actions">
-                  <button class="copy-btn">Copia per il Coach</button>
-                  <button class="return-btn">Torna al Calendario</button>
-              </div>
-          `;
-          element.innerHTML = `
-              <div class="debriefing-container">
-                  ${summaryHtml}
-                  ${actionsHtml}
-              </div>
-          `;
-      }
-
-      export function init(element) {
-          element.addEventListener('click', (event) => {
-              if (event.target.closest('.return-btn')) {
-                  store.dispatch({ type: 'CHANGE_VIEW', payload: 'calendar' });
-              }
-              if (event.target.closest('.copy-btn')) {
-                  const { completedWorkout } = store.getState();
-                  const textToCopy = generateTextForCoach(completedWorkout);
-                  navigator.clipboard.writeText(textToCopy).then(() => {
-                      store.dispatch({ type: 'SHOW_NOTICE', payload: { message: 'Riepilogo copiato!' } });
-                  }).catch(err => {
-                      console.error('Errore nella copia:', err);
-                      store.dispatch({ type: 'SHOW_NOTICE', payload: { message: 'Errore nella copia' } });
-                  });
-              }
-          });
-
-          store.subscribe(() => {
-              // Re-render only if the view is active to avoid unnecessary work
-              if(element.classList.contains('view--active')) {
-                  render(element);
-              }
-          });
-          element.innerHTML = '';
-      }
   - file: src/views/TrainerView.js
     content: |
       import store from '../modules/store.js';
@@ -1009,12 +16,188 @@ patches:
       let animationFrameId = null;
       let animationStartTime = null;
 
+      function runStateBasedTimer(element) {
+          const { trainerState, trainerContext, activeWorkout } = store.getState();
+          
+          if (animationFrameId && trainerState !== 'paused') {
+              cancelAnimationFrame(animationFrameId);
+              animationFrameId = null;
+          }
+
+          const onComplete = () => store.dispatch({ type: 'TIMER_COMPLETE' });
+          const currentItem = activeWorkout.items[trainerContext.itemIndex];
+          let duration = 0;
+
+          switch(trainerState) {
+              case 'preparing':
+                  duration = 3000;
+                  break;
+              case 'announcing':
+                  duration = 750;
+                  break;
+              case 'action':
+                  if (currentItem.type === 'time') {
+                      duration = (currentItem.duration || 10) * 1000;
+                  } else {
+                      const tempo = currentItem.tempo || {};
+                      duration = (tempo[trainerContext.currentPhase] || 1) * 1000;
+                  }
+                  break;
+              case 'rest': {
+                  let restDuration = 60; // Default
+                  if (currentItem.type === 'rest') {
+                      restDuration = currentItem.duration;
+                  } else if (currentItem.exerciseId) {
+                      restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60;
+                  }
+                  duration = restDuration * 1000;
+                  break;
+              }
+              default:
+                  return; // No timer for states like 'ready', 'paused', 'finished'
+          }
+          
+          const ringEl = element.querySelector('.progress-ring__foreground');
+          const timerEl = element.querySelector('.progress-ring__timer');
+          if (!ringEl || !timerEl) return;
+          const circumference = 2 * Math.PI * ringEl.r.baseVal.value;
+          
+          const isResuming = trainerContext.stateBeforePause && trainerContext.remaining > 0;
+          const animationDuration = isResuming ? trainerContext.remaining : duration;
+          let startTime = performance.now();
+          animationStartTime = startTime;
+          if (isResuming) {
+              store.dispatch({ type: 'UPDATE_TRAINER_CONTEXT', payload: { remaining: 0, stateBeforePause: null }});
+          }
+
+          const animationStep = (timestamp) => {
+              const elapsed = timestamp - startTime;
+              const progress = Math.min(1, elapsed / animationDuration);
+              ringEl.style.strokeDashoffset = circumference * (1 - progress);
+              
+              if (store.getState().trainerState !== 'announcing') {
+                timerEl.textContent = Math.ceil((animationDuration - elapsed) / 1000);
+              } else {
+                timerEl.textContent = '';
+              }
+
+              if (elapsed < animationDuration) {
+                  animationFrameId = requestAnimationFrame(animationStep);
+              } else {
+                  ringEl.style.strokeDashoffset = 0;
+                  timerEl.textContent = 0;
+                  if (onComplete) onComplete();
+              }
+          };
+          animationFrameId = requestAnimationFrame(animationStep);
+      }
+
+      function render(element) {
+          const { activeWorkout, trainerState, trainerContext } = store.getState();
+          if (!activeWorkout) {
+              element.innerHTML = '<h2>Nessun workout attivo.</h2>';
+              return;
+          }
+
+          const currentItem = activeWorkout.items[trainerContext.itemIndex];
+          const radius = 90;
+          const circumference = 2 * Math.PI * radius;
+          let phaseText = '', instructionText = '', buttonText = '', timerText = '', phaseClass = '';
+          let ringOffset = circumference;
+          const isExercise = currentItem.type === 'exercise' || currentItem.type === 'time';
+          let currentDuration = 0;
+          let terminateButtonHidden = trainerState === 'finished' || trainerState === 'ready';
+
+          switch (trainerState) {
+              case 'ready':
+                  phaseText = 'PRONTO'; instructionText = `Premi INIZIA per cominciare`; buttonText = 'INIZIA';
+                  break;
+              case 'preparing':
+                  phaseText = 'PREPARATI'; instructionText = 'Inizia il movimento...'; buttonText = 'PAUSA'; timerText = '3'; currentDuration = 3000;
+                  break;
+              case 'rest': {
+                  let restDuration = 60;
+                  if (currentItem.type === 'rest') { restDuration = currentItem.duration; }
+                  else if (currentItem.exerciseId) { restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60; }
+                  phaseText = 'RIPOSO'; instructionText = 'Recupera'; buttonText = 'PAUSA'; timerText = restDuration; currentDuration = restDuration * 1000;
+                  break;
+              }
+              case 'announcing':
+                  phaseText = trainerContext.currentPhase?.toUpperCase() || '';
+                  instructionText = `Prossima fase: ${phaseText}`; buttonText = 'PAUSA'; phaseClass = 'is-flashing'; currentDuration = 750;
+                  break;
+              case 'action':
+                  phaseText = trainerContext.currentPhase?.toUpperCase() || '';
+                  if (currentItem.type === 'time') { currentDuration = currentItem.duration * 1000; }
+                  else { const tempo = currentItem.tempo || {}; currentDuration = (tempo[trainerContext.currentPhase] || 1) * 1000; }
+                  instructionText = 'Esegui il movimento'; buttonText = 'PAUSA';
+                  break;
+              case 'paused': {
+                  const prevState = trainerContext.stateBeforePause;
+                  if(prevState === 'preparing') { phaseText = 'PREPARATI'; currentDuration = 3000; }
+                  else if(prevState === 'rest') { phaseText = 'RIPOSO'; let restDuration = 60; if (currentItem.type === 'rest') { restDuration = currentItem.duration; } else if (currentItem.exerciseId) { restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60; } currentDuration = restDuration * 1000; }
+                  else if(prevState === 'announcing' || prevState === 'action') {
+                      phaseText = trainerContext.currentPhase?.toUpperCase() || '';
+                      if (prevState === 'announcing') { phaseClass = 'is-flashing'; currentDuration = 750; }
+                      else { if (currentItem.type === 'time') { currentDuration = currentItem.duration * 1000; } else { const tempo = currentItem.tempo || {}; currentDuration = (tempo[trainerContext.currentPhase] || 1) * 1000; } }
+                  }
+                  instructionText = 'Pausa'; buttonText = 'RIPRENDI'; 
+                  if(prevState !== 'announcing') { timerText = Math.ceil(trainerContext.remaining/1000); }
+                  ringOffset = circumference * (1 - ( (currentDuration - trainerContext.remaining) / currentDuration) );
+                  break;
+              }
+              case 'finished':
+                  phaseText = 'FINE'; instructionText = 'Workout completato!'; buttonText = 'DEBRIEFING';
+                  break;
+              default: phaseText = 'IDLE'; instructionText = 'Stato non riconosciuto'; buttonText = 'RESET';
+          }
+          const headerTitle = currentItem.name || 'Riposo';
+          const seriesText = isExercise ? `SERIE ${trainerContext.currentSeries} / ${currentItem.series || 1}` : '';
+          const repsText = currentItem.type === 'exercise' ? `REP ${trainerContext.currentRep} / ${currentItem.reps || 1}` : '';
+
+          element.innerHTML = `
+              <div class="trainer-container">
+                  <header class="trainer-header">
+                      <h2>${headerTitle}</h2>
+                      <p>${seriesText} ${repsText ? `| ${repsText}` : ''}</p>
+                  </header>
+                  <div class="progress-ring">
+                      <svg>
+                          <circle class="progress-ring__background" stroke-width="10" r="${radius}" cx="50%" cy="50%"></circle>
+                          <circle class="progress-ring__foreground" style="stroke-dashoffset: ${ringOffset};" stroke-width="10" r="${radius}" cx="50%" cy="50%" stroke-dasharray="${circumference}"></circle>
+                      </svg>
+                      <div class="progress-ring__text">
+                          <div class="progress-ring__phase ${phaseClass}">${phaseText}</div>
+                          <div class="progress-ring__timer">${timerText}</div>
+                      </div>
+                  </div>
+                  <footer class="trainer-footer">
+                      <p class="trainer-instruction">${instructionText}</p>
+                      <div class="trainer-controls">
+                          <button class="trainer-main-btn" data-duration="${currentDuration}">${buttonText}</button>
+                          <button class="trainer-terminate-btn" ${terminateButtonHidden ? 'hidden' : ''}>Termina</button>
+                      </div>
+                  </footer>
+              </div>
+          `;
+      }
+
       export function init(element) {
+          let lastState = null;
+
           element.addEventListener('click', (event) => {
               const mainButton = event.target.closest('.trainer-main-btn');
               const terminateButton = event.target.closest('.trainer-terminate-btn');
 
               if (terminateButton) {
+                  const currentState = store.getState().trainerState;
+                  if (currentState !== 'paused') {
+                      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                      const elapsed = performance.now() - animationStartTime;
+                      const duration = mainButton?.dataset?.duration || 0;
+                      const remaining = duration - elapsed;
+                      store.dispatch({ type: 'PAUSE_TRAINER', payload: { remaining: remaining > 0 ? remaining : 0, duration } });
+                  }
                   store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'CONFIRM_TERMINATION' } });
                   return;
               }
@@ -1038,185 +221,30 @@ patches:
                   case 'announcing':
                       if (animationFrameId) cancelAnimationFrame(animationFrameId);
                       const elapsed = performance.now() - animationStartTime;
-                      const remaining = mainButton.dataset.duration - elapsed;
-                      store.dispatch({ type: 'PAUSE_TRAINER', payload: { remaining: remaining > 0 ? remaining : 0, duration: mainButton.dataset.duration } });
+                      const duration = mainButton.dataset.duration;
+                      const remaining = duration - elapsed;
+                      store.dispatch({ type: 'PAUSE_TRAINER', payload: { remaining: remaining > 0 ? remaining : 0, duration } });
                       break;
               }
           });
 
-          element.addEventListener('animateRing', ({ detail }) => {
-              if (animationFrameId) cancelAnimationFrame(animationFrameId);
-              const ringEl = element.querySelector('.progress-ring__foreground');
-              const timerEl = element.querySelector('.progress-ring__timer');
-              if (!ringEl || !timerEl) return;
-              const circumference = 2 * Math.PI * ringEl.r.baseVal.value;
-              const { trainerContext } = store.getState();
+          store.subscribe(() => {
+              const currentState = store.getState();
+              const trainerState = currentState.trainerState;
 
-              const isResuming = trainerContext.stateBeforePause && trainerContext.remaining > 0;
-              const duration = isResuming ? trainerContext.remaining : detail.duration;
-              let startTime = performance.now();
-              animationStartTime = startTime;
-              if (isResuming) {
-                  store.dispatch({ type: 'UPDATE_TRAINER_CONTEXT', payload: { remaining: 0, stateBeforePause: null }});
+              if(element.classList.contains('view--active')) {
+                  render(element);
+                  // Only start a timer if the state has meaningfully changed to a timed one
+                  if (trainerState !== lastState) {
+                      if (['preparing', 'announcing', 'action', 'rest'].includes(trainerState)) {
+                          runStateBasedTimer(element);
+                      }
+                  }
               }
-
-              const animationStep = (timestamp) => {
-                  const elapsed = timestamp - startTime;
-                  const progress = Math.min(1, elapsed / duration);
-                  ringEl.style.strokeDashoffset = circumference * (1 - progress);
-
-                  if (store.getState().trainerState !== 'announcing') {
-                    timerEl.textContent = Math.ceil((duration - elapsed) / 1000);
-                  } else {
-                    timerEl.textContent = '';
-                  }
-
-                  if (elapsed < duration) {
-                      animationFrameId = requestAnimationFrame(animationStep);
-                  } else {
-                      ringEl.style.strokeDashoffset = 0;
-                      timerEl.textContent = 0;
-                      if (detail.onComplete) detail.onComplete();
-                  }
-              };
-              animationFrameId = requestAnimationFrame(animationStep);
+              lastState = trainerState;
           });
 
-          function runStateBasedTimer() {
-              const { trainerState, trainerContext, activeWorkout } = store.getState();
-
-              if (animationFrameId && trainerState !== 'paused') {
-                  cancelAnimationFrame(animationFrameId);
-                  animationFrameId = null;
-              }
-
-              const onComplete = () => store.dispatch({ type: 'TIMER_COMPLETE' });
-              const currentItem = activeWorkout.items[trainerContext.itemIndex];
-              let duration = 0;
-
-              switch(trainerState) {
-                  case 'preparing':
-                      duration = 3000;
-                      break;
-                  case 'announcing':
-                      duration = 750;
-                      break;
-                  case 'action':
-                      if (currentItem.type === 'time') {
-                          duration = (currentItem.duration || 10) * 1000;
-                      } else {
-                          const tempo = currentItem.tempo || {};
-                          duration = (tempo[trainerContext.currentPhase] || 1) * 1000;
-                      }
-                      break;
-                  case 'rest': {
-                      let restDuration = 60; // Default
-                      if (currentItem.type === 'rest') {
-                          restDuration = currentItem.duration;
-                      } else if (currentItem.exerciseId) {
-                          restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60;
-                      }
-                      duration = restDuration * 1000;
-                      break;
-                  }
-                  default:
-                      // No timer for states like 'ready', 'paused', 'finished'
-                      return;
-              }
-              element.dispatchEvent(new CustomEvent('animateRing', { detail: { duration, onComplete } }));
-          }
-
-          function render() {
-              const { activeWorkout, trainerState, trainerContext } = store.getState();
-              if (!activeWorkout) { element.innerHTML = '<h2>Nessun workout attivo.</h2>'; return; }
-
-              const currentItem = activeWorkout.items[trainerContext.itemIndex];
-              const radius = 90;
-              const circumference = 2 * Math.PI * radius;
-              let phaseText = '', instructionText = '', buttonText = '', timerText = '', phaseClass = '';
-              let ringOffset = circumference;
-              const isExercise = currentItem.type === 'exercise' || currentItem.type === 'time';
-              let currentDuration = 0;
-              let terminateButtonHidden = trainerState === 'finished' || trainerState === 'ready';
-
-              switch (trainerState) {
-                  case 'ready':
-                      phaseText = 'PRONTO'; instructionText = `Premi INIZIA per cominciare`; buttonText = 'INIZIA';
-                      break;
-                  case 'preparing':
-                      phaseText = 'PREPARATI'; instructionText = 'Inizia il movimento...'; buttonText = 'PAUSA'; timerText = '3'; currentDuration = 3000;
-                      break;
-                  case 'rest': {
-                      let restDuration = 60;
-                      if (currentItem.type === 'rest') { restDuration = currentItem.duration; }
-                      else if (currentItem.exerciseId) { restDuration = getExerciseById(currentItem.exerciseId)?.defaultRest || 60; }
-                      phaseText = 'RIPOSO'; instructionText = 'Recupera'; buttonText = 'PAUSA'; timerText = restDuration; currentDuration = restDuration * 1000;
-                      break;
-                  }
-                  case 'announcing':
-                      phaseText = trainerContext.currentPhase?.toUpperCase() || '';
-                      instructionText = `Prossima fase: ${phaseText}`; buttonText = 'PAUSA'; phaseClass = 'is-flashing'; currentDuration = 750;
-                      break;
-                  case 'action':
-                      phaseText = trainerContext.currentPhase?.toUpperCase() || '';
-                      if (currentItem.type === 'time') { currentDuration = currentItem.duration * 1000; }
-                      else { const tempo = currentItem.tempo || {}; currentDuration = (tempo[trainerContext.currentPhase] || 1) * 1000; }
-                      instructionText = 'Esegui il movimento'; buttonText = 'PAUSA';
-                      break;
-                  case 'paused': {
-                      const prevState = trainerContext.stateBeforePause;
-                      if(prevState === 'preparing') { phaseText = 'PREPARATI'; }
-                      else if(prevState === 'rest') { phaseText = 'RIPOSO'; }
-                      else if(prevState === 'announcing' || prevState === 'action') { phaseText = trainerContext.currentPhase?.toUpperCase() || ''; }
-                      if(prevState === 'announcing') { phaseClass = 'is-flashing'; }
-
-                      instructionText = 'Pausa'; buttonText = 'RIPRENDI';
-                      if(prevState !== 'announcing') { timerText = Math.ceil(trainerContext.remaining/1000); }
-                      ringOffset = circumference * (1 - ( (trainerContext.duration - trainerContext.remaining) / trainerContext.duration) );
-                      currentDuration = trainerContext.duration;
-                      break;
-                  }
-                  case 'finished':
-                      phaseText = 'FINE'; instructionText = 'Workout completato!'; buttonText = 'DEBRIEFING';
-                      break;
-                  default: phaseText = 'IDLE'; instructionText = 'Stato non riconosciuto'; buttonText = 'RESET';
-              }
-              const headerTitle = currentItem.name || 'Riposo';
-              const seriesText = isExercise ? `SERIE ${trainerContext.currentSeries} / ${currentItem.series || 1}` : '';
-              const repsText = currentItem.type === 'exercise' ? `REP ${trainerContext.currentRep} / ${currentItem.reps || 1}` : '';
-
-              element.innerHTML = `
-                  <div class="trainer-container">
-                      <header class="trainer-header">
-                          <h2>${headerTitle}</h2>
-                          <p>${seriesText} ${repsText ? `| ${repsText}` : ''}</p>
-                      </header>
-                      <div class="progress-ring">
-                          <svg>
-                              <circle class="progress-ring__background" stroke-width="10" r="${radius}" cx="50%" cy="50%"></circle>
-                              <circle class="progress-ring__foreground" style="stroke-dashoffset: ${ringOffset};" stroke-width="10" r="${radius}" cx="50%" cy="50%" stroke-dasharray="${circumference}"></circle>
-                          </svg>
-                          <div class="progress-ring__text">
-                              <div class="progress-ring__phase ${phaseClass}">${phaseText}</div>
-                              <div class="progress-ring__timer">${timerText}</div>
-                          </div>
-                      </div>
-                      <footer class="trainer-footer">
-                          <p class="trainer-instruction">${instructionText}</p>
-                          <div class="trainer-controls">
-                              <button class="trainer-main-btn" data-duration="${currentDuration}">${buttonText}</button>
-                              <button class="trainer-terminate-btn" ${terminateButtonHidden ? 'hidden' : ''}>Termina</button>
-                          </div>
-                      </footer>
-                  </div>
-              `;
-
-              if (trainerState !== 'paused') {
-                runStateBasedTimer();
-              }
-          }
-          store.subscribe(render);
-          render();
+          render(element); // Initial render
       }
 commands:
-  - "echo 'Replaced native pop-ups with custom modals and notices.'"
+ - "echo 'Critical bugs related to pause and render loop have been fixed.'"
