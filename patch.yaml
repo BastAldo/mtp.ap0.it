@@ -2,7 +2,7 @@ commit_message: "refactor(store): Riprogettazione definitiva della macchina a st
 rationale: |
   Questo commit rappresenta una riprogettazione completa e definitiva della macchina a stati del trainer per risolvere tutti i bug rimanenti, inclusa la funzione di pausa e l'animazione. L'approccio segue una logica più robusta e centralizzata, aderendo pienamente all'ADR 003.
 
-  1.  **Risoluzione Definitiva della Pausa**: La "race condition" è stata eliminata riprogettando il flusso. È stata introdotta un'unica azione `ADVANCE_TRAINER_STATE` che agisce come unico "gatekeeper" per le transizioni di stato. L'azione `TIMER_TICK` ora si occupa solo di decrementare il tempo. Quando il timer scade, invia un'azione `TIMER_EXPIRED` che a sua volta chiama `ADVANCE_TRAINER_STATE`. Le azioni `PAUSE_TRAINER` e `RESUME_TRAINER` sono ora semplici, atomiche e affidabili, limitandosi a fermare/riavviare il timer e a cambiare lo stato.
+  1.  **Risoluzione Definitiva della Pausa e dei Loop**: La "race condition" e i loop sono stati eliminati riprogettando completamente il flusso. È stata introdotta un'unica azione `ADVANCE_TRAINER_STATE` che agisce come unico "gatekeeper" per le transizioni di stato. L'azione `TIMER_TICK` ora si occupa solo di decrementare il tempo. Quando il timer scade, invia un'azione `TIMER_EXPIRED` che a sua volta chiama `ADVANCE_TRAINER_STATE`. Le azioni `PAUSE_TRAINER` e `RESUME_TRAINER` sono ora semplici, atomiche e affidabili, limitandosi a fermare/riavviare il timer e a cambiare lo stato.
 
   2.  **Miglioramento Animazione "Announcing"**: L'animazione in `assets/css/style.css` è stata modificata per fornire un singolo "flash" o "pulse" morbido e gradevole della durata di 0.75 secondi, come richiesto, migliorando l'esperienza utente.
 patches:
