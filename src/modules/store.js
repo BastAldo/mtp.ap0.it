@@ -4,7 +4,6 @@ import { getExerciseById } from './exerciseRepository.js';
 import { generatePlan } from './planGenerator.js';
 
 const WORKOUTS_STORAGE_KEY = 'workouts';
-const clone = (data) => JSON.parse(JSON.stringify(data));
 
 const trainerInitialState = {
     status: 'idle',
@@ -39,7 +38,11 @@ function createStore() {
     }
     
     const oldState = state;
-    const newState = clone(state);
+    // Iniziamo con una copia shallow dello stato, è più sicuro e performante
+    const newState = { 
+        ...state,
+        trainer: { ...state.trainer } // Copia shallow anche del trainer
+    };
 
     switch (action.type) {
       case 'CHANGE_VIEW': newState.currentView = action.payload; break;
@@ -49,11 +52,11 @@ function createStore() {
       case 'OPEN_MODAL': newState.isModalOpen = true; newState.modalContext = action.payload; break;
       case 'CLOSE_MODAL': newState.isModalOpen = false; newState.modalContext = null; break;
       case 'SHOW_NOTICE': newState.notice = { message: action.payload.message, id: Date.now() }; break;
-      case 'ADD_EXERCISE_ITEM': { const { date, exerciseId } = action.payload; const dateKey = `workout-${date}`; const exercise = getExerciseById(exerciseId); if (!exercise) break; const newItem = { ...exercise, id: `item-${Date.now()}`, type: exercise.type || 'exercise', exerciseId: exercise.id }; const dayWorkout = newState.workouts[dateKey] || []; dayWorkout.push(newItem); newState.workouts[dateKey] = dayWorkout; newState.modalContext = { type: 'EDIT_WORKOUT', date }; break; }
-      case 'ADD_REST_ITEM': { const { date } = action.payload; const dateKey = `workout-${date}`; const newItem = { id: `item-${Date.now()}`, type: 'rest', duration: 60 }; const dayWorkout = newState.workouts[dateKey] || []; dayWorkout.push(newItem); newState.workouts[dateKey] = dayWorkout; break; }
-      case 'REMOVE_WORKOUT_ITEM': { const { date, itemId } = action.payload; const dateKey = `workout-${date}`; newState.workouts[dateKey] = (newState.workouts[dateKey] || []).filter(item => item.id !== itemId); break; }
-      case 'UPDATE_REST_DURATION': { const { date, itemId, newDuration } = action.payload; const dateKey = `workout-${date}`; const dayWorkout = newState.workouts[dateKey] || []; const itemIndex = dayWorkout.findIndex(item => item.id === itemId); if (itemIndex > -1 && dayWorkout[itemIndex].type === 'rest') { dayWorkout[itemIndex].duration = newDuration; } break; }
-      case 'REORDER_WORKOUT_ITEMS': { const { date, draggedItemId, targetItemId } = action.payload; const dateKey = `workout-${date}`; const items = newState.workouts[dateKey] || []; const draggedIndex = items.findIndex(item => item.id === draggedItemId); const targetIndex = items.findIndex(item => item.id === targetItemId); if (draggedIndex > -1 && targetIndex > -1) { const [draggedItem] = items.splice(draggedIndex, 1); items.splice(targetIndex, 0, draggedItem); } break; }
+      case 'ADD_EXERCISE_ITEM': { const { date, exerciseId } = action.payload; const dateKey = `workout-${date}`; const exercise = getExerciseById(exerciseId); if (!exercise) break; const newItem = { ...exercise, id: `item-${Date.now()}`, type: exercise.type || 'exercise', exerciseId: exercise.id }; const dayWorkout = [...(newState.workouts[dateKey] || [])]; dayWorkout.push(newItem); newState.workouts = {...newState.workouts, [dateKey]: dayWorkout }; newState.modalContext = { type: 'EDIT_WORKOUT', date }; break; }
+      case 'ADD_REST_ITEM': { const { date } = action.payload; const dateKey = `workout-${date}`; const newItem = { id: `item-${Date.now()}`, type: 'rest', duration: 60 }; const dayWorkout = [...(newState.workouts[dateKey] || [])]; dayWorkout.push(newItem); newState.workouts = {...newState.workouts, [dateKey]: dayWorkout }; break; }
+      case 'REMOVE_WORKOUT_ITEM': { const { date, itemId } = action.payload; const dateKey = `workout-${date}`; const updatedWorkout = (newState.workouts[dateKey] || []).filter(item => item.id !== itemId); newState.workouts = {...newState.workouts, [dateKey]: updatedWorkout }; break; }
+      case 'UPDATE_REST_DURATION': { const { date, itemId, newDuration } = action.payload; const dateKey = `workout-${date}`; const dayWorkout = (newState.workouts[dateKey] || []).map(item => item.id === itemId ? { ...item, duration: newDuration } : item); newState.workouts = {...newState.workouts, [dateKey]: dayWorkout }; break; }
+      case 'REORDER_WORKOUT_ITEMS': { const { date, draggedItemId, targetItemId } = action.payload; const dateKey = `workout-${date}`; const items = [...(newState.workouts[dateKey] || [])]; const draggedIndex = items.findIndex(item => item.id === draggedItemId); const targetIndex = items.findIndex(item => item.id === targetItemId); if (draggedIndex > -1 && targetIndex > -1) { const [draggedItem] = items.splice(draggedIndex, 1); items.splice(targetIndex, 0, draggedItem); newState.workouts = {...newState.workouts, [dateKey]: items }; } break; }
       
       case 'START_WORKOUT': {
           const { date } = action.payload;
