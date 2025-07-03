@@ -63,10 +63,10 @@ body::-webkit-scrollbar-thumb, .modal-body::-webkit-scrollbar-thumb { background
 /* --- KEYFRAMES --- */
 @keyframes soft-flash {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; } /* Reso più delicato, da 0.2 a 0.4 */
+  50% { opacity: 0.4; }
 }
 .is-flashing {
-  animation: soft-flash 0.75s ease-in-out;
+  animation: soft-flash 0.75s ease-in-out infinite; /* Aggiunto 'infinite' */
 }
 @keyframes fade-slide-up {
     from {
@@ -174,7 +174,7 @@ body::-webkit-scrollbar-thumb, .modal-body::-webkit-scrollbar-thumb { background
 .progress-ring { position: relative; width: 250px; height: 250px; margin: 2rem 0; }
 .progress-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
 .progress-ring__background { stroke: var(--card-color); fill: transparent; }
-.progress-ring__foreground { stroke: var(--secondary-color); fill: transparent; }
+.progress-ring__foreground { stroke: var(--secondary-color); fill: transparent; transition: stroke-dashoffset 0.1s linear; } /* Aggiunta transizione */
 .progress-ring__text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
 .progress-ring__phase { font-size: 1.6rem; font-weight: bold; text-transform: uppercase; }
 .progress-ring__timer { font-size: 3rem; color: var(--text-color); }
