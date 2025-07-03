@@ -1,16 +1,14 @@
-commit_message: "fix(trainer): Correggere bug critico e migliorare la robustezza del trainer"
+commit_message: "fix(store): Risolvere bug NaN del timer eliminando il nested dispatch"
 rationale: |
-  Questo commit risolve un errore di sintassi critico in `store.js` che impediva l'avvio dell'applicazione.
+  Questo commit risolve un bug critico che causava la visualizzazione di 'NaN' nel timer del trainer.
 
-  Inoltre, come parte di una revisione più approfondita del codice, sono state implementate diverse migliorie per aumentare la robustezza e la manutenibilità del nuovo sistema a piano pre-compilato:
+  La causa era un problema di race condition nella gestione dello stato: l'azione `TIMER_TICK` invocava un'altra azione (`ADVANCE_PLAN`) al suo interno. Lo stato aggiornato da `ADVANCE_PLAN` veniva scartato, lasciando la proprietà `remaining` non definita nel nuovo stato, da cui il `NaN`.
 
-  1.  **Bug Fix (`store.js`):** Rimosso un carattere '}' extra che causava un `SyntaxError` bloccante.
+  La soluzione è stata un refactoring dello store per eliminare il "nested dispatch":
+  1.  L'azione `ADVANCE_PLAN` è stata rimossa.
+  2.  La logica per avanzare al passo successivo è stata spostata direttamente dentro `TIMER_TICK`.
   
-  2.  **Robustezza (`store.js`):** Aggiunto un controllo di sicurezza nell'azione `TERMINATE_WORKOUT` per gestire con grazia eventuali dati corrotti e garantire che la sessione termini senza errori imprevisti.
-  
-  3.  **Manutenibilità (`planGenerator.js`):** Aggiunti commenti dettagliati per documentare la struttura degli oggetti-passo generati, rendendo il codice più chiaro per future manutenzioni.
-
-  4.  **Coerenza (`DebriefingView.js`):** Effettuato un piccolo ritocco per garantire che la vista di debriefing utilizzi sempre la proprietà `fullPlan` dall'oggetto `completedWorkout`, assicurando coerenza con lo stato centrale.
+  Questo approccio rende il flusso di stato più robusto, lineare e prevedibile, eliminando la causa radice del bug.
 patches:
   - file: src/modules/store.js
     content: |
@@ -29,10 +27,10 @@ patches:
           isModalOpen: false,
           modalContext: null,
           notice: null,
-          activeWorkout: null, // Contiene il workout originale {date, items}
+          activeWorkout: null, 
           completedWorkout: null,
-          trainerState: 'idle', // ready, running, paused, finished
-          trainerContext: {}, // { executionPlan, currentStepIndex, remaining, stateBeforePause }
+          trainerState: 'idle', 
+          trainerContext: {}, 
         };
 
         const subscribers = new Set();
@@ -73,30 +71,29 @@ patches:
               }
               break;
             }
-            case 'ADVANCE_PLAN': {
-              const { executionPlan, currentStepIndex } = state.trainerContext;
-              const nextStepIndex = currentStepIndex + 1;
-              if (nextStepIndex >= executionPlan.length) {
-                dispatch({ type: 'FINISH_WORKOUT' });
-                shouldNotify = false;
-                break;
-              }
-              const nextStep = executionPlan[nextStepIndex];
-              if (nextStep.type === 'finished') {
-                newState = { ...state, trainerState: 'finished', trainerContext: { ...state.trainerContext, currentStepIndex: nextStepIndex }};
-              } else {
-                newState = { ...state, trainerContext: { ...state.trainerContext, currentStepIndex: nextStepIndex, remaining: nextStep.duration }};
-              }
-              break;
-            }
             case 'TIMER_TICK': {
               if (state.trainerState !== 'running') { shouldNotify = false; break; }
               const newRemaining = (state.trainerContext.remaining || 0) - action.payload.tick;
+
               if (newRemaining > 0) {
                 newState = { ...state, trainerContext: { ...state.trainerContext, remaining: newRemaining } };
               } else {
-                dispatch({ type: 'ADVANCE_PLAN' });
-                shouldNotify = false;
+                const { executionPlan, currentStepIndex } = state.trainerContext;
+                const nextStepIndex = currentStepIndex + 1;
+
+                if (nextStepIndex >= executionPlan.length) {
+                  const fullPlan = state.activeWorkout.items;
+                  newState = { ...state, currentView: 'debriefing', completedWorkout: { ...state.activeWorkout, completed: true, fullPlan }, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
+                  break;
+                }
+
+                const nextStep = executionPlan[nextStepIndex];
+
+                if (nextStep.type === 'finished') {
+                  newState = { ...state, trainerState: 'finished', trainerContext: { ...state.trainerContext, currentStepIndex: nextStepIndex, remaining: 0 }};
+                } else {
+                  newState = { ...state, trainerState: 'running', trainerContext: { ...state.trainerContext, currentStepIndex: nextStepIndex, remaining: nextStep.duration }};
+                }
               }
               break;
             }
@@ -113,7 +110,6 @@ patches:
               break;
             }
             case 'FINISH_WORKOUT': {
-              // Il fullPlan contiene solo gli item originali, per il debriefing.
               const fullPlan = state.activeWorkout.items;
               newState = { ...state, currentView: 'debriefing', completedWorkout: { ...state.activeWorkout, completed: true, fullPlan }, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
               break;
@@ -123,7 +119,6 @@ patches:
               const { executionPlan, currentStepIndex } = trainerContext;
               const fullPlan = activeWorkout.items;
               
-              // Safeguard: Trova l'indice dell'item originale per un debriefing accurato
               const currentStep = executionPlan[currentStepIndex];
               const currentItem = currentStep?.item;
               const originalItemIndex = currentItem ? fullPlan.findIndex(i => i.id === currentItem.id) : -1;
@@ -155,234 +150,5 @@ patches:
       }
       const store = createStore();
       export default store;
-  - file: src/modules/planGenerator.js
-    content: |
-      // --- Modulo Generatore di Piani di Esecuzione per il Trainer ---
-
-      /**
-       * Struttura di un "Oggetto-Passo" (Step Object) generato:
-       * {
-       * type: string,          // 'preparing', 'announcing', 'action', 'rest', 'finished'
-       * duration: number,      // Durata del passo in millisecondi
-       * headerTitle: string,   // Testo principale per l'header del trainer (es. nome esercizio)
-       * mainText: string,      // Testo secondario per il centro del trainer (es. 'RIPOSO', 'UP', 'DOWN')
-       * item?: object,         // Riferimento all'item originale del workout (se applicabile)
-       * context?: object,      // Contesto specifico del passo (es. { currentSeries, totalSeries, ... })
-       * }
-       */
-
-      function unrollExerciseSeries(item, seriesIndex) {
-          const steps = [];
-          const totalSeries = item.series || 1;
-          const totalReps = item.reps || 1;
-
-          if (seriesIndex === 1) {
-              steps.push({
-                  type: 'announcing',
-                  duration: 2000,
-                  headerTitle: 'Prossimo Esercizio',
-                  mainText: item.name,
-                  item,
-              });
-          }
-
-          for (let repIndex = 1; repIndex <= totalReps; repIndex++) {
-              if (item.type === 'time') {
-                  steps.push({
-                      type: 'action',
-                      duration: (item.duration || 10) * 1000,
-                      headerTitle: item.name,
-                      mainText: `Serie ${seriesIndex}/${totalSeries}`,
-                      item,
-                      context: { currentSeries: seriesIndex, totalSeries }
-                  });
-              } else { // type 'exercise' con tempo
-                  const tempoPhases = Object.keys(item.tempo || { exec: 1 });
-                  tempoPhases.forEach(phase => {
-                      steps.push({
-                          type: 'action',
-                          duration: (item.tempo[phase] || 1) * 1000,
-                          headerTitle: item.name,
-                          mainText: phase.toUpperCase(),
-                          item,
-                          context: { currentSeries: seriesIndex, totalSeries, currentRep: repIndex, totalReps, phase }
-                      });
-                  });
-              }
-          }
-
-          if (seriesIndex < totalSeries) {
-              steps.push({
-                  type: 'rest',
-                  duration: (item.defaultRest || 60) * 1000,
-                  headerTitle: 'Riposo',
-                  mainText: 'Recupera le forze',
-                  isSeriesRest: true,
-                  item,
-              });
-          }
-
-          return steps;
-      }
-
-      export function generatePlan(workoutItems) {
-          if (!workoutItems || workoutItems.length === 0) return [];
-
-          const plan = [];
-
-          plan.push({
-              type: 'preparing',
-              duration: 3000,
-              headerTitle: 'Preparati',
-              mainText: 'Si comincia...',
-          });
-
-          workoutItems.forEach((item) => {
-              if (item.type === 'rest') {
-                  plan.push({
-                      type: 'rest',
-                      duration: (item.duration || 60) * 1000,
-                      headerTitle: 'Riposo',
-                      mainText: 'Come da programma',
-                      isSeriesRest: false,
-                      item,
-                  });
-              } else {
-                  const totalSeries = item.series || 1;
-                  for (let i = 1; i <= totalSeries; i++) {
-                      plan.push(...unrollExerciseSeries(item, i));
-                  }
-              }
-          });
-
-          plan.push({
-              type: 'finished',
-              duration: 0,
-              headerTitle: 'Fine',
-              mainText: 'Workout Completato!',
-          });
-
-          return plan;
-      }
-  - file: src/views/DebriefingView.js
-    content: |
-      import store from '../modules/store.js';
-
-      function generateSummaryHtml(completedWorkout) {
-          if (!completedWorkout || !completedWorkout.fullPlan) return '<p>Nessun dato di allenamento disponibile.</p>';
-
-          const title = completedWorkout.completed
-              ? '<h2>Workout Completato!</h2>'
-              : '<h2>Workout Interrotto</h2>';
-
-          const termPoint = completedWorkout.terminationPoint;
-
-          const itemsHtml = completedWorkout.fullPlan.map((item, index) => {
-              let itemClass = 'debrief-item';
-              let statusText = '';
-              let animationDelay = `style="animation-delay: ${index * 50}ms;"`;
-
-              if (completedWorkout.completed) {
-                  itemClass += ' debrief-item--completed';
-              } else if (termPoint) {
-                  if (index < termPoint.itemIndex) {
-                      itemClass += ' debrief-item--completed';
-                  } else if (index === termPoint.itemIndex) {
-                      itemClass += ' debrief-item--terminated';
-                      statusText = `(interrotto alla serie ${termPoint.currentSeries})`;
-                  } else {
-                      itemClass += ' debrief-item--skipped';
-                      animationDelay = '';
-                  }
-              }
-
-              let mainText = '';
-              if (item.type === 'rest') {
-                  mainText = `Riposo: ${item.duration}s`;
-              } else {
-                  const series = item.series || 1;
-                  const reps = item.reps ? `${item.reps} reps` : `${item.duration}s`;
-                  mainText = `${item.name}: ${series}x${reps} ${statusText}`;
-              }
-
-              return `<li class="${itemClass}" ${animationDelay}>${mainText}</li>`;
-          }).join('');
-
-          return `${title}<ul class="debrief-list">${itemsHtml}</ul>`;
-      }
-
-      function generateTextForCoach(completedWorkout) {
-          if (!completedWorkout || !completedWorkout.fullPlan) return 'Nessun dato disponibile.';
-          const date = new Date(completedWorkout.date).toLocaleDateString('it-IT');
-          const status = completedWorkout.completed ? 'Completato' : 'Interrotto';
-          let report = `Report Allenamento - ${date} (${status})\n====================\n\n`;
-
-          const termPoint = completedWorkout.terminationPoint;
-
-          completedWorkout.fullPlan.forEach((item, index) => {
-              let statusTag = '[✓]';
-              if (!completedWorkout.completed && termPoint) {
-                  if (index < termPoint.itemIndex) statusTag = '[✓]';
-                  else if (index === termPoint.itemIndex) statusTag = '[✗]';
-                  else statusTag = '[-]';
-              }
-
-              if (item.type === 'rest') {
-                  report += `${statusTag} Riposo: ${item.duration}s\n`;
-              } else {
-                  const series = item.series || 1;
-                  const reps = item.reps ? `${item.reps} reps` : `${item.duration}s`;
-                  let terminationInfo = '';
-                  if (statusTag === '[✗]') {
-                      terminationInfo = ` (interrotto alla serie ${termPoint.currentSeries}/${series})`;
-                  }
-                  report += `${statusTag} ${item.name}: ${series}x${reps}${terminationInfo}\n`;
-              }
-          });
-          return report;
-      }
-
-
-      function render(element) {
-          const { completedWorkout } = store.getState();
-          const summaryHtml = generateSummaryHtml(completedWorkout);
-          const actionsHtml = `
-              <div class="debriefing-actions">
-                  <button class="copy-btn">Copia per il Coach</button>
-                  <button class="return-btn">Torna al Calendario</button>
-              </div>
-          `;
-          element.innerHTML = `
-              <div class="debriefing-container">
-                  ${summaryHtml}
-                  ${actionsHtml}
-              </div>
-          `;
-      }
-
-      export function init(element) {
-          element.addEventListener('click', (event) => {
-              if (event.target.closest('.return-btn')) {
-                  store.dispatch({ type: 'CHANGE_VIEW', payload: 'calendar' });
-              }
-              if (event.target.closest('.copy-btn')) {
-                  const { completedWorkout } = store.getState();
-                  const textToCopy = generateTextForCoach(completedWorkout);
-                  navigator.clipboard.writeText(textToCopy).then(() => {
-                      store.dispatch({ type: 'SHOW_NOTICE', payload: { message: 'Riepilogo copiato!' } });
-                  }).catch(err => {
-                      console.error('Errore nella copia:', err);
-                      store.dispatch({ type: 'SHOW_NOTICE', payload: { message: 'Errore nella copia' } });
-                  });
-              }
-          });
-
-          store.subscribe(() => {
-              if(element.classList.contains('view--active')) {
-                  render(element);
-              }
-          });
-          element.innerHTML = '';
-      }
 commands:
-  - "echo 'Bug critico risolto e robustezza del sistema migliorata.'"
+  - "echo 'Bug NaN risolto. Lo store ora ha un flusso di stato più robusto e prevedibile.'"

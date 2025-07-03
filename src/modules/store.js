@@ -13,10 +13,10 @@ function createStore() {
     isModalOpen: false,
     modalContext: null,
     notice: null,
-    activeWorkout: null, // Contiene il workout originale {date, items}
+    activeWorkout: null, 
     completedWorkout: null,
-    trainerState: 'idle', // ready, running, paused, finished
-    trainerContext: {}, // { executionPlan, currentStepIndex, remaining, stateBeforePause }
+    trainerState: 'idle', 
+    trainerContext: {}, 
   };
 
   const subscribers = new Set();
@@ -57,30 +57,29 @@ function createStore() {
         }
         break;
       }
-      case 'ADVANCE_PLAN': {
-        const { executionPlan, currentStepIndex } = state.trainerContext;
-        const nextStepIndex = currentStepIndex + 1;
-        if (nextStepIndex >= executionPlan.length) {
-          dispatch({ type: 'FINISH_WORKOUT' });
-          shouldNotify = false;
-          break;
-        }
-        const nextStep = executionPlan[nextStepIndex];
-        if (nextStep.type === 'finished') {
-          newState = { ...state, trainerState: 'finished', trainerContext: { ...state.trainerContext, currentStepIndex: nextStepIndex }};
-        } else {
-          newState = { ...state, trainerContext: { ...state.trainerContext, currentStepIndex: nextStepIndex, remaining: nextStep.duration }};
-        }
-        break;
-      }
       case 'TIMER_TICK': {
         if (state.trainerState !== 'running') { shouldNotify = false; break; }
         const newRemaining = (state.trainerContext.remaining || 0) - action.payload.tick;
+
         if (newRemaining > 0) {
           newState = { ...state, trainerContext: { ...state.trainerContext, remaining: newRemaining } };
         } else {
-          dispatch({ type: 'ADVANCE_PLAN' });
-          shouldNotify = false;
+          const { executionPlan, currentStepIndex } = state.trainerContext;
+          const nextStepIndex = currentStepIndex + 1;
+
+          if (nextStepIndex >= executionPlan.length) {
+            const fullPlan = state.activeWorkout.items;
+            newState = { ...state, currentView: 'debriefing', completedWorkout: { ...state.activeWorkout, completed: true, fullPlan }, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
+            break;
+          }
+
+          const nextStep = executionPlan[nextStepIndex];
+
+          if (nextStep.type === 'finished') {
+            newState = { ...state, trainerState: 'finished', trainerContext: { ...state.trainerContext, currentStepIndex: nextStepIndex, remaining: 0 }};
+          } else {
+            newState = { ...state, trainerState: 'running', trainerContext: { ...state.trainerContext, currentStepIndex: nextStepIndex, remaining: nextStep.duration }};
+          }
         }
         break;
       }
@@ -97,7 +96,6 @@ function createStore() {
         break;
       }
       case 'FINISH_WORKOUT': {
-        // Il fullPlan contiene solo gli item originali, per il debriefing.
         const fullPlan = state.activeWorkout.items;
         newState = { ...state, currentView: 'debriefing', completedWorkout: { ...state.activeWorkout, completed: true, fullPlan }, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
         break;
@@ -107,7 +105,6 @@ function createStore() {
         const { executionPlan, currentStepIndex } = trainerContext;
         const fullPlan = activeWorkout.items;
         
-        // Safeguard: Trova l'indice dell'item originale per un debriefing accurato
         const currentStep = executionPlan[currentStepIndex];
         const currentItem = currentStep?.item;
         const originalItemIndex = currentItem ? fullPlan.findIndex(i => i.id === currentItem.id) : -1;
