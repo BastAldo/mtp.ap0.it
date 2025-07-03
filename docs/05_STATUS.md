@@ -1,29 +1,18 @@
 # Stato Attuale del Progetto
-*Ultimo aggiornamento: 2025-07-02*
+*Ultimo aggiornamento: 2025-07-03*
 
-## Stato: Fallimento Critico della Macchina a Stati del Trainer
+## Stato: Approvata Riprogettazione Architetturale Definitiva
 
-### Problema Attuale
-Nonostante ripetuti tentativi di correzione, il componente **Trainer Interattivo rimane criticamente instabile e non utilizzabile**. I problemi principali sono:
-1.  **Loop Infinito**: All'avvio, la macchina a stati entra in un ciclo infinito di transizioni, come evidenziato dai log.
-2.  **Funzione di Pausa Inefficace**: A causa del loop, qualsiasi tentativo di mettere in pausa il workout viene ignorato o immediatamente sovrascritto.
+### Contesto
+Dopo un'analisi approfondita dei fallimenti della precedente macchina a stati del trainer, è emerso che qualsiasi approccio basato su calcoli dinamici a tempo di esecuzione introduceva una complessità eccessiva e difficile da governare.
 
-### Causa Radice (Analisi Definitiva)
-I tentativi di correzione precedenti sono falliti perché indirizzavano i sintomi invece della causa. La causa radice è un **difetto di progettazione architetturale** nel file `src/modules/store.js`.
+### Strategia Adottata: Architettura a "Piano Pre-compilato"
+È stato deciso di abbandonare l'approccio "interprete" in favore di un approccio "compilatore", considerato architetturalmente superiore e più robusto.
 
-La logica del `reducer` viola il principio della separazione delle responsabilità tentando di gestire due compiti contemporaneamente:
-1.  **Calcolare le modifiche di stato** (es. passare da `preparing` a `announcing`).
-2.  **Gestire effetti collaterali** (avviare e fermare i `setInterval` per i timer).
+La strategia consiste in:
+1.  **Generazione Upfront**: Prima che il workout inizi, una funzione dedicata (`planGenerator`) "compilerà" l'intera sequenza di esercizi, serie, ripetizioni, fasi `tempo` e riposi in un **singolo array sequenziale** di "oggetti-passo".
+2.  **Oggetti-Passo Ricchi**: Ogni oggetto nell'array conterrà tutte le informazioni necessarie sia per la logica (es. `type`, `duration`) sia per la visualizzazione (es. `headerTitle`, `mainText`), rendendo i componenti della UI estremamente semplici.
+3.  **Esecutore "Stupido"**: Lo store, durante l'allenamento, si limiterà a incrementare un indice per muoversi lungo l'array pre-compilato. Tutta la complessità logica a runtime viene eliminata.
 
-Questa mescolanza crea una catena di azioni (`dispatch` che chiamano altri `dispatch`), portando a **"race condition"** incontrollabili che sono la vera fonte dei loop.
-
-### Prossima Strategia Obbligatoria: Riprogettazione Architetturale
-
-Qualsiasi ulteriore tentativo di "patch" sull'implementazione corrente è da considerarsi fallimentare. L'unica via per risolvere il problema è una **riscrittura della logica del trainer** che aderisca strettamente ai principi architetturali (ADR 003).
-
-1.  **Rendere il Reducer "Puro"**: La logica all'interno dello `switch` del `dispatch` in `store.js` deve essere modificata per avere un unico scopo: calcolare il nuovo stato e restituirlo. **Non deve più contenere alcuna chiamata a `startTimer` o `stopTimer`**.
-2.  **Introdurre un "Controller" per gli Effetti Collaterali**: Bisogna implementare un meccanismo separato (es. un "middleware" o un "controller che si iscrive allo store") il cui unico compito sia **reagire** ai cambiamenti di stato per gestire i timer.
-    -   *Se vede* che lo stato è diventato `action`, *allora* avvia il timer corrispondente.
-    -   *Se vede* che lo stato è diventato `paused`, *allora* ferma il timer.
-
-Questo disaccoppiamento è l'unico modo per garantire stabilità, prevedibilità e per risolvere definitivamente i bug.
+### Stato Attuale
+La documentazione è stata allineata a questa nuova architettura. Il progetto è **pronto per l'implementazione** di questo refactoring definitivo.

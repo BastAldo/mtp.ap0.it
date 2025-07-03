@@ -32,17 +32,13 @@ To ensure data integrity, all data read from `localStorage` MUST be validated ag
 - **Exercise Schema:** An object defining an exercise's properties.
   - `exercise`: `{ id: string, name: string, tempo: object, ...rest }`
 
-### 4.2. Workout Item Structure
-The data structure for a daily workout is an array of "workout items". Each item is an object with a `type` key:
--   `{ type: 'exercise', id: 'squat', ... }`
--   `{ type: 'rest', duration: 60, ... }`
-
 ## 5. State Management
 
 The application MUST use a centralized state store (`src/modules/store.js`) as the Single Source of Truth (SSoT) for all application state.
 -   **State:** A single, read-only JavaScript object containing all shared application data.
 -   **Actions:** State can only be modified by dispatching predefined, synchronous "actions".
 -   **Subscriptions:** UI modules can "subscribe" to the store. When the state is updated, subscribers are notified to re-render.
+-   **Trainer State Model**: The trainer's state is managed via a pre-compiled execution plan. The `trainerContext` holds `executionPlan` (an array of step objects) and `currentStepIndex`.
 
 ## 6. Architectural Decision Records (ADRs)
 
@@ -56,8 +52,11 @@ The application MUST use a centralized state store (`src/modules/store.js`) as t
 -   **Decision**: We will introduce an "Exercise Repository" module. This module will abstract the source of exercise data.
 -   **Consequences**: The UI is decoupled from the data source, increasing maintainability.
 
-### ADR 003: Centralizzazione della Logica di Flusso del Trainer
--   **Status**: Proposto
--   **Contesto**: Durante lo sviluppo, la logica di transizione di stato del trainer è stata distribuita in modo non ottimale tra la view (`TrainerView.js`) e lo store (`store.js`). Questo ha portato a bug critici, loop e race condition, rendendo il sistema instabile e difficile da debuggare.
--   **Decisione**: Si decide di refattorizzare il sistema per centralizzare il 100% della logica di flusso del trainer all'interno dello store. La view diventerà "stupida", limitandosi a renderizzare lo stato e a inviare un'unica azione generica (`TIMER_COMPLETE`) allo store al termine di ogni timer. Lo store, ricevendo questa azione, sarà l'unico responsabile di calcolare e impostare lo stato successivo.
--   **Conseguenze**: Aumento della stabilità e della prevedibilità. Aderenza stretta al principio del Single Source of Truth. Semplificazione del debugging e della manutenibilità futura.
+### ADR 003: Architettura a Piano di Esecuzione Pre-compilato per il Trainer
+-   **Status**: Accettato
+-   **Contesto**: I precedenti tentativi di creare una macchina a stati dinamica per il trainer si sono rivelati fragili, complessi e difficili da mantenere, portando a loop e bug logici.
+-   **Decisione**: Si adotta un'architettura a "piano pre-compilato". Prima dell'inizio di un workout, una funzione "generatrice" (`planGenerator.js`) "srotola" l'intero allenamento (con serie, ripetizioni, fasi di tempo e riposi) in un unico array sequenziale di "oggetti-passo". Ogni oggetto contiene tutte le informazioni necessarie sia per la logica (tipo, durata) sia per la visualizzazione (testi formattati). Lo store, durante l'esecuzione, si limita a incrementare un indice (`currentStepIndex`) per puntare al passo successivo in questo array.
+-   **Conseguenze**:
+    -   **Semplicità Massima a Runtime**: La logica di avanzamento diventa banale (`index++`), eliminando quasi del tutto la possibilità di bug durante l'esecuzione.
+    -   **Complessità Isolata**: Tutta la logica complessa è confinata nella funzione generatrice, che è pura, più facile da ragionare e testare in modo isolato.
+    -   **Robustezza e Debuggability**: L'intero flusso del workout può essere ispezionato e validato prima ancora che l'allenamento inizi, rendendo il debug estremamente più semplice.

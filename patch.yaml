@@ -1,439 +1,96 @@
-commit_message: "fix(trainer): Correzione completa della logica della macchina a stati"
+commit_message: "docs: Allineare la documentazione alla nuova architettura del trainer"
 rationale: |
-  Questo commit risolve tre bug critici che rendevano il trainer instabile e funzionalmente scorretto:
-  1.  **Loop Ricorsivo Infinito**: La causa principale del crash (`Maximum call stack size exceeded`) è stata eliminata. La funzione `handleTrainerEffects` in `main.js` è stata semplificata per gestire *esclusivamente* l'avvio e l'arresto del `setInterval`, rimuovendo la chiamata `dispatch` che innescava il loop.
-  2.  **Logica di Transizione Errata**: Il `case 'ADVANCE_TRAINER_PHASE'` in `store.js` è stato completamente riscritto. Ora gestisce correttamente la progressione attraverso le fasi di `tempo` (up/hold/down), le ripetizioni e le serie. Introduce correttamente uno stato di `rest` tra le serie di un esercizio, risolvendo il bug degli esercizi a tempo senza pausa.
-  3.  **Visualizzazione Fasi**: La `TrainerView.js` è stata aggiornata per visualizzare la fase `tempo` corrente (es. "UP", "DOWN"), fornendo all'utente un feedback preciso durante gli esercizi a ripetizioni, come da specifiche.
+  Questo commit aggiorna i documenti di architettura e di stato per riflettere la decisione strategica di adottare il pattern "Pre-compiled Workout Plan".
 
-  Con queste modifiche, l'architettura del trainer non è solo stabile, ma la sua logica di allenamento è ora corretta, completa e robusta.
+  1.  **docs/02_ARCHITECTURE.md**: L'ADR 003 è stato completamente riscritto per descrivere la nuova architettura, che sposta la complessità dalla gestione dello stato a tempo di esecuzione a una singola fase di "compilazione" iniziale. Viene anche aggiornata la sezione sulla gestione dello stato del trainer.
+  
+  2.  **docs/05_STATUS.md**: Il documento di stato è stato aggiornato per riflettere che la strategia definitiva è stata approvata. Non descrive più un problema irrisolto, ma la soluzione concordata, pronta per l'implementazione.
+
+  Queste modifiche assicurano che la documentazione del progetto sia allineata con l'implementazione futura.
 patches:
-  - file: src/main.js
+  - file: docs/02_ARCHITECTURE.md
     content: |
-      import store from './modules/store.js';
-      import { init as initCalendarView } from './views/CalendarView.js';
-      import { init as initTrainerView } from './views/TrainerView.js';
-      import { init as initDebriefingView } from './views/DebriefingView.js';
-      import { init as initModal } from './ui/Modal.js';
-      import { init as initNotice } from './ui/Notice.js';
-      import { loadFromStorage, saveToStorage } from './modules/storage.js';
-      import { mockWorkouts } from './modules/_mockData.js';
+      # Application Architecture
 
-      const WORKOUTS_STORAGE_KEY = 'workouts';
-      const TICK_INTERVAL = 100;
+      This document outlines the high-level architecture for the "Mio Trainer Personale" SPA.
 
-      const views = {
-          calendar: document.getElementById('calendar-view'),
-          trainer: document.getElementById('trainer-view'),
-          debriefing: document.getElementById('debriefing-view'),
-      };
-      const initializedViews = new Set();
+      ## 1. Core Principles
 
-      function initializeApp() {
-        let workouts = loadFromStorage(WORKOUTS_STORAGE_KEY);
-        if (!workouts) {
-          saveToStorage(WORKOUTS_STORAGE_KEY, mockWorkouts);
-          workouts = mockWorkouts;
-        }
-        store.dispatch({ type: 'SET_WORKOUTS', payload: workouts });
+      -   **Modularity:** The application is broken down into distinct, single-responsibility modules.
+      -   **State-Driven UI:** The user interface reacts to changes in the application's state.
 
-        initCalendarView(views.calendar);
-        initializedViews.add('calendar');
-        initModal(document.getElementById('modal-container'));
-        initNotice(document.getElementById('notice-container'));
-      }
+      ## 2. Directory Structure
 
-      let currentActiveView = views.calendar;
-      function handleViewChange() {
-        const { currentView } = store.getState();
-        const newActiveViewEl = views[currentView];
+      -   `docs/`: Contains all project documentation.
+      -   `index.html`: The single HTML entry point.
+      -   `src/`: Contains all application source code.
+          -   `src/modules/`: Contains core logic modules (store, repository, etc.).
+          -   `src/views/`: Contains UI rendering logic for major components.
+          -   `src/data/`: Contains static data sources.
 
-        if (currentActiveView !== newActiveViewEl) {
-          currentActiveView.classList.remove('view--active');
-          newActiveViewEl.classList.add('view--active');
-          currentActiveView = newActiveViewEl;
+      ## 3. View Management
 
-          if (!initializedViews.has(currentView)) {
-            if (currentView === 'trainer') initTrainerView(views.trainer);
-            else if (currentView === 'debriefing') initDebriefingView(views.debriefing);
-            initializedViews.add(currentView);
-          }
-        }
-      }
+      The application uses a simple view manager controlled by `main.js`. Only one view is active (`.view--active`) at any given time. This is driven by the state in the central store.
 
-      // --- Side Effect Handler for Trainer Timers (FIXED) ---
-      let timerInterval = null;
-      let lastTrainerState = 'idle';
+      ## 4. Data Persistence
 
-      function handleTrainerEffects() {
-          const { trainerState } = store.getState();
+      All user data is persisted in `localStorage`. The `storage.js` module provides a clean API for this.
 
-          // Se lo stato è cambiato, reagiamo.
-          if (trainerState !== lastTrainerState) {
-              // Regola n.1: Pulisci sempre il timer precedente.
-              if (timerInterval) {
-                  clearInterval(timerInterval);
-                  timerInterval = null;
-              }
+      ### 4.1. Data Schemas and Validation
+      To ensure data integrity, all data read from `localStorage` MUST be validated against a defined schema before being used by the application. This prevents errors from corrupted or outdated data structures.
 
-              // Regola n.2: Avvia un nuovo timer SOLO se lo stato lo richiede.
-              const statesWithTimers = ['preparing', 'announcing', 'action', 'rest'];
-              if (statesWithTimers.includes(trainerState)) {
-                  // NON chiamare dispatch da qui. Lo store è l'unica fonte della verità
-                  // per duration e remaining.
-                  timerInterval = setInterval(() => {
-                      store.dispatch({ type: 'TIMER_TICK', payload: { tick: TICK_INTERVAL } });
-                  }, TICK_INTERVAL);
-              }
-          }
-          lastTrainerState = trainerState;
-      }
+      - **Daily Workout Schema:** An array of "workout item" objects.
+        - `item`: `{ id: string, type: 'exercise' | 'rest', ...rest }`
+      - **Exercise Schema:** An object defining an exercise's properties.
+        - `exercise`: `{ id: string, name: string, tempo: object, ...rest }`
 
+      ## 5. State Management
 
-      store.subscribe(handleViewChange);
-      store.subscribe(handleTrainerEffects);
+      The application MUST use a centralized state store (`src/modules/store.js`) as the Single Source of Truth (SSoT) for all application state.
+      -   **State:** A single, read-only JavaScript object containing all shared application data.
+      -   **Actions:** State can only be modified by dispatching predefined, synchronous "actions".
+      -   **Subscriptions:** UI modules can "subscribe" to the store. When the state is updated, subscribers are notified to re-render.
+      -   **Trainer State Model**: The trainer's state is managed via a pre-compiled execution plan. The `trainerContext` holds `executionPlan` (an array of step objects) and `currentStepIndex`.
 
-      initializeApp();
-      console.log('App "Mio Trainer Personale" inizializzata.');
-  - file: src/modules/store.js
+      ## 6. Architectural Decision Records (ADRs)
+
+      ### ADR 001: No Native Pop-ups
+      -   **Status**: Accepted
+      -   **Decision**: All forms of pop-up dialogs MUST be implemented as "pop-ins" or modals rendered within the application's own DOM.
+
+      ### ADR 002: Exercise Repository Pattern
+      -   **Status**: Accepted
+      -   **Context**: The application needs a way to list available exercises for the user to add to a workout.
+      -   **Decision**: We will introduce an "Exercise Repository" module. This module will abstract the source of exercise data.
+      -   **Consequences**: The UI is decoupled from the data source, increasing maintainability.
+
+      ### ADR 003: Architettura a Piano di Esecuzione Pre-compilato per il Trainer
+      -   **Status**: Accettato
+      -   **Contesto**: I precedenti tentativi di creare una macchina a stati dinamica per il trainer si sono rivelati fragili, complessi e difficili da mantenere, portando a loop e bug logici.
+      -   **Decisione**: Si adotta un'architettura a "piano pre-compilato". Prima dell'inizio di un workout, una funzione "generatrice" (`planGenerator.js`) "srotola" l'intero allenamento (con serie, ripetizioni, fasi di tempo e riposi) in un unico array sequenziale di "oggetti-passo". Ogni oggetto contiene tutte le informazioni necessarie sia per la logica (tipo, durata) sia per la visualizzazione (testi formattati). Lo store, durante l'esecuzione, si limita a incrementare un indice (`currentStepIndex`) per puntare al passo successivo in questo array.
+      -   **Conseguenze**:
+          -   **Semplicità Massima a Runtime**: La logica di avanzamento diventa banale (`index++`), eliminando quasi del tutto la possibilità di bug durante l'esecuzione.
+          -   **Complessità Isolata**: Tutta la logica complessa è confinata nella funzione generatrice, che è pura, più facile da ragionare e testare in modo isolato.
+          -   **Robustezza e Debuggability**: L'intero flusso del workout può essere ispezionato e validato prima ancora che l'allenamento inizi, rendendo il debug estremamente più semplice.
+  - file: docs/05_STATUS.md
     content: |
-      import { saveToStorage } from './storage.js';
-      import { getExerciseById } from './exerciseRepository.js';
+      # Stato Attuale del Progetto
+      *Ultimo aggiornamento: 2025-07-03*
 
-      const WORKOUTS_STORAGE_KEY = 'workouts';
-      const cloneWorkouts = (workouts) => JSON.parse(JSON.stringify(workouts));
+      ## Stato: Approvata Riprogettazione Architetturale Definitiva
 
-      function createStore() {
-        let state = {
-          currentView: 'calendar',
-          focusedDate: new Date(),
-          workouts: {},
-          isModalOpen: false,
-          modalContext: null,
-          notice: null,
-          activeWorkout: null,
-          completedWorkout: null,
-          trainerState: 'idle',
-          trainerContext: {},
-        };
+      ### Contesto
+      Dopo un'analisi approfondita dei fallimenti della precedente macchina a stati del trainer, è emerso che qualsiasi approccio basato su calcoli dinamici a tempo di esecuzione introduceva una complessità eccessiva e difficile da governare.
 
-        const subscribers = new Set();
-        function notify() { subscribers.forEach(callback => callback()); }
+      ### Strategia Adottata: Architettura a "Piano Pre-compilato"
+      È stato deciso di abbandonare l'approccio "interprete" in favore di un approccio "compilatore", considerato architetturalmente superiore e più robusto.
 
-        function logState(actionType, state) {
-            if (actionType.startsWith('@@')) return;
-            const { activeWorkout, trainerState, trainerContext } = state;
-            if (!activeWorkout) {
-                console.log(`%c[${actionType}]`, 'color: #88aaff; font-weight: bold;', `View: ${state.currentView}`);
-                return;
-            };
-            const { currentItem, currentSeries, currentRep, currentPhase } = trainerContext;
-            if(!currentItem) return;
+      La strategia consiste in:
+      1.  **Generazione Upfront**: Prima che il workout inizi, una funzione dedicata (`planGenerator`) "compilerà" l'intera sequenza di esercizi, serie, ripetizioni, fasi `tempo` e riposi in un **singolo array sequenziale** di "oggetti-passo".
+      2.  **Oggetti-Passo Ricchi**: Ogni oggetto nell'array conterrà tutte le informazioni necessarie sia per la logica (es. `type`, `duration`) sia per la visualizzazione (es. `headerTitle`, `mainText`), rendendo i componenti della UI estremamente semplici.
+      3.  **Esecutore "Stupido"**: Lo store, durante l'allenamento, si limiterà a incrementare un indice per muoversi lungo l'array pre-compilato. Tutta la complessità logica a runtime viene eliminata.
 
-            const exerciseName = currentItem.name || 'Riposo';
-            const series = `S:${currentSeries || '-'}/${currentItem.series || '-'}`;
-            const reps = `R:${currentRep || '-'}/${currentItem.reps || '-'}`;
-            let status = trainerState.toUpperCase();
-            if(currentPhase) status += ` (${currentPhase.toUpperCase()})`
-
-            const logString = `Esercizio: ${exerciseName} | ${series} | ${reps} | Stato: ${status}`;
-            console.log(`%c[${actionType}]`, 'color: #88aaff; font-weight: bold;', logString);
-        }
-
-        const dispatch = (action) => {
-          const oldState = { ...state };
-          let newState = { ...state };
-          let shouldNotify = true;
-
-          switch (action.type) {
-            // ... (other cases remain the same)
-            case 'CHANGE_VIEW': newState = { ...state, currentView: action.payload }; break;
-            case 'PREV_WEEK': { const d = new Date(state.focusedDate); d.setDate(d.getDate() - 7); newState = { ...state, focusedDate: d }; break; }
-            case 'NEXT_WEEK': { const d = new Date(state.focusedDate); d.setDate(d.getDate() + 7); newState = { ...state, focusedDate: d }; break; }
-            case 'SET_WORKOUTS': newState = { ...state, workouts: action.payload }; break;
-            case 'OPEN_MODAL': newState = { ...state, isModalOpen: true, modalContext: action.payload }; break;
-            case 'CLOSE_MODAL': newState = { ...state, isModalOpen: false, modalContext: null }; break;
-            case 'SHOW_NOTICE': newState = { ...state, notice: { message: action.payload.message, id: Date.now() } }; break;
-            case 'ADD_EXERCISE_ITEM': { const { date, exerciseId } = action.payload; const dateKey = `workout-${date}`; const exercise = getExerciseById(exerciseId); if (!exercise) break; const newItem = { ...exercise, id: `item-${Date.now()}`, type: exercise.type || 'exercise', exerciseId: exercise.id }; const newWorkouts = cloneWorkouts(state.workouts); const dayWorkout = newWorkouts[dateKey] || []; dayWorkout.push(newItem); newWorkouts[dateKey] = dayWorkout; newState = { ...state, workouts: newWorkouts, modalContext: { type: 'EDIT_WORKOUT', date } }; break; }
-            case 'ADD_REST_ITEM': { const { date } = action.payload; const dateKey = `workout-${date}`; const newItem = { id: `item-${Date.now()}`, type: 'rest', duration: 60 }; const newWorkouts = cloneWorkouts(state.workouts); const dayWorkout = newWorkouts[dateKey] || []; dayWorkout.push(newItem); newWorkouts[dateKey] = dayWorkout; newState = { ...state, workouts: newWorkouts }; break; }
-            case 'REMOVE_WORKOUT_ITEM': { const { date, itemId } = action.payload; const dateKey = `workout-${date}`; const newWorkouts = cloneWorkouts(state.workouts); newWorkouts[dateKey] = (newWorkouts[dateKey] || []).filter(item => item.id !== itemId); newState = { ...state, workouts: newWorkouts }; break; }
-            case 'UPDATE_REST_DURATION': { const { date, itemId, newDuration } = action.payload; const dateKey = `workout-${date}`; const newWorkouts = cloneWorkouts(state.workouts); const dayWorkout = newWorkouts[dateKey] || []; const itemIndex = dayWorkout.findIndex(item => item.id === itemId); if (itemIndex > -1 && dayWorkout[itemIndex].type === 'rest') { dayWorkout[itemIndex].duration = newDuration; newWorkouts[dateKey] = dayWorkout; newState = { ...state, workouts: newWorkouts }; } break; }
-            case 'REORDER_WORKOUT_ITEMS': { const { date, draggedItemId, targetItemId } = action.payload; const dateKey = `workout-${date}`; const newWorkouts = cloneWorkouts(state.workouts); const items = newWorkouts[dateKey] || []; const draggedIndex = items.findIndex(item => item.id === draggedItemId); const targetIndex = items.findIndex(item => item.id === targetItemId); if (draggedIndex > -1 && targetIndex > -1) { const [draggedItem] = items.splice(draggedIndex, 1); items.splice(targetIndex, 0, draggedItem); newWorkouts[dateKey] = items; newState = { ...state, workouts: newWorkouts }; } break; }
-
-            // TRAINER LIFECYCLE
-            case 'START_WORKOUT': {
-              const { date } = action.payload;
-              const workoutItems = state.workouts[`workout-${date}`];
-              if (!workoutItems || workoutItems.length === 0) break;
-              newState = { ...state, currentView: 'trainer', activeWorkout: { date, items: workoutItems, fullPlan: workoutItems }, trainerState: 'ready', trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1, currentItem: workoutItems[0] } };
-              break;
-            }
-            case 'FINISH_WORKOUT': {
-              newState = { ...state, currentView: 'debriefing', completedWorkout: { ...state.activeWorkout, completed: true }, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
-              break;
-            }
-            case 'TERMINATE_WORKOUT': {
-              const { activeWorkout, trainerContext } = state;
-              const partialWorkout = { ...activeWorkout, completed: false, terminationPoint: trainerContext };
-              newState = { ...state, currentView: 'debriefing', completedWorkout: partialWorkout, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
-              break;
-            }
-            case 'START_TRAINER': {
-              if (state.trainerState === 'ready') {
-                const duration = 3000;
-                newState = { ...state, trainerState: 'preparing', trainerContext: { ...state.trainerContext, duration, remaining: duration } };
-              }
-              break;
-            }
-            case 'PAUSE_TRAINER': {
-              if (!['paused', 'ready', 'finished'].includes(state.trainerState)) {
-                newState = { ...state, trainerState: 'paused', trainerContext: { ...state.trainerContext, stateBeforePause: state.trainerState } };
-              }
-              break;
-            }
-            case 'RESUME_TRAINER': {
-              if (state.trainerState === 'paused') {
-                newState = { ...state, trainerState: state.trainerContext.stateBeforePause };
-              }
-              break;
-            }
-            case 'TIMER_TICK': {
-              if (state.trainerState === 'paused') { shouldNotify = false; break; }
-              const newRemaining = (state.trainerContext.remaining || 0) - action.payload.tick;
-              if (newRemaining > 0) {
-                newState = { ...state, trainerContext: { ...state.trainerContext, remaining: newRemaining } };
-              } else {
-                dispatch({ type: 'ADVANCE_TRAINER_PHASE' });
-                shouldNotify = false;
-              }
-              break;
-            }
-            case 'ADVANCE_TRAINER_PHASE': {
-              const { trainerState, activeWorkout, trainerContext } = state;
-              let nextState = trainerState;
-              let nextContext = { ...trainerContext };
-              const currentItem = trainerContext.currentItem;
-
-              // --- LOGICA DI TRANSIZIONE REIMPLEMENTATA ---
-
-              if (trainerState === 'preparing' || trainerState === 'rest') {
-                // Dopo la preparazione o il riposo, si annuncia il prossimo esercizio
-                nextState = 'announcing';
-              }
-              else if (trainerState === 'announcing') {
-                // Dopo l'annuncio, si passa all'azione
-                nextState = 'action';
-              }
-              else if (trainerState === 'action') {
-                // Logica principale: cosa fare dopo un'azione completata
-                let itemIsComplete = false;
-                let repIsComplete = false;
-
-                if (currentItem.type === 'time') {
-                    repIsComplete = true; // Per gli ex a tempo, ogni azione è una "ripetizione"
-                } else { // Esercizio a 'reps' con 'tempo'
-                    const tempoPhases = Object.keys(currentItem.tempo || {});
-                    const currentPhaseIndex = tempoPhases.indexOf(nextContext.currentPhase);
-                    if (currentPhaseIndex < tempoPhases.length - 1) {
-                        nextContext.currentPhase = tempoPhases[currentPhaseIndex + 1];
-                    } else {
-                        repIsComplete = true;
-                    }
-                }
-
-                if (repIsComplete) {
-                    if (nextContext.currentRep < (currentItem.reps || 1)) {
-                        nextContext.currentRep++;
-                    } else if (nextContext.currentSeries < (currentItem.series || 1)) {
-                        nextContext.currentSeries++;
-                        nextContext.currentRep = 1;
-                        nextState = 'rest'; // Passa al riposo tra le serie
-                    } else {
-                        itemIsComplete = true;
-                    }
-                }
-
-                if (itemIsComplete) {
-                    if (nextContext.itemIndex < activeWorkout.items.length - 1) {
-                        // Avanza al prossimo item
-                        nextContext = { itemIndex: nextContext.itemIndex + 1, currentSeries: 1, currentRep: 1 };
-                        nextState = 'announcing'; // Annuncia il nuovo item
-                    } else {
-                        nextState = 'finished'; // Workout completato
-                    }
-                } else if (nextState !== 'rest') {
-                  nextState = 'action'; // Continua con la prossima fase/rep
-                }
-              }
-
-              // --- IMPOSTAZIONE DEL NUOVO STATO ---
-              if (nextState !== 'finished') {
-                const newItem = activeWorkout.items[nextContext.itemIndex];
-                nextContext.currentItem = newItem;
-
-                // Se il nuovo item è un blocco di riposo, forza lo stato a 'rest'
-                if (newItem.type === 'rest' && trainerState !== 'rest') {
-                  nextState = 'rest';
-                }
-
-                let duration = 0;
-                switch (nextState) {
-                  case 'announcing': duration = 750; break;
-                  case 'rest': duration = (newItem.defaultRest || 60) * 1000; break;
-                  case 'action':
-                    if (newItem.type === 'time') {
-                      duration = (newItem.duration || 10) * 1000;
-                    } else {
-                      const tempoPhases = Object.keys(newItem.tempo || { 'down': 1 });
-                      if (!nextContext.currentPhase) nextContext.currentPhase = tempoPhases[0];
-                      duration = (newItem.tempo[nextContext.currentPhase] || 1) * 1000;
-                    }
-                    break;
-                }
-                nextContext.duration = duration;
-                nextContext.remaining = duration;
-              }
-              newState = { ...state, trainerState: nextState, trainerContext: nextContext };
-              break;
-            }
-            default: shouldNotify = false; break;
-          }
-
-          state = newState;
-          if (shouldNotify) {
-            logState(action.type, state);
-            if (state.workouts !== oldState.workouts) { saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts); }
-            notify();
-          }
-        };
-
-        return {
-          getState: () => ({ ...state }),
-          subscribe: (callback) => { subscribers.add(callback); return () => subscribers.delete(callback); },
-          dispatch,
-        };
-      }
-      const store = createStore();
-      export default store;
-  - file: src/views/TrainerView.js
-    content: |
-      import store from '../modules/store.js';
-
-      function render(element) {
-          const { activeWorkout, trainerState, trainerContext } = store.getState();
-          if (!activeWorkout || !trainerContext.currentItem) {
-              element.innerHTML = '<h2>Nessun workout attivo.</h2>';
-              return;
-          }
-
-          const { currentItem, duration, remaining, stateBeforePause, currentPhase } = trainerContext;
-          const radius = 90;
-          const circumference = 2 * Math.PI * radius;
-
-          let ringOffset = circumference;
-          if (duration > 0 && remaining >= 0) {
-              const progress = (duration - remaining) / duration;
-              ringOffset = circumference * (1 - progress);
-          }
-
-          let phaseText = '', instructionText = '', buttonText = '', timerText = '', isFlashing = false;
-          const terminateButtonHidden = trainerState === 'finished' || trainerState === 'ready';
-          const isExercise = currentItem.type === 'exercise' || currentItem.type === 'time';
-
-          let displayPhase = currentPhase?.toUpperCase() || '';
-
-          switch (trainerState) {
-              case 'ready':
-                  phaseText = 'PRONTO'; instructionText = 'Premi INIZIA per cominciare'; buttonText = 'INIZIA';
-                  break;
-              case 'preparing':
-                  phaseText = 'PREPARATI'; instructionText = 'Si parte...'; buttonText = 'PAUSA'; timerText = Math.ceil(remaining / 1000);
-                  break;
-              case 'rest':
-                  phaseText = 'RIPOSO'; instructionText = 'Recupera le forze'; buttonText = 'PAUSA'; timerText = Math.ceil(remaining / 1000);
-                  break;
-              case 'announcing':
-                  phaseText = currentItem.name; instructionText = `Prossimo Esercizio`; buttonText = 'PAUSA'; isFlashing = true;
-                  break;
-              case 'action':
-                  phaseText = displayPhase; instructionText = 'Esegui il movimento'; buttonText = 'PAUSA'; timerText = Math.ceil(remaining / 1000);
-                  break;
-              case 'paused':
-                  const pausedState = stateBeforePause || 'action';
-                  if (pausedState === 'rest') phaseText = 'RIPOSO';
-                  else if (pausedState === 'announcing') { phaseText = currentItem.name; isFlashing = true; }
-                  else phaseText = (pausedState === 'preparing') ? 'PREPARATI' : displayPhase;
-                  instructionText = 'Pausa'; buttonText = 'RIPRENDI';
-                  if (pausedState !== 'announcing') timerText = Math.ceil(remaining / 1000);
-                  break;
-              case 'finished':
-                  phaseText = 'FINE'; instructionText = 'Workout completato!'; buttonText = 'DEBRIEFING';
-                  break;
-              default:
-                  phaseText = 'IDLE'; instructionText = 'Stato non riconosciuto'; buttonText = 'RESET';
-          }
-
-          const headerTitle = currentItem.name || 'Riposo';
-          const seriesText = isExercise ? `SERIE ${trainerContext.currentSeries || 1} / ${currentItem.series || 1}` : '';
-          const repsText = currentItem.type === 'exercise' ? `REP ${trainerContext.currentRep || 1} / ${currentItem.reps || 1}` : '';
-
-          element.innerHTML = `
-              <div class="trainer-container">
-                  <header class="trainer-header">
-                      <h2>${headerTitle}</h2>
-                      <p>${seriesText} ${repsText ? `| ${repsText}` : ''}</p>
-                  </header>
-                  <div class="progress-ring">
-                      <svg>
-                          <circle class="progress-ring__background" stroke-width="10" r="${radius}" cx="50%" cy="50%"></circle>
-                          <circle class="progress-ring__foreground" style="stroke-dashoffset: ${ringOffset};" stroke-width="10" r="${radius}" cx="50%" cy="50%" stroke-dasharray="${circumference}"></circle>
-                      </svg>
-                      <div class="progress-ring__text">
-                          <div class="progress-ring__phase ${isFlashing ? 'is-flashing' : ''}">${phaseText}</div>
-                          <div class="progress-ring__timer">${timerText}</div>
-                      </div>
-                  </div>
-                  <footer class="trainer-footer">
-                      <p class="trainer-instruction">${instructionText}</p>
-                      <div class="trainer-controls">
-                          <button class="trainer-main-btn">${buttonText}</button>
-                          <button class="trainer-terminate-btn" ${terminateButtonHidden ? 'hidden' : ''}>Termina</button>
-                      </div>
-                  </footer>
-              </div>
-          `;
-      }
-
-      export function init(element) {
-          element.addEventListener('click', (event) => {
-              const mainButton = event.target.closest('.trainer-main-btn');
-              const terminateButton = event.target.closest('.trainer-terminate-btn');
-
-              if (terminateButton) {
-                  store.dispatch({ type: 'PAUSE_TRAINER' });
-                  store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'CONFIRM_TERMINATION' } });
-                  return;
-              }
-
-              if (!mainButton) return;
-              const { trainerState } = store.getState();
-
-              switch (trainerState) {
-                  case 'ready': store.dispatch({ type: 'START_TRAINER' }); break;
-                  case 'paused': store.dispatch({ type: 'RESUME_TRAINER' }); break;
-                  case 'finished': store.dispatch({ type: 'FINISH_WORKOUT' }); break;
-                  default: store.dispatch({ type: 'PAUSE_TRAINER' }); break;
-              }
-          });
-
-          store.subscribe(() => {
-              if (element.classList.contains('view--active')) {
-                  render(element);
-              }
-          });
-          // Initial render in case the view is already active
-          if (element.classList.contains('view--active')) {
-            render(element);
-          }
-      }
+      ### Stato Attuale
+      La documentazione è stata allineata a questa nuova architettura. Il progetto è **pronto per l'implementazione** di questo refactoring definitivo.
 commands:
-  - "echo 'Correzione completa applicata. Il loop ricorsivo e i bug di logica del trainer sono stati risolti.'"
+  - "echo 'Documentazione aggiornata con la nuova architettura del trainer. Pronto per iniziare l'implementazione nella prossima istanza.'"
