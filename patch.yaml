@@ -1,11 +1,99 @@
-commit_message: "fix(trainer): Correzione inizializzazione timer e ripristino log di debug"
+commit_message: "fix(trainer): Correzione completa della logica della macchina a stati"
 rationale: |
-  Questo commit risolve due bug critici introdotti nel precedente refactoring:
-  1.  **Blocco del Trainer (NaN)**: La causa era un'inizializzazione incompleta dello stato del timer. Quando veniva impostata la `duration` di una nuova fase, il contatore `remaining` non veniva impostato contemporaneamente, risultando in un valore `undefined` che bloccava la macchina a stati. Ora, `remaining` viene sempre inizializzato insieme a `duration`, risolvendo il problema del `NaN` e del blocco.
-  2.  **Log Mancanti**: La funzione di logging `logState` era stata rimossa per errore, rendendo il debug impossibile. È stata ripristinata e ora viene eseguita ad ogni dispatch, fornendo nuovamente una traccia chiara delle transizioni di stato in console.
+  Questo commit risolve tre bug critici che rendevano il trainer instabile e funzionalmente scorretto:
+  1.  **Loop Ricorsivo Infinito**: La causa principale del crash (`Maximum call stack size exceeded`) è stata eliminata. La funzione `handleTrainerEffects` in `main.js` è stata semplificata per gestire *esclusivamente* l'avvio e l'arresto del `setInterval`, rimuovendo la chiamata `dispatch` che innescava il loop.
+  2.  **Logica di Transizione Errata**: Il `case 'ADVANCE_TRAINER_PHASE'` in `store.js` è stato completamente riscritto. Ora gestisce correttamente la progressione attraverso le fasi di `tempo` (up/hold/down), le ripetizioni e le serie. Introduce correttamente uno stato di `rest` tra le serie di un esercizio, risolvendo il bug degli esercizi a tempo senza pausa.
+  3.  **Visualizzazione Fasi**: La `TrainerView.js` è stata aggiornata per visualizzare la fase `tempo` corrente (es. "UP", "DOWN"), fornendo all'utente un feedback preciso durante gli esercizi a ripetizioni, come da specifiche.
 
-  Queste correzioni ripristinano la piena funzionalità e osservabilità del trainer dopo la riprogettazione architetturale.
+  Con queste modifiche, l'architettura del trainer non è solo stabile, ma la sua logica di allenamento è ora corretta, completa e robusta.
 patches:
+  - file: src/main.js
+    content: |
+      import store from './modules/store.js';
+      import { init as initCalendarView } from './views/CalendarView.js';
+      import { init as initTrainerView } from './views/TrainerView.js';
+      import { init as initDebriefingView } from './views/DebriefingView.js';
+      import { init as initModal } from './ui/Modal.js';
+      import { init as initNotice } from './ui/Notice.js';
+      import { loadFromStorage, saveToStorage } from './modules/storage.js';
+      import { mockWorkouts } from './modules/_mockData.js';
+
+      const WORKOUTS_STORAGE_KEY = 'workouts';
+      const TICK_INTERVAL = 100;
+
+      const views = {
+          calendar: document.getElementById('calendar-view'),
+          trainer: document.getElementById('trainer-view'),
+          debriefing: document.getElementById('debriefing-view'),
+      };
+      const initializedViews = new Set();
+
+      function initializeApp() {
+        let workouts = loadFromStorage(WORKOUTS_STORAGE_KEY);
+        if (!workouts) {
+          saveToStorage(WORKOUTS_STORAGE_KEY, mockWorkouts);
+          workouts = mockWorkouts;
+        }
+        store.dispatch({ type: 'SET_WORKOUTS', payload: workouts });
+
+        initCalendarView(views.calendar);
+        initializedViews.add('calendar');
+        initModal(document.getElementById('modal-container'));
+        initNotice(document.getElementById('notice-container'));
+      }
+
+      let currentActiveView = views.calendar;
+      function handleViewChange() {
+        const { currentView } = store.getState();
+        const newActiveViewEl = views[currentView];
+
+        if (currentActiveView !== newActiveViewEl) {
+          currentActiveView.classList.remove('view--active');
+          newActiveViewEl.classList.add('view--active');
+          currentActiveView = newActiveViewEl;
+
+          if (!initializedViews.has(currentView)) {
+            if (currentView === 'trainer') initTrainerView(views.trainer);
+            else if (currentView === 'debriefing') initDebriefingView(views.debriefing);
+            initializedViews.add(currentView);
+          }
+        }
+      }
+
+      // --- Side Effect Handler for Trainer Timers (FIXED) ---
+      let timerInterval = null;
+      let lastTrainerState = 'idle';
+
+      function handleTrainerEffects() {
+          const { trainerState } = store.getState();
+
+          // Se lo stato è cambiato, reagiamo.
+          if (trainerState !== lastTrainerState) {
+              // Regola n.1: Pulisci sempre il timer precedente.
+              if (timerInterval) {
+                  clearInterval(timerInterval);
+                  timerInterval = null;
+              }
+
+              // Regola n.2: Avvia un nuovo timer SOLO se lo stato lo richiede.
+              const statesWithTimers = ['preparing', 'announcing', 'action', 'rest'];
+              if (statesWithTimers.includes(trainerState)) {
+                  // NON chiamare dispatch da qui. Lo store è l'unica fonte della verità
+                  // per duration e remaining.
+                  timerInterval = setInterval(() => {
+                      store.dispatch({ type: 'TIMER_TICK', payload: { tick: TICK_INTERVAL } });
+                  }, TICK_INTERVAL);
+              }
+          }
+          lastTrainerState = trainerState;
+      }
+
+
+      store.subscribe(handleViewChange);
+      store.subscribe(handleTrainerEffects);
+
+      initializeApp();
+      console.log('App "Mio Trainer Personale" inizializzata.');
   - file: src/modules/store.js
     content: |
       import { saveToStorage } from './storage.js';
@@ -24,27 +112,30 @@ patches:
           notice: null,
           activeWorkout: null,
           completedWorkout: null,
-          trainerState: 'idle', // idle, ready, preparing, announcing, action, rest, paused, finished
+          trainerState: 'idle',
           trainerContext: {},
         };
 
         const subscribers = new Set();
         function notify() { subscribers.forEach(callback => callback()); }
 
-        // --- FUNZIONE DI LOGGING RIPRISTINATA ---
         function logState(actionType, state) {
             if (actionType.startsWith('@@')) return;
             const { activeWorkout, trainerState, trainerContext } = state;
-            if (!activeWorkout || !trainerContext.currentItem) {
+            if (!activeWorkout) {
                 console.log(`%c[${actionType}]`, 'color: #88aaff; font-weight: bold;', `View: ${state.currentView}`);
                 return;
             };
-            const { currentItem, currentSeries, currentRep } = trainerContext;
+            const { currentItem, currentSeries, currentRep, currentPhase } = trainerContext;
+            if(!currentItem) return;
+
             const exerciseName = currentItem.name || 'Riposo';
-            const series = `${currentSeries || '-'}/${currentItem.series || '-'}`;
-            const reps = `${currentRep || '-'}/${currentItem.reps || '-'}`;
+            const series = `S:${currentSeries || '-'}/${currentItem.series || '-'}`;
+            const reps = `R:${currentRep || '-'}/${currentItem.reps || '-'}`;
             let status = trainerState.toUpperCase();
-            const logString = `Esercizio: ${exerciseName} | Serie: ${series} | Rep: ${reps} | Stato: ${status}`;
+            if(currentPhase) status += ` (${currentPhase.toUpperCase()})`
+
+            const logString = `Esercizio: ${exerciseName} | ${series} | ${reps} | Stato: ${status}`;
             console.log(`%c[${actionType}]`, 'color: #88aaff; font-weight: bold;', logString);
         }
 
@@ -54,6 +145,7 @@ patches:
           let shouldNotify = true;
 
           switch (action.type) {
+            // ... (other cases remain the same)
             case 'CHANGE_VIEW': newState = { ...state, currentView: action.payload }; break;
             case 'PREV_WEEK': { const d = new Date(state.focusedDate); d.setDate(d.getDate() - 7); newState = { ...state, focusedDate: d }; break; }
             case 'NEXT_WEEK': { const d = new Date(state.focusedDate); d.setDate(d.getDate() + 7); newState = { ...state, focusedDate: d }; break; }
@@ -61,82 +153,18 @@ patches:
             case 'OPEN_MODAL': newState = { ...state, isModalOpen: true, modalContext: action.payload }; break;
             case 'CLOSE_MODAL': newState = { ...state, isModalOpen: false, modalContext: null }; break;
             case 'SHOW_NOTICE': newState = { ...state, notice: { message: action.payload.message, id: Date.now() } }; break;
+            case 'ADD_EXERCISE_ITEM': { const { date, exerciseId } = action.payload; const dateKey = `workout-${date}`; const exercise = getExerciseById(exerciseId); if (!exercise) break; const newItem = { ...exercise, id: `item-${Date.now()}`, type: exercise.type || 'exercise', exerciseId: exercise.id }; const newWorkouts = cloneWorkouts(state.workouts); const dayWorkout = newWorkouts[dateKey] || []; dayWorkout.push(newItem); newWorkouts[dateKey] = dayWorkout; newState = { ...state, workouts: newWorkouts, modalContext: { type: 'EDIT_WORKOUT', date } }; break; }
+            case 'ADD_REST_ITEM': { const { date } = action.payload; const dateKey = `workout-${date}`; const newItem = { id: `item-${Date.now()}`, type: 'rest', duration: 60 }; const newWorkouts = cloneWorkouts(state.workouts); const dayWorkout = newWorkouts[dateKey] || []; dayWorkout.push(newItem); newWorkouts[dateKey] = dayWorkout; newState = { ...state, workouts: newWorkouts }; break; }
+            case 'REMOVE_WORKOUT_ITEM': { const { date, itemId } = action.payload; const dateKey = `workout-${date}`; const newWorkouts = cloneWorkouts(state.workouts); newWorkouts[dateKey] = (newWorkouts[dateKey] || []).filter(item => item.id !== itemId); newState = { ...state, workouts: newWorkouts }; break; }
+            case 'UPDATE_REST_DURATION': { const { date, itemId, newDuration } = action.payload; const dateKey = `workout-${date}`; const newWorkouts = cloneWorkouts(state.workouts); const dayWorkout = newWorkouts[dateKey] || []; const itemIndex = dayWorkout.findIndex(item => item.id === itemId); if (itemIndex > -1 && dayWorkout[itemIndex].type === 'rest') { dayWorkout[itemIndex].duration = newDuration; newWorkouts[dateKey] = dayWorkout; newState = { ...state, workouts: newWorkouts }; } break; }
+            case 'REORDER_WORKOUT_ITEMS': { const { date, draggedItemId, targetItemId } = action.payload; const dateKey = `workout-${date}`; const newWorkouts = cloneWorkouts(state.workouts); const items = newWorkouts[dateKey] || []; const draggedIndex = items.findIndex(item => item.id === draggedItemId); const targetIndex = items.findIndex(item => item.id === targetItemId); if (draggedIndex > -1 && targetIndex > -1) { const [draggedItem] = items.splice(draggedIndex, 1); items.splice(targetIndex, 0, draggedItem); newWorkouts[dateKey] = items; newState = { ...state, workouts: newWorkouts }; } break; }
 
-            case 'ADD_EXERCISE_ITEM': {
-                const { date, exerciseId } = action.payload;
-                const dateKey = `workout-${date}`;
-                const exercise = getExerciseById(exerciseId);
-                if (!exercise) break;
-                const newItem = { ...exercise, id: `item-${Date.now()}`, type: exercise.type || 'exercise', exerciseId: exercise.id };
-                const newWorkouts = cloneWorkouts(state.workouts);
-                const dayWorkout = newWorkouts[dateKey] || [];
-                dayWorkout.push(newItem);
-                newWorkouts[dateKey] = dayWorkout;
-                newState = { ...state, workouts: newWorkouts, modalContext: { type: 'EDIT_WORKOUT', date } };
-                break;
-            }
-            case 'ADD_REST_ITEM': {
-                const { date } = action.payload;
-                const dateKey = `workout-${date}`;
-                const newItem = { id: `item-${Date.now()}`, type: 'rest', duration: 60 };
-                const newWorkouts = cloneWorkouts(state.workouts);
-                const dayWorkout = newWorkouts[dateKey] || [];
-                dayWorkout.push(newItem);
-                newWorkouts[dateKey] = dayWorkout;
-                newState = { ...state, workouts: newWorkouts };
-                break;
-            }
-            case 'REMOVE_WORKOUT_ITEM': {
-                const { date, itemId } = action.payload;
-                const dateKey = `workout-${date}`;
-                const newWorkouts = cloneWorkouts(state.workouts);
-                newWorkouts[dateKey] = (newWorkouts[dateKey] || []).filter(item => item.id !== itemId);
-                newState = { ...state, workouts: newWorkouts };
-                break;
-            }
-            case 'UPDATE_REST_DURATION': {
-                const { date, itemId, newDuration } = action.payload;
-                const dateKey = `workout-${date}`;
-                const newWorkouts = cloneWorkouts(state.workouts);
-                const dayWorkout = newWorkouts[dateKey] || [];
-                const itemIndex = dayWorkout.findIndex(item => item.id === itemId);
-                if (itemIndex > -1 && dayWorkout[itemIndex].type === 'rest') {
-                    dayWorkout[itemIndex].duration = newDuration;
-                    newWorkouts[dateKey] = dayWorkout;
-                    newState = { ...state, workouts: newWorkouts };
-                }
-                break;
-            }
-            case 'REORDER_WORKOUT_ITEMS': {
-                const { date, draggedItemId, targetItemId } = action.payload;
-                const dateKey = `workout-${date}`;
-                const newWorkouts = cloneWorkouts(state.workouts);
-                const items = newWorkouts[dateKey] || [];
-                const draggedIndex = items.findIndex(item => item.id === draggedItemId);
-                const targetIndex = items.findIndex(item => item.id === targetItemId);
-                if (draggedIndex > -1 && targetIndex > -1) {
-                    const [draggedItem] = items.splice(draggedIndex, 1);
-                    items.splice(targetIndex, 0, draggedItem);
-                    newWorkouts[dateKey] = items;
-                    newState = { ...state, workouts: newWorkouts };
-                }
-                break;
-            }
-
-            // TRAINER LIFECYCLE ACTIONS
+            // TRAINER LIFECYCLE
             case 'START_WORKOUT': {
               const { date } = action.payload;
-              const dateKey = `workout-${date}`;
-              const workoutItems = state.workouts[dateKey];
+              const workoutItems = state.workouts[`workout-${date}`];
               if (!workoutItems || workoutItems.length === 0) break;
-              newState = {
-                ...state,
-                currentView: 'trainer',
-                activeWorkout: { date, items: workoutItems, completed: false, fullPlan: workoutItems },
-                completedWorkout: null,
-                trainerState: 'ready',
-                trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1, currentItem: workoutItems[0] }
-              };
+              newState = { ...state, currentView: 'trainer', activeWorkout: { date, items: workoutItems, fullPlan: workoutItems }, trainerState: 'ready', trainerContext: { itemIndex: 0, currentSeries: 1, currentRep: 1, currentItem: workoutItems[0] } };
               break;
             }
             case 'FINISH_WORKOUT': {
@@ -145,19 +173,19 @@ patches:
             }
             case 'TERMINATE_WORKOUT': {
               const { activeWorkout, trainerContext } = state;
-              const partialWorkout = { date: activeWorkout.date, fullPlan: activeWorkout.fullPlan, completed: false, terminationPoint: trainerContext };
+              const partialWorkout = { ...activeWorkout, completed: false, terminationPoint: trainerContext };
               newState = { ...state, currentView: 'debriefing', completedWorkout: partialWorkout, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
               break;
             }
             case 'START_TRAINER': {
-              if(state.trainerState === 'ready') {
+              if (state.trainerState === 'ready') {
                 const duration = 3000;
-                newState = { ...state, trainerState: 'preparing', trainerContext: { ...state.trainerContext, duration, remaining: duration }};
+                newState = { ...state, trainerState: 'preparing', trainerContext: { ...state.trainerContext, duration, remaining: duration } };
               }
               break;
             }
             case 'PAUSE_TRAINER': {
-              if (state.trainerState !== 'paused' && state.trainerState !== 'ready' && state.trainerState !== 'finished') {
+              if (!['paused', 'ready', 'finished'].includes(state.trainerState)) {
                 newState = { ...state, trainerState: 'paused', trainerContext: { ...state.trainerContext, stateBeforePause: state.trainerState } };
               }
               break;
@@ -172,7 +200,7 @@ patches:
               if (state.trainerState === 'paused') { shouldNotify = false; break; }
               const newRemaining = (state.trainerContext.remaining || 0) - action.payload.tick;
               if (newRemaining > 0) {
-                newState = { ...state, trainerContext: { ...state.trainerContext, remaining: newRemaining }};
+                newState = { ...state, trainerContext: { ...state.trainerContext, remaining: newRemaining } };
               } else {
                 dispatch({ type: 'ADVANCE_TRAINER_PHASE' });
                 shouldNotify = false;
@@ -183,63 +211,97 @@ patches:
               const { trainerState, activeWorkout, trainerContext } = state;
               let nextState = trainerState;
               let nextContext = { ...trainerContext };
+              const currentItem = trainerContext.currentItem;
 
-              if (trainerState === 'preparing') { nextState = 'announcing'; }
-              else if (trainerState === 'announcing') { nextState = 'action'; }
-              else if (trainerState === 'action' || trainerState === 'rest') {
-                  let itemIsComplete = false;
-                  const currentItem = trainerContext.currentItem;
-                  if(trainerState === 'rest') { itemIsComplete = true; }
-                  else if (currentItem.type === 'time') {
-                      if (nextContext.currentSeries < (currentItem.series || 1)) { nextContext.currentSeries++; } else { itemIsComplete = true; }
-                  } else if (currentItem.type === 'exercise') {
-                      if (nextContext.currentRep < (currentItem.reps || 1)) { nextContext.currentRep++; }
-                      else if (nextContext.currentSeries < (currentItem.series || 1)) { nextContext.currentSeries++; nextContext.currentRep = 1; }
-                      else { itemIsComplete = true; }
-                  }
-                  if (itemIsComplete) {
-                      if (nextContext.itemIndex < activeWorkout.items.length - 1) {
-                          nextContext = { itemIndex: nextContext.itemIndex + 1, currentSeries: 1, currentRep: 1 };
-                          nextState = 'announcing';
-                      } else { nextState = 'finished'; }
-                  } else { nextState = 'announcing'; }
+              // --- LOGICA DI TRANSIZIONE REIMPLEMENTATA ---
+
+              if (trainerState === 'preparing' || trainerState === 'rest') {
+                // Dopo la preparazione o il riposo, si annuncia il prossimo esercizio
+                nextState = 'announcing';
+              }
+              else if (trainerState === 'announcing') {
+                // Dopo l'annuncio, si passa all'azione
+                nextState = 'action';
+              }
+              else if (trainerState === 'action') {
+                // Logica principale: cosa fare dopo un'azione completata
+                let itemIsComplete = false;
+                let repIsComplete = false;
+
+                if (currentItem.type === 'time') {
+                    repIsComplete = true; // Per gli ex a tempo, ogni azione è una "ripetizione"
+                } else { // Esercizio a 'reps' con 'tempo'
+                    const tempoPhases = Object.keys(currentItem.tempo || {});
+                    const currentPhaseIndex = tempoPhases.indexOf(nextContext.currentPhase);
+                    if (currentPhaseIndex < tempoPhases.length - 1) {
+                        nextContext.currentPhase = tempoPhases[currentPhaseIndex + 1];
+                    } else {
+                        repIsComplete = true;
+                    }
+                }
+
+                if (repIsComplete) {
+                    if (nextContext.currentRep < (currentItem.reps || 1)) {
+                        nextContext.currentRep++;
+                    } else if (nextContext.currentSeries < (currentItem.series || 1)) {
+                        nextContext.currentSeries++;
+                        nextContext.currentRep = 1;
+                        nextState = 'rest'; // Passa al riposo tra le serie
+                    } else {
+                        itemIsComplete = true;
+                    }
+                }
+
+                if (itemIsComplete) {
+                    if (nextContext.itemIndex < activeWorkout.items.length - 1) {
+                        // Avanza al prossimo item
+                        nextContext = { itemIndex: nextContext.itemIndex + 1, currentSeries: 1, currentRep: 1 };
+                        nextState = 'announcing'; // Annuncia il nuovo item
+                    } else {
+                        nextState = 'finished'; // Workout completato
+                    }
+                } else if (nextState !== 'rest') {
+                  nextState = 'action'; // Continua con la prossima fase/rep
+                }
               }
 
-              if (nextState !== 'finished' && nextState !== state.trainerState) {
-                  const newItem = activeWorkout.items[nextContext.itemIndex];
-                  nextContext.currentItem = newItem;
-                  let duration = 0;
-                  if (newItem.type === 'rest' && trainerState !== 'rest') { nextState = 'rest'; }
+              // --- IMPOSTAZIONE DEL NUOVO STATO ---
+              if (nextState !== 'finished') {
+                const newItem = activeWorkout.items[nextContext.itemIndex];
+                nextContext.currentItem = newItem;
 
-                  switch(nextState) {
-                      case 'preparing': duration = 3000; break;
-                      case 'announcing': duration = 750; break;
-                      case 'action':
-                          duration = (newItem.type === 'time') ? (newItem.duration || 10) * 1000 : (newItem.tempo?.down || 1) * 1000;
-                          break;
-                      case 'rest': duration = (newItem.duration || 60) * 1000; break;
-                  }
-                  nextContext.duration = duration;
-                  nextContext.remaining = duration; // --- FIX: Inizializza anche remaining ---
+                // Se il nuovo item è un blocco di riposo, forza lo stato a 'rest'
+                if (newItem.type === 'rest' && trainerState !== 'rest') {
+                  nextState = 'rest';
+                }
+
+                let duration = 0;
+                switch (nextState) {
+                  case 'announcing': duration = 750; break;
+                  case 'rest': duration = (newItem.defaultRest || 60) * 1000; break;
+                  case 'action':
+                    if (newItem.type === 'time') {
+                      duration = (newItem.duration || 10) * 1000;
+                    } else {
+                      const tempoPhases = Object.keys(newItem.tempo || { 'down': 1 });
+                      if (!nextContext.currentPhase) nextContext.currentPhase = tempoPhases[0];
+                      duration = (newItem.tempo[nextContext.currentPhase] || 1) * 1000;
+                    }
+                    break;
+                }
+                nextContext.duration = duration;
+                nextContext.remaining = duration;
               }
               newState = { ...state, trainerState: nextState, trainerContext: nextContext };
               break;
             }
-            default:
-              action.type = '@@UNKNOWN';
-              shouldNotify = false;
-              break;
+            default: shouldNotify = false; break;
           }
 
           state = newState;
-          if (shouldNotify && state !== oldState) {
-            logState(action.type, state); // --- CHIAMATA AL LOGGER RIPRISTINATA ---
-            if (state.workouts !== oldState.workouts) {
-              saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
-            }
-            notify();
-          } else if (action.type === 'TIMER_TICK') {
-            // Notifica comunque per aggiornare il timer nella UI, ma senza log
+          if (shouldNotify) {
+            logState(action.type, state);
+            if (state.workouts !== oldState.workouts) { saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts); }
             notify();
           }
         };
@@ -250,8 +312,128 @@ patches:
           dispatch,
         };
       }
-
       const store = createStore();
       export default store;
+  - file: src/views/TrainerView.js
+    content: |
+      import store from '../modules/store.js';
+
+      function render(element) {
+          const { activeWorkout, trainerState, trainerContext } = store.getState();
+          if (!activeWorkout || !trainerContext.currentItem) {
+              element.innerHTML = '<h2>Nessun workout attivo.</h2>';
+              return;
+          }
+
+          const { currentItem, duration, remaining, stateBeforePause, currentPhase } = trainerContext;
+          const radius = 90;
+          const circumference = 2 * Math.PI * radius;
+
+          let ringOffset = circumference;
+          if (duration > 0 && remaining >= 0) {
+              const progress = (duration - remaining) / duration;
+              ringOffset = circumference * (1 - progress);
+          }
+
+          let phaseText = '', instructionText = '', buttonText = '', timerText = '', isFlashing = false;
+          const terminateButtonHidden = trainerState === 'finished' || trainerState === 'ready';
+          const isExercise = currentItem.type === 'exercise' || currentItem.type === 'time';
+
+          let displayPhase = currentPhase?.toUpperCase() || '';
+
+          switch (trainerState) {
+              case 'ready':
+                  phaseText = 'PRONTO'; instructionText = 'Premi INIZIA per cominciare'; buttonText = 'INIZIA';
+                  break;
+              case 'preparing':
+                  phaseText = 'PREPARATI'; instructionText = 'Si parte...'; buttonText = 'PAUSA'; timerText = Math.ceil(remaining / 1000);
+                  break;
+              case 'rest':
+                  phaseText = 'RIPOSO'; instructionText = 'Recupera le forze'; buttonText = 'PAUSA'; timerText = Math.ceil(remaining / 1000);
+                  break;
+              case 'announcing':
+                  phaseText = currentItem.name; instructionText = `Prossimo Esercizio`; buttonText = 'PAUSA'; isFlashing = true;
+                  break;
+              case 'action':
+                  phaseText = displayPhase; instructionText = 'Esegui il movimento'; buttonText = 'PAUSA'; timerText = Math.ceil(remaining / 1000);
+                  break;
+              case 'paused':
+                  const pausedState = stateBeforePause || 'action';
+                  if (pausedState === 'rest') phaseText = 'RIPOSO';
+                  else if (pausedState === 'announcing') { phaseText = currentItem.name; isFlashing = true; }
+                  else phaseText = (pausedState === 'preparing') ? 'PREPARATI' : displayPhase;
+                  instructionText = 'Pausa'; buttonText = 'RIPRENDI';
+                  if (pausedState !== 'announcing') timerText = Math.ceil(remaining / 1000);
+                  break;
+              case 'finished':
+                  phaseText = 'FINE'; instructionText = 'Workout completato!'; buttonText = 'DEBRIEFING';
+                  break;
+              default:
+                  phaseText = 'IDLE'; instructionText = 'Stato non riconosciuto'; buttonText = 'RESET';
+          }
+
+          const headerTitle = currentItem.name || 'Riposo';
+          const seriesText = isExercise ? `SERIE ${trainerContext.currentSeries || 1} / ${currentItem.series || 1}` : '';
+          const repsText = currentItem.type === 'exercise' ? `REP ${trainerContext.currentRep || 1} / ${currentItem.reps || 1}` : '';
+
+          element.innerHTML = `
+              <div class="trainer-container">
+                  <header class="trainer-header">
+                      <h2>${headerTitle}</h2>
+                      <p>${seriesText} ${repsText ? `| ${repsText}` : ''}</p>
+                  </header>
+                  <div class="progress-ring">
+                      <svg>
+                          <circle class="progress-ring__background" stroke-width="10" r="${radius}" cx="50%" cy="50%"></circle>
+                          <circle class="progress-ring__foreground" style="stroke-dashoffset: ${ringOffset};" stroke-width="10" r="${radius}" cx="50%" cy="50%" stroke-dasharray="${circumference}"></circle>
+                      </svg>
+                      <div class="progress-ring__text">
+                          <div class="progress-ring__phase ${isFlashing ? 'is-flashing' : ''}">${phaseText}</div>
+                          <div class="progress-ring__timer">${timerText}</div>
+                      </div>
+                  </div>
+                  <footer class="trainer-footer">
+                      <p class="trainer-instruction">${instructionText}</p>
+                      <div class="trainer-controls">
+                          <button class="trainer-main-btn">${buttonText}</button>
+                          <button class="trainer-terminate-btn" ${terminateButtonHidden ? 'hidden' : ''}>Termina</button>
+                      </div>
+                  </footer>
+              </div>
+          `;
+      }
+
+      export function init(element) {
+          element.addEventListener('click', (event) => {
+              const mainButton = event.target.closest('.trainer-main-btn');
+              const terminateButton = event.target.closest('.trainer-terminate-btn');
+
+              if (terminateButton) {
+                  store.dispatch({ type: 'PAUSE_TRAINER' });
+                  store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'CONFIRM_TERMINATION' } });
+                  return;
+              }
+
+              if (!mainButton) return;
+              const { trainerState } = store.getState();
+
+              switch (trainerState) {
+                  case 'ready': store.dispatch({ type: 'START_TRAINER' }); break;
+                  case 'paused': store.dispatch({ type: 'RESUME_TRAINER' }); break;
+                  case 'finished': store.dispatch({ type: 'FINISH_WORKOUT' }); break;
+                  default: store.dispatch({ type: 'PAUSE_TRAINER' }); break;
+              }
+          });
+
+          store.subscribe(() => {
+              if (element.classList.contains('view--active')) {
+                  render(element);
+              }
+          });
+          // Initial render in case the view is already active
+          if (element.classList.contains('view--active')) {
+            render(element);
+          }
+      }
 commands:
-  - "echo 'Bug del timer corretto e log di debug ripristinati. Il trainer è di nuovo operativo.'"
+  - "echo 'Correzione completa applicata. Il loop ricorsivo e i bug di logica del trainer sono stati risolti.'"

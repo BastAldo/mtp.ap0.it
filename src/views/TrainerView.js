@@ -2,15 +2,14 @@ import store from '../modules/store.js';
 
 function render(element) {
     const { activeWorkout, trainerState, trainerContext } = store.getState();
-    if (!activeWorkout) {
+    if (!activeWorkout || !trainerContext.currentItem) {
         element.innerHTML = '<h2>Nessun workout attivo.</h2>';
         return;
     }
 
-    const currentItem = trainerContext.currentItem || activeWorkout.items[trainerContext.itemIndex];
+    const { currentItem, duration, remaining, stateBeforePause, currentPhase } = trainerContext;
     const radius = 90;
     const circumference = 2 * Math.PI * radius;
-    const { duration, remaining, stateBeforePause } = trainerContext;
 
     let ringOffset = circumference;
     if (duration > 0 && remaining >= 0) {
@@ -21,11 +20,12 @@ function render(element) {
     let phaseText = '', instructionText = '', buttonText = '', timerText = '', isFlashing = false;
     const terminateButtonHidden = trainerState === 'finished' || trainerState === 'ready';
     const isExercise = currentItem.type === 'exercise' || currentItem.type === 'time';
-    const currentPhase = currentItem.type === 'time' ? 'Esegui' : (currentItem.tempo ? 'Fase' : 'Azione');
+
+    let displayPhase = currentPhase?.toUpperCase() || '';
 
     switch (trainerState) {
         case 'ready':
-            phaseText = 'PRONTO'; instructionText = `Premi INIZIA per cominciare`; buttonText = 'INIZIA';
+            phaseText = 'PRONTO'; instructionText = 'Premi INIZIA per cominciare'; buttonText = 'INIZIA';
             break;
         case 'preparing':
             phaseText = 'PREPARATI'; instructionText = 'Si parte...'; buttonText = 'PAUSA'; timerText = Math.ceil(remaining / 1000);
@@ -37,15 +37,15 @@ function render(element) {
             phaseText = currentItem.name; instructionText = `Prossimo Esercizio`; buttonText = 'PAUSA'; isFlashing = true;
             break;
         case 'action':
-            phaseText = currentPhase.toUpperCase(); instructionText = 'Esegui il movimento'; buttonText = 'PAUSA'; timerText = Math.ceil(remaining / 1000);
+            phaseText = displayPhase; instructionText = 'Esegui il movimento'; buttonText = 'PAUSA'; timerText = Math.ceil(remaining / 1000);
             break;
         case 'paused':
             const pausedState = stateBeforePause || 'action';
-            if (pausedState === 'rest') { phaseText = 'RIPOSO'; }
-            else if(pausedState === 'announcing') { phaseText = currentItem.name; isFlashing = true; }
-            else { phaseText = (pausedState === 'preparing') ? 'PREPARATI' : currentPhase.toUpperCase(); }
+            if (pausedState === 'rest') phaseText = 'RIPOSO';
+            else if (pausedState === 'announcing') { phaseText = currentItem.name; isFlashing = true; }
+            else phaseText = (pausedState === 'preparing') ? 'PREPARATI' : displayPhase;
             instructionText = 'Pausa'; buttonText = 'RIPRENDI';
-            if(pausedState !== 'announcing') { timerText = Math.ceil(remaining / 1000); }
+            if (pausedState !== 'announcing') timerText = Math.ceil(remaining / 1000);
             break;
         case 'finished':
             phaseText = 'FINE'; instructionText = 'Workout completato!'; buttonText = 'DEBRIEFING';
@@ -112,5 +112,8 @@ export function init(element) {
             render(element);
         }
     });
-    render(element);
+    // Initial render in case the view is already active
+    if (element.classList.contains('view--active')) {
+      render(element);
+    }
 }

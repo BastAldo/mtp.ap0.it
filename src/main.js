@@ -49,25 +49,26 @@ function handleViewChange() {
   }
 }
 
-// --- Side Effect Handler for Trainer Timers ---
+// --- Side Effect Handler for Trainer Timers (FIXED) ---
 let timerInterval = null;
 let lastTrainerState = 'idle';
 
 function handleTrainerEffects() {
-    const { trainerState, trainerContext } = store.getState();
+    const { trainerState } = store.getState();
 
-    // State changed, so we always clear the existing timer first.
+    // Se lo stato è cambiato, reagiamo.
     if (trainerState !== lastTrainerState) {
+        // Regola n.1: Pulisci sempre il timer precedente.
         if (timerInterval) {
             clearInterval(timerInterval);
             timerInterval = null;
         }
 
+        // Regola n.2: Avvia un nuovo timer SOLO se lo stato lo richiede.
         const statesWithTimers = ['preparing', 'announcing', 'action', 'rest'];
         if (statesWithTimers.includes(trainerState)) {
-            // Set initial remaining time when a new timed state starts
-            store.dispatch({ type: 'TIMER_TICK', payload: { tick: 0 } });
-
+            // NON chiamare dispatch da qui. Lo store è l'unica fonte della verità
+            // per duration e remaining.
             timerInterval = setInterval(() => {
                 store.dispatch({ type: 'TIMER_TICK', payload: { tick: TICK_INTERVAL } });
             }, TICK_INTERVAL);
@@ -76,8 +77,9 @@ function handleTrainerEffects() {
     lastTrainerState = trainerState;
 }
 
+
 store.subscribe(handleViewChange);
-store.subscribe(handleTrainerEffects); // Subscribe the effect handler
+store.subscribe(handleTrainerEffects);
 
 initializeApp();
 console.log('App "Mio Trainer Personale" inizializzata.');
