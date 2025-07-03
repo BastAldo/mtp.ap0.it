@@ -59,11 +59,15 @@ function createStore() {
           const { date } = action.payload;
           const workoutItems = newState.workouts[`workout-${date}`];
           if (workoutItems?.length > 0) {
+              const plan = generatePlan(workoutItems);
+              console.log("--- Piano di Esecuzione Generato ---");
+              console.table(plan); // Stampa il piano per il debug
+
               newState.currentView = 'trainer';
               newState.trainer = {
                   ...trainerInitialState,
                   status: 'ready',
-                  executionPlan: generatePlan(workoutItems),
+                  executionPlan: plan,
                   activeWorkout: { date, items: workoutItems },
               };
           }
@@ -77,10 +81,14 @@ function createStore() {
           }
           break;
       case 'PAUSE_TRAINER':
-          if (newState.trainer.status === 'running') newState.trainer.status = 'paused';
+          if (newState.trainer.status === 'running') {
+              newState.trainer.status = 'paused';
+          }
           break;
       case 'RESUME_TRAINER':
-          if (newState.trainer.status === 'paused') newState.trainer.status = 'running';
+          if (newState.trainer.status === 'paused') {
+              newState.trainer.status = 'running';
+          }
           break;
       case 'TIMER_TICK':
           if (newState.trainer.status === 'running') {
@@ -119,7 +127,7 @@ function createStore() {
     
     state = newState;
 
-    if (state.workouts !== oldState.workouts) {
+    if (JSON.stringify(state.workouts) !== JSON.stringify(oldState.workouts)) {
       saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
     }
     notify();
