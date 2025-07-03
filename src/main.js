@@ -1,4 +1,4 @@
-console.log('%cMTP Build: 2.0.1 - Esecuzione confermata.', 'color: #lime; font-size: 1.2em; font-weight: bold;');
+console.log('%cMTP Build: 2.0.2 - Esecuzione confermata.', 'color: #lime; font-size: 1.2em; font-weight: bold;');
 import store from './modules/store.js';
 import { init as initCalendarView } from './views/CalendarView.js';
 import { init as initTrainerView } from './views/TrainerView.js';
