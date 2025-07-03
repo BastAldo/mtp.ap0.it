@@ -63,7 +63,7 @@ body::-webkit-scrollbar-thumb, .modal-body::-webkit-scrollbar-thumb { background
 /* --- KEYFRAMES --- */
 @keyframes soft-flash {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.2; }
+  50% { opacity: 0.4; } /* Reso più delicato, da 0.2 a 0.4 */
 }
 .is-flashing {
   animation: soft-flash 0.75s ease-in-out;

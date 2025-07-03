@@ -1,279 +1,237 @@
-commit_message: "feat(core): Riprogettare il timer e ripristinare le funzionalità"
+commit_message: "style(fx): Rendere più delicata l'animazione di flashing"
 rationale: |
-  Questo commit esegue una riprogettazione architetturale del sistema di timer per risolvere una criticità di 'race condition' e migliora la generazione del piano di allenamento.
+  In risposta al feedback dell'utente, l'animazione di flashing per gli stati di annuncio è stata resa più delicata.
 
-  1.  **Nuovo Modulo Timer**: È stato introdotto un nuovo modulo `src/modules/timer.js` che utilizza `requestAnimationFrame`. Questo approccio, superiore a `setInterval`, elimina la 'race condition' che rendeva inaffidabile il pulsante "Pausa" e centralizza la gestione del tempo in un unico punto con funzioni semplici (`start`, `stop`).
-
-  2.  **Logica Semplificata**: La logica del timer è stata rimossa da `main.js` e integrata direttamente nelle azioni dello store (`START_TRAINER`, `PAUSE_TRAINER`, etc.), che ora controllano esplicitamente l'avvio e l'arresto del timer. Questo rende il flusso di stato più pulito e prevedibile.
-
-  3.  **Funzionalità Ripristinate**:
-      - È stata reinserita la `console.table()` per l'ispezione del piano di allenamento generato, una feature di debug fondamentale.
-      - Il `planGenerator.js` è stato corretto per inserire correttamente gli stati di annuncio (`announcing-phase`) per ogni fase del 'tempo' (up, hold, down), riabilitando il feedback visivo (flicker) durante le ripetizioni.
-
-  L'insieme di queste modifiche rende l'applicazione più stabile, performante e allineata ai principi di codice pulito e a singola responsabilità.
+  La modifica chiave è nel keyframe `@keyframes soft-flash` all'interno di `assets/css/style.css`. L'opacità minima è stata aumentata da `0.2` a `0.4`. Questo riduce il contrasto del "lampeggio", risultando in un effetto visivo più morbido e meno invadente, che migliora l'esperienza utente durante l'allenamento.
 patches:
-  - file: src/modules/timer.js
+  - file: assets/css/style.css
     content: |
-      let animationFrameId = null;
+      /* --- GLOBAL STYLES & MOBILE FIRST --- */
+      :root {
+          --bg-color: #1a1a1d;
+          --card-color: #2c2c34;
+          --primary-color: #9575cd;
+          --secondary-color: #4db6ac;
+          --text-color: #f4f4f9;
+          --text-color-muted: #aaa;
+          --border-color: #40404a;
+          --danger-color: #ef5350;
+          --success-color: #66bb6a;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+          background-color: var(--bg-color);
+          color: var(--text-color);
+          padding-top: 80px; /* Adjusted Space for the fixed header */
+          scrollbar-width: thin;
+          scrollbar-color: var(--primary-color) var(--bg-color);
+      }
+      /* Custom Scrollbar for Webkit Browsers */
+      body::-webkit-scrollbar, .modal-body::-webkit-scrollbar { width: 8px; }
+      body::-webkit-scrollbar-track, .modal-body::-webkit-scrollbar-track { background: var(--card-color); }
+      body::-webkit-scrollbar-thumb, .modal-body::-webkit-scrollbar-thumb { background-color: var(--primary-color); border-radius: 10px; border: 2px solid var(--card-color); }
 
-      function loop(callback, lastTime) {
-          const currentTime = performance.now();
-          const tick = currentTime - lastTime;
-          callback(tick);
-          animationFrameId = requestAnimationFrame(() => loop(callback, currentTime));
+      /* --- PERSISTENT HEADER (REDESIGNED) --- */
+      .app-header {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 60px;
+          background-color: rgba(44, 44, 52, 0.85);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+      }
+      .app-title {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+      }
+      .app-title svg {
+          width: 24px;
+          height: 24px;
+      }
+      .app-title h1 {
+          font-size: 1.4rem;
+          background: -webkit-linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
       }
 
-      export function start(callback) {
-          if (!animationFrameId) {
-              animationFrameId = requestAnimationFrame(() => loop(callback, performance.now()));
+      #app-container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+      .view { display: none; width: 100%; }
+      .view--active { display: block; }
+
+      /* --- KEYFRAMES --- */
+      @keyframes soft-flash {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; } /* Reso più delicato, da 0.2 a 0.4 */
+      }
+      .is-flashing {
+        animation: soft-flash 0.75s ease-in-out;
+      }
+      @keyframes fade-slide-up {
+          from {
+              opacity: 0;
+              transform: translateY(10px);
+          }
+          to {
+              opacity: 1;
+              transform: translateY(0);
           }
       }
-
-      export function stop() {
-          if (animationFrameId) {
-              cancelAnimationFrame(animationFrameId);
-              animationFrameId = null;
-          }
-      }
-  - file: src/main.js
-    content: |
-      import store from './modules/store.js';
-      import { init as initCalendarView } from './views/CalendarView.js';
-      import { init as initTrainerView } from './views/TrainerView.js';
-      import { init as initDebriefingView } from './views/DebriefingView.js';
-      import { init as initModal } from './ui/Modal.js';
-      import { init as initNotice } from './ui/Notice.js';
-      import { loadFromStorage, saveToStorage } from './modules/storage.js';
-
-      const WORKOUTS_STORAGE_KEY = 'workouts';
-
-      const views = {
-          calendar: document.getElementById('calendar-view'),
-          trainer: document.getElementById('trainer-view'),
-          debriefing: document.getElementById('debriefing-view'),
-      };
-      const initializedViews = new Set();
-
-      function initializeApp() {
-        let workouts = loadFromStorage(WORKOUTS_STORAGE_KEY);
-        if (!workouts) {
-          workouts = {};
-          saveToStorage(WORKOUTS_STORAGE_KEY, workouts);
-        }
-        store.dispatch({ type: 'SET_WORKOUTS', payload: workouts });
-
-        initCalendarView(views.calendar);
-        initializedViews.add('calendar');
-        initModal(document.getElementById('modal-container'));
-        initNotice(document.getElementById('notice-container'));
+      @keyframes fade-in-out {
+        0%, 100% { opacity: 0; transform: translateY(-20px); }
+        10%, 90% { opacity: 1; transform: translateY(0); }
       }
 
-      function handleViewChange() {
-        const { currentView } = store.getState();
-        const newActiveViewEl = views[currentView];
-
-        if (newActiveViewEl && newActiveViewEl.id !== store.currentActiveViewId) {
-          const oldView = document.querySelector('.view--active');
-          if(oldView) oldView.classList.remove('view--active');
-          
-          newActiveViewEl.classList.add('view--active');
-          store.currentActiveViewId = newActiveViewEl.id;
-
-          if (!initializedViews.has(currentView)) {
-            if (currentView === 'trainer') initTrainerView(views.trainer);
-            else if (currentView === 'debriefing') initDebriefingView(views.debriefing);
-            initializedViews.add(currentView);
-          }
-        }
+      /* --- NOTICE / TOAST STYLES --- */
+      #notice-container {
+          position: fixed;
+          top: 80px; /* Below header */
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 2000;
+          display: flex;
+          justify-content: center;
+      }
+      .notice {
+          background-color: var(--secondary-color);
+          color: var(--bg-color);
+          padding: 0.8rem 1.5rem;
+          border-radius: 6px;
+          font-weight: bold;
+          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+          animation: fade-in-out 3s ease-in-out forwards;
       }
 
-      store.subscribe(handleViewChange);
-      initializeApp();
-  - file: src/modules/planGenerator.js
-    content: |
-      function createActionSteps(item, seriesIndex) {
-          const steps = [];
-          const totalSeries = item.series || 1;
-          const baseContext = { currentSeries: seriesIndex, totalSeries, item };
+      /* --- CALENDAR VIEW STYLES --- */
+      .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+      .calendar-header h2 { font-size: 1.25rem; text-align: center; }
+      .calendar-header button { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: background-color 0.2s; }
+      .calendar-header button:hover { background-color: var(--primary-color); }
+      .calendar-grid { display: grid; grid-template-columns: 1fr; gap: 0.5rem; }
+      .day-cell { background-color: var(--card-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; min-height: 150px; display: flex; flex-direction: column; cursor: pointer; transition: border-color 0.2s; }
+      .day-cell:hover { border-color: var(--primary-color); }
+      .day-cell__header { display: flex; justify-content: space-between; font-weight: bold; color: var(--text-color-muted); text-transform: uppercase; font-size: 0.8rem; pointer-events: none; }
+      .day-cell__body { margin-top: 0.5rem; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; pointer-events: none; }
+      .exercise-count { font-size: 0.9rem; color: var(--secondary-color); }
+      .start-btn { background-color: var(--secondary-color); color: var(--bg-color); border: none; padding: 0.6rem; border-radius: 6px; cursor: pointer; font-weight: bold; text-transform: uppercase; width: 100%; margin-top: 1rem; transition: opacity 0.2s; pointer-events: all !important; }
+      .start-btn:hover { opacity: 0.85; }
 
-          if (item.type === 'time') {
-              steps.push({ type: 'announcing-phase', duration: 750, headerTitle: item.name, mainText: `Esegui`, context: baseContext, item });
-              steps.push({ type: 'action', duration: (item.duration || 10) * 1000, headerTitle: item.name, mainText: `RUN`, context: baseContext, item });
-          } else {
-              const totalReps = item.reps || 1;
-              const tempoPhases = Object.keys(item.tempo || { exec: 1 });
-              for (let repIndex = 1; repIndex <= totalReps; repIndex++) {
-                  const repContext = { ...baseContext, currentRep: repIndex, totalReps };
-                  tempoPhases.forEach(phase => {
-                      const phaseContext = { ...repContext, phase };
-                      // Inserisce un annuncio PRIMA di ogni fase di azione
-                      steps.push({ type: 'announcing-phase', duration: 750, headerTitle: item.name, mainText: phase.toUpperCase(), context: phaseContext, item });
-                      steps.push({ type: 'action', duration: (item.tempo[phase] || 1) * 1000, headerTitle: item.name, mainText: phase.toUpperCase(), context: phaseContext, item });
-                  });
-              }
-          }
-          return steps;
+      /* --- MODAL STYLES --- */
+      #modal-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; z-index: 1001; }
+      #modal-container.active { opacity: 1; pointer-events: all; }
+      .modal-content { background-color: var(--card-color); border-radius: 8px; border: 1px solid var(--border-color); width: 90%; max-width: 500px; transform: scale(0.95); transition: transform 0.3s ease; display: flex; flex-direction: column; max-height: 90vh; }
+      #modal-container.active .modal-content { transform: scale(1); }
+      .modal-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; }
+      .modal-header h3 { color: var(--primary-color); }
+      .modal-close-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; cursor: pointer; }
+      .modal-body { overflow-y: auto; flex-grow: 1; padding: 1rem 1.5rem; }
+      .modal-actions { padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 1rem; flex-shrink: 0; }
+      .modal-actions button {
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-weight: bold;
+      }
+      .modal-actions .btn-confirm {
+          background-color: var(--danger-color);
+          border: 1px solid var(--danger-color);
+          color: var(--text-color);
+      }
+      .modal-actions .btn-cancel {
+          background-color: transparent;
+          border: 1px solid var(--border-color);
+          color: var(--text-color-muted);
+      }
+      .add-rest-btn, .add-exercise-btn { background-color: transparent; border: 1px solid var(--secondary-color); color: var(--secondary-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+      .add-rest-btn:hover, .add-exercise-btn:hover { background-color: var(--secondary-color); color: var(--card-color); }
+
+      /* --- WORKOUT EDITOR & LIBRARY STYLES --- */
+      .workout-item-list, .exercise-library-list { list-style: none; padding: 0; margin: 0; }
+      .workout-item { display: flex; align-items: center; padding: 1rem 0.5rem; border-bottom: 1px solid var(--border-color); }
+      .workout-item:last-child { border-bottom: none; }
+      .workout-item.dragging { opacity: 0.4; background-color: var(--border-color); }
+      .workout-item.drag-over-target { border-top: 2px solid var(--primary-color); }
+      .drag-handle { cursor: grab; padding-right: 1rem; color: var(--text-color-muted); }
+      .item-info { display: flex; align-items: baseline; gap: 0.75rem; flex-grow: 1; }
+      .item-info .item-name { font-weight: bold; }
+      .item-info .item-details { color: var(--secondary-color); }
+      .workout-item--rest .item-info .item-name { color: var(--text-color-muted); font-style: italic; }
+      .rest-duration-input { -moz-appearance: textfield; background-color: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 4px; padding: 0.25rem; width: 60px; text-align: center; }
+      .rest-duration-input::-webkit-outer-spin-button, .rest-duration-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+      .remove-item-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; font-weight: bold; cursor: pointer; padding: 0 0.5rem; border-radius: 50%; }
+      .remove-item-btn:hover { color: var(--danger-color); background-color: rgba(239, 83, 80, 0.1); }
+      .exercise-library-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0.5rem; border-bottom: 1px solid var(--border-color); }
+      .exercise-library-item:last-child { border-bottom: none; }
+      .add-to-workout-btn { background-color: var(--primary-color); color: var(--text-color); border: none; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; }
+
+      /* --- TRAINER VIEW STYLES --- */
+      .trainer-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: calc(100vh - 4rem - 60px); text-align: center; }
+      .trainer-header { margin-bottom: 1rem; }
+      .trainer-header h2 { font-size: 2rem; text-transform: uppercase; color: var(--primary-color); }
+      .trainer-header p { color: var(--text-color-muted); }
+      .progress-ring { position: relative; width: 250px; height: 250px; margin: 2rem 0; }
+      .progress-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+      .progress-ring__background { stroke: var(--card-color); fill: transparent; }
+      .progress-ring__foreground { stroke: var(--secondary-color); fill: transparent; }
+      .progress-ring__text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+      .progress-ring__phase { font-size: 1.6rem; font-weight: bold; text-transform: uppercase; }
+      .progress-ring__timer { font-size: 3rem; color: var(--text-color); }
+      .trainer-footer { margin-top: 1rem; }
+      .trainer-footer p { font-size: 1.2rem; min-height: 2em; }
+      .trainer-controls { display: flex; flex-direction: column; align-items: center; gap: 1rem; margin-top: 1rem; }
+      .trainer-main-btn { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 1rem 2rem; border-radius: 8px; cursor: pointer; font-size: 1.2rem; text-transform: uppercase; }
+      .trainer-terminate-btn {
+          background-color: transparent;
+          border: 1px solid var(--border-color);
+          color: var(--text-color-muted);
+          padding: 0.5rem 1rem;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 0.9rem;
+          transition: all 0.2s ease;
+      }
+      .trainer-terminate-btn:hover {
+          background-color: var(--border-color);
+          color: var(--text-color);
       }
 
-      export function generatePlan(workoutItems) {
-          if (!workoutItems || workoutItems.length === 0) return [];
-
-          let plan = [{ type: 'preparing', duration: 3000, headerTitle: 'Preparati', mainText: 'Si comincia...' }];
-
-          workoutItems.forEach((item, index) => {
-              if (item.type === 'rest') {
-                  plan.push({ type: 'rest', duration: item.duration * 1000, headerTitle: 'Riposo', mainText: `Prossimo: ${workoutItems[index + 1]?.name || 'Fine'}`, item });
-              } else {
-                  plan.push(...createActionSteps(item, index + 1));
-              }
-          });
-
-          plan.push({ type: 'finished', duration: 0, headerTitle: 'Fine', mainText: 'Workout Completato!' });
-          return plan;
+      /* --- DEBRIEFING VIEW STYLES --- */
+      .debriefing-container { max-width: 700px; margin: 0 auto; padding: 1rem; }
+      .debriefing-container h2 { text-align: center; color: var(--primary-color); margin-bottom: 2rem; }
+      .debrief-list { list-style: none; padding: 0; margin: 0 0 2rem 0; }
+      .debrief-item {
+          background-color: var(--card-color);
+          border: 1px solid var(--border-color);
+          border-left: 5px solid var(--border-color);
+          padding: 1rem;
+          border-radius: 6px;
+          margin-bottom: 0.75rem;
+          opacity: 0; /* Start hidden for animation */
+          animation: fade-slide-up 0.5s ease-out forwards;
       }
-  - file: src/modules/store.js
-    content: |
-      import { saveToStorage } from './storage.js';
-      import { getExerciseById } from './exerciseRepository.js';
-      import { generatePlan } from './planGenerator.js';
-      import * as timer from './timer.js';
+      .debrief-item--completed { border-left-color: var(--success-color); }
+      .debrief-item--terminated { border-left-color: var(--danger-color); font-weight: bold; }
+      .debrief-item--skipped { opacity: 0.6; animation: none; }
+      .debriefing-actions { display: flex; justify-content: center; gap: 1rem; }
+      .debriefing-actions button { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.8rem 1.5rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+      .debriefing-actions button:hover { border-color: var(--primary-color); color: var(--primary-color); }
 
-      const WORKOUTS_STORAGE_KEY = 'workouts';
-
-      const trainerInitialState = {
-          status: 'idle',
-          executionPlan: null,
-          currentStepIndex: 0,
-          remaining: 0,
-          activeWorkout: null,
-          completedWorkout: null,
-      };
-
-      function createStore() {
-        let state = {
-          currentView: 'calendar',
-          focusedDate: new Date(),
-          workouts: {},
-          isModalOpen: false,
-          modalContext: null,
-          notice: null,
-          trainer: { ...trainerInitialState },
-        };
-
-        const subscribers = new Set();
-        function notify() { for (const callback of subscribers) { callback(); } }
-
-        function handleTimerTick(tick) {
-            dispatch({ type: 'TIMER_TICK', payload: { tick } });
-        }
-
-        const dispatch = (action) => {
-          if (action.type !== 'TIMER_TICK') {
-            console.log(`%c[${action.type}]`, 'color: #88aaff; font-weight: bold;', action.payload || '');
-          }
-
-          const oldState = state;
-          const newState = { ...state, trainer: { ...state.trainer } };
-
-          switch (action.type) {
-            case 'CHANGE_VIEW': newState.currentView = action.payload; break;
-            case 'PREV_WEEK': { const d = new Date(newState.focusedDate); d.setDate(d.getDate() - 7); newState.focusedDate = d; break; }
-            case 'NEXT_WEEK': { const d = new Date(newState.focusedDate); d.setDate(d.getDate() + 7); newState.focusedDate = d; break; }
-            case 'SET_WORKOUTS': newState.workouts = action.payload; break;
-            case 'OPEN_MODAL': newState.isModalOpen = true; newState.modalContext = action.payload; break;
-            case 'CLOSE_MODAL': newState.isModalOpen = false; newState.modalContext = null; break;
-            case 'SHOW_NOTICE': newState.notice = { message: action.payload.message, id: Date.now() }; break;
-            case 'ADD_EXERCISE_ITEM': { const { date, exerciseId } = action.payload; const dateKey = `workout-${date}`; const exercise = getExerciseById(exerciseId); if (!exercise) break; const newItem = { ...exercise, id: `item-${Date.now()}`, type: exercise.type || 'exercise', exerciseId: exercise.id }; const dayWorkout = [...(newState.workouts[dateKey] || [])]; dayWorkout.push(newItem); newState.workouts = { ...newState.workouts, [dateKey]: dayWorkout }; newState.modalContext = { type: 'EDIT_WORKOUT', date }; break; }
-            case 'ADD_REST_ITEM': { const { date } = action.payload; const dateKey = `workout-${date}`; const newItem = { id: `item-${Date.now()}`, type: 'rest', duration: 60 }; const dayWorkout = [...(newState.workouts[dateKey] || [])]; dayWorkout.push(newItem); newState.workouts = { ...newState.workouts, [dateKey]: dayWorkout }; break; }
-            case 'REMOVE_WORKOUT_ITEM': { const { date, itemId } = action.payload; const dateKey = `workout-${date}`; const updatedWorkout = (newState.workouts[dateKey] || []).filter(item => item.id !== itemId); newState.workouts = { ...newState.workouts, [dateKey]: updatedWorkout }; break; }
-            case 'UPDATE_REST_DURATION': { const { date, itemId, newDuration } = action.payload; const dateKey = `workout-${date}`; const dayWorkout = (newState.workouts[dateKey] || []).map(item => item.id === itemId ? { ...item, duration: newDuration } : item); newState.workouts = { ...newState.workouts, [dateKey]: dayWorkout }; break; }
-            case 'REORDER_WORKOUT_ITEMS': { const { date, draggedItemId, targetItemId } = action.payload; const dateKey = `workout-${date}`; const items = [...(newState.workouts[dateKey] || [])]; const draggedIndex = items.findIndex(item => item.id === draggedItemId); const targetIndex = items.findIndex(item => item.id === targetItemId); if (draggedIndex > -1 && targetIndex > -1) { const [draggedItem] = items.splice(draggedIndex, 1); items.splice(targetIndex, 0, draggedItem); newState.workouts = { ...newState.workouts, [dateKey]: items }; } break; }
-            
-            case 'START_WORKOUT': {
-              const { date } = action.payload;
-              const workoutItems = newState.workouts[`workout-${date}`];
-              if (workoutItems?.length > 0) {
-                const plan = generatePlan(workoutItems);
-                console.log("--- Piano di Esecuzione Generato ---");
-                console.table(plan);
-                newState.currentView = 'trainer';
-                newState.trainer = { ...trainerInitialState, status: 'ready', executionPlan: plan, activeWorkout: { date, items: workoutItems } };
-              }
-              break;
-            }
-            case 'START_TRAINER':
-              if (newState.trainer.status === 'ready') {
-                newState.trainer.status = 'running';
-                const firstStep = newState.trainer.executionPlan[0];
-                newState.trainer.remaining = firstStep.duration;
-                timer.start(handleTimerTick);
-              }
-              break;
-            case 'PAUSE_TRAINER':
-              if (newState.trainer.status === 'running') {
-                newState.trainer.status = 'paused';
-                timer.stop();
-              }
-              break;
-            case 'RESUME_TRAINER':
-              if (newState.trainer.status === 'paused') {
-                newState.trainer.status = 'running';
-                timer.start(handleTimerTick);
-              }
-              break;
-            case 'TIMER_TICK':
-              if (newState.trainer.status === 'running') {
-                const newRemaining = newState.trainer.remaining - action.payload.tick;
-                if (newRemaining <= 0) {
-                  const { executionPlan, currentStepIndex } = newState.trainer;
-                  const nextStepIndex = currentStepIndex + 1;
-                  if (nextStepIndex < executionPlan.length) {
-                    const nextStep = executionPlan[nextStepIndex];
-                    newState.trainer.currentStepIndex = nextStepIndex;
-                    newState.trainer.remaining = nextStep.duration;
-                    if (nextStep.type === 'finished') {
-                      newState.trainer.status = 'finished';
-                      newState.trainer.completedWorkout = { ...newState.trainer.activeWorkout, completed: true };
-                      timer.stop();
-                    }
-                  }
-                } else {
-                  newState.trainer.remaining = newRemaining;
-                }
-              }
-              break;
-            case 'TERMINATE_WORKOUT':
-              if (newState.trainer.status !== 'idle' && newState.trainer.status !== 'finished') {
-                const { executionPlan, currentStepIndex, activeWorkout } = newState.trainer;
-                const currentStep = executionPlan[currentStepIndex];
-                const itemIndex = activeWorkout.items.findIndex(i => i.id === currentStep.item?.id);
-                newState.trainer.status = 'finished';
-                newState.trainer.completedWorkout = { ...activeWorkout, completed: false, terminationPoint: { itemIndex: itemIndex > -1 ? itemIndex : 0, currentSeries: currentStep.context?.currentSeries || 1 } };
-                timer.stop();
-                newState.currentView = 'debriefing';
-              }
-              break;
-            case 'FINISH_WORKOUT':
-              if (newState.trainer.status === 'finished') {
-                newState.trainer = { ...trainerInitialState };
-                newState.currentView = 'calendar';
-              }
-              break;
-          }
-
-          state = newState;
-          if (JSON.stringify(state.workouts) !== JSON.stringify(oldState.workouts)) {
-            saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
-          }
-          notify();
-        };
-
-        return { getState: () => state, subscribe: (callback) => { subscribers.add(callback); return () => subscribers.delete(callback); }, dispatch };
+      /* --- TABLET/DESKTOP OVERRIDES --- */
+      @media (min-width: 768px) {
+          #app-container { padding: 2rem; }
+          .calendar-grid { grid-template-columns: repeat(7, 1fr); gap: 1rem; }
+          .modal-content { max-width: 600px; height: auto; max-height: 80vh; }
+          .progress-ring { width: 300px; height: 300px; }
       }
-
-      const store = createStore();
-      export default store;
 commands:
-  - "echo 'Riprogettazione del timer completata con successo!'"
-  - "echo 'La gestione del timer è ora più robusta e il codice più pulito.'"
-  - "echo 'Ripristinata la console.table e la logica di annuncio per le fasi tempo.'"
+  - "echo 'Animazione di flashing aggiornata con successo!'"
