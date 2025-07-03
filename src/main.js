@@ -6,7 +6,6 @@ import { init as initDebriefingView } from './views/DebriefingView.js';
 import { init as initModal } from './ui/Modal.js';
 import { init as initNotice } from './ui/Notice.js';
 import { loadFromStorage, saveToStorage } from './modules/storage.js';
-import { mockWorkouts } from './modules/_mockData.js';
 
 const WORKOUTS_STORAGE_KEY = 'workouts';
 const TICK_INTERVAL = 100;
@@ -21,8 +20,9 @@ const initializedViews = new Set();
 function initializeApp() {
   let workouts = loadFromStorage(WORKOUTS_STORAGE_KEY);
   if (!workouts) {
-    saveToStorage(WORKOUTS_STORAGE_KEY, mockWorkouts);
-    workouts = mockWorkouts;
+    // Inizializza con un oggetto vuoto se non c'è nulla nello storage
+    workouts = {};
+    saveToStorage(WORKOUTS_STORAGE_KEY, workouts);
   }
   store.dispatch({ type: 'SET_WORKOUTS', payload: workouts });
 
@@ -64,7 +64,6 @@ function handleTrainerEffects() {
 
     if (trainerState === 'running' && !timerInterval) {
         timerInterval = setInterval(() => {
-            // Usiamo un payload fittizio per il tick, la logica del tempo è ora interna allo store
             store.dispatch({ type: 'TIMER_TICK', payload: { tick: TICK_INTERVAL } });
         }, TICK_INTERVAL);
     }
