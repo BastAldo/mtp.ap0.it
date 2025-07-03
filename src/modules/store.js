@@ -39,7 +39,7 @@ function createStore() {
       case 'ADD_REST_ITEM': { const { date } = action.payload; const dateKey = `workout-${date}`; const newItem = { id: `item-${Date.now()}`, type: 'rest', duration: 60 }; const newWorkouts = cloneWorkouts(state.workouts); const dayWorkout = newWorkouts[dateKey] || []; dayWorkout.push(newItem); newWorkouts[dateKey] = dayWorkout; newState = { ...state, workouts: newWorkouts }; break; }
       case 'REMOVE_WORKOUT_ITEM': { const { date, itemId } = action.payload; const dateKey = `workout-${date}`; const newWorkouts = cloneWorkouts(state.workouts); newWorkouts[dateKey] = (newWorkouts[dateKey] || []).filter(item => item.id !== itemId); newState = { ...state, workouts: newWorkouts }; break; }
       case 'UPDATE_REST_DURATION': { const { date, itemId, newDuration } = action.payload; const dateKey = `workout-${date}`; const newWorkouts = cloneWorkouts(state.workouts); const dayWorkout = newWorkouts[dateKey] || []; const itemIndex = dayWorkout.findIndex(item => item.id === itemId); if (itemIndex > -1 && dayWorkout[itemIndex].type === 'rest') { dayWorkout[itemIndex].duration = newDuration; newWorkouts[dateKey] = dayWorkout; newState = { ...state, workouts: newWorkouts }; } break; }
-      case 'REORDER_WORKOUT_ITEMS': { const { date, draggedItemId, targetItemId } = action.payload; const dateKey = `workout-${date}`; const newWorkouts = cloneWorkouts(state.workouts); const items = newWorkouts[dateKey] || []; const draggedIndex = items.findIndex(item => item.id === draggedItemId); const targetIndex = items.findIndex(item => item.id === targetItemId); if (draggedIndex > -1 && targetIndex > -1) { const [draggedItem] = items.splice(draggedIndex, 1); items.splice(targetIndex, 0, draggedItem); newWorkouts[dateKey] = items; newState = { ...state, workouts: newWorkouts }; } break;
+      case 'REORDER_WORKOUT_ITEMS': { const { date, draggedItemId, targetItemId } = action.payload; const dateKey = `workout-${date}`; const newWorkouts = cloneWorkouts(state.workouts); const items = newWorkouts[dateKey] || []; const draggedIndex = items.findIndex(item => item.id === draggedItemId); const targetIndex = items.findIndex(item => item.id === targetItemId); if (draggedIndex > -1 && targetIndex > -1) { const [draggedItem] = items.splice(draggedIndex, 1); items.splice(targetIndex, 0, draggedItem); newWorkouts[dateKey] = items; newState = { ...state, workouts: newWorkouts }; } break; }
 
       // --- TRAINER LIFECYCLE (REFACTORED) ---
       case 'START_WORKOUT': {
@@ -61,7 +61,6 @@ function createStore() {
         const { executionPlan, currentStepIndex } = state.trainerContext;
         const nextStepIndex = currentStepIndex + 1;
         if (nextStepIndex >= executionPlan.length) {
-          // Should not happen due to 'finished' step, but as a safeguard:
           dispatch({ type: 'FINISH_WORKOUT' });
           shouldNotify = false;
           break;
@@ -81,7 +80,7 @@ function createStore() {
           newState = { ...state, trainerContext: { ...state.trainerContext, remaining: newRemaining } };
         } else {
           dispatch({ type: 'ADVANCE_PLAN' });
-          shouldNotify = false; // ADVANCE_PLAN will trigger its own notification
+          shouldNotify = false;
         }
         break;
       }
@@ -98,20 +97,27 @@ function createStore() {
         break;
       }
       case 'FINISH_WORKOUT': {
-        const fullPlan = state.trainerContext.executionPlan.map(step => step.item).filter(Boolean);
+        // Il fullPlan contiene solo gli item originali, per il debriefing.
+        const fullPlan = state.activeWorkout.items;
         newState = { ...state, currentView: 'debriefing', completedWorkout: { ...state.activeWorkout, completed: true, fullPlan }, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
         break;
       }
       case 'TERMINATE_WORKOUT': {
         const { activeWorkout, trainerContext } = state;
         const { executionPlan, currentStepIndex } = trainerContext;
-        const fullPlan = executionPlan.map(step => step.item).filter(Boolean);
+        const fullPlan = activeWorkout.items;
+        
+        // Safeguard: Trova l'indice dell'item originale per un debriefing accurato
+        const currentStep = executionPlan[currentStepIndex];
+        const currentItem = currentStep?.item;
+        const originalItemIndex = currentItem ? fullPlan.findIndex(i => i.id === currentItem.id) : -1;
 
-        // Find the original item index from the step
-        const currentItem = executionPlan[currentStepIndex].item;
-        const originalItemIndex = activeWorkout.items.findIndex(i => i.id === currentItem.id);
+        const terminationPoint = {
+          itemIndex: originalItemIndex > -1 ? originalItemIndex : 0,
+          currentSeries: currentStep?.context?.currentSeries || 1,
+        };
 
-        const partialWorkout = { ...activeWorkout, completed: false, fullPlan, terminationPoint: { itemIndex: originalItemIndex, currentSeries: executionPlan[currentStepIndex].context?.currentSeries || 1 } };
+        const partialWorkout = { ...activeWorkout, completed: false, fullPlan, terminationPoint };
         newState = { ...state, currentView: 'debriefing', completedWorkout: partialWorkout, activeWorkout: null, trainerState: 'idle', trainerContext: {} };
         break;
       }

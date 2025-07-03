@@ -1,17 +1,22 @@
 // --- Modulo Generatore di Piani di Esecuzione per il Trainer ---
 
 /**
- * "Srotola" un esercizio in una sequenza di passi (annuncio, azione, riposo).
- * @param {object} item - L'item di esercizio dal workout.
- * @param {number} seriesIndex - L'indice della serie corrente (1-based).
- * @returns {array} - Un array di oggetti-passo per la serie.
+ * Struttura di un "Oggetto-Passo" (Step Object) generato:
+ * {
+ * type: string,          // 'preparing', 'announcing', 'action', 'rest', 'finished'
+ * duration: number,      // Durata del passo in millisecondi
+ * headerTitle: string,   // Testo principale per l'header del trainer (es. nome esercizio)
+ * mainText: string,      // Testo secondario per il centro del trainer (es. 'RIPOSO', 'UP', 'DOWN')
+ * item?: object,         // Riferimento all'item originale del workout (se applicabile)
+ * context?: object,      // Contesto specifico del passo (es. { currentSeries, totalSeries, ... })
+ * }
  */
+
 function unrollExerciseSeries(item, seriesIndex) {
     const steps = [];
     const totalSeries = item.series || 1;
     const totalReps = item.reps || 1;
 
-    // 1. Annuncio Iniziale (solo per la prima serie di un esercizio)
     if (seriesIndex === 1) {
         steps.push({
             type: 'announcing',
@@ -22,7 +27,6 @@ function unrollExerciseSeries(item, seriesIndex) {
         });
     }
 
-    // 2. Passi di Azione (Repetizioni e Fasi Tempo)
     for (let repIndex = 1; repIndex <= totalReps; repIndex++) {
         if (item.type === 'time') {
             steps.push({
@@ -48,7 +52,6 @@ function unrollExerciseSeries(item, seriesIndex) {
         }
     }
 
-    // 3. Riposo tra le serie (se non è l'ultima serie)
     if (seriesIndex < totalSeries) {
         steps.push({
             type: 'rest',
@@ -63,17 +66,11 @@ function unrollExerciseSeries(item, seriesIndex) {
     return steps;
 }
 
-/**
- * Compila un array di workout items in un piano di esecuzione sequenziale.
- * @param {array} workoutItems - L'array di esercizi e riposi.
- * @returns {array} - L'executionPlan completo.
- */
 export function generatePlan(workoutItems) {
     if (!workoutItems || workoutItems.length === 0) return [];
 
     const plan = [];
 
-    // Passo 0: Preparazione iniziale
     plan.push({
         type: 'preparing',
         duration: 3000,
@@ -91,7 +88,7 @@ export function generatePlan(workoutItems) {
                 isSeriesRest: false,
                 item,
             });
-        } else { // 'exercise' o 'time'
+        } else {
             const totalSeries = item.series || 1;
             for (let i = 1; i <= totalSeries; i++) {
                 plan.push(...unrollExerciseSeries(item, i));
@@ -99,7 +96,6 @@ export function generatePlan(workoutItems) {
         }
     });
 
-    // Passo Finale: Completamento
     plan.push({
         type: 'finished',
         duration: 0,

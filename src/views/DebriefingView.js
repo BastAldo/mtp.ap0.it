@@ -1,7 +1,7 @@
 import store from '../modules/store.js';
 
 function generateSummaryHtml(completedWorkout) {
-    if (!completedWorkout) return '<p>Nessun dato di allenamento disponibile.</p>';
+    if (!completedWorkout || !completedWorkout.fullPlan) return '<p>Nessun dato di allenamento disponibile.</p>';
 
     const title = completedWorkout.completed
         ? '<h2>Workout Completato!</h2>'
@@ -16,16 +16,15 @@ function generateSummaryHtml(completedWorkout) {
 
         if (completedWorkout.completed) {
             itemClass += ' debrief-item--completed';
-        } else {
+        } else if (termPoint) {
             if (index < termPoint.itemIndex) {
                 itemClass += ' debrief-item--completed';
             } else if (index === termPoint.itemIndex) {
                 itemClass += ' debrief-item--terminated';
-                const currentSeries = termPoint.currentSeries || 1;
-                statusText = `(interrotto alla serie ${currentSeries})`;
+                statusText = `(interrotto alla serie ${termPoint.currentSeries})`;
             } else {
                 itemClass += ' debrief-item--skipped';
-                animationDelay = ''; // Don't animate skipped items
+                animationDelay = '';
             }
         }
 
@@ -45,7 +44,7 @@ function generateSummaryHtml(completedWorkout) {
 }
 
 function generateTextForCoach(completedWorkout) {
-    if (!completedWorkout) return 'Nessun dato disponibile.';
+    if (!completedWorkout || !completedWorkout.fullPlan) return 'Nessun dato disponibile.';
     const date = new Date(completedWorkout.date).toLocaleDateString('it-IT');
     const status = completedWorkout.completed ? 'Completato' : 'Interrotto';
     let report = `Report Allenamento - ${date} (${status})\n====================\n\n`;
@@ -53,13 +52,11 @@ function generateTextForCoach(completedWorkout) {
     const termPoint = completedWorkout.terminationPoint;
 
     completedWorkout.fullPlan.forEach((item, index) => {
-        let statusTag = '';
-        if (!completedWorkout.completed) {
+        let statusTag = '[✓]';
+        if (!completedWorkout.completed && termPoint) {
             if (index < termPoint.itemIndex) statusTag = '[✓]';
             else if (index === termPoint.itemIndex) statusTag = '[✗]';
             else statusTag = '[-]';
-        } else {
-            statusTag = '[✓]';
         }
 
         if (item.type === 'rest') {
@@ -113,7 +110,6 @@ export function init(element) {
     });
 
     store.subscribe(() => {
-        // Re-render only if the view is active to avoid unnecessary work
         if(element.classList.contains('view--active')) {
             render(element);
         }
