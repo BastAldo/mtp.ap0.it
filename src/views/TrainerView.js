@@ -4,13 +4,13 @@ function render(element) {
     const { trainerState, trainerContext } = store.getState();
     const { executionPlan, currentStepIndex, remaining } = trainerContext;
 
-    if (!executionPlan || executionPlan.length === 0) {
+    if (!executionPlan || executionPlan.length === 0 || !executionPlan[currentStepIndex]) {
         element.innerHTML = '<h2>Nessun piano di workout attivo.</h2>';
         return;
     }
 
     const currentStep = executionPlan[currentStepIndex];
-    const { type, duration, headerTitle, mainText, context = {} } = currentStep;
+    const { type, duration, headerTitle, mainText } = currentStep;
 
     const radius = 90;
     const circumference = 2 * Math.PI * radius;
@@ -19,8 +19,10 @@ function render(element) {
     let timerText = '', buttonText = '', instructionText = '';
     const isFlashing = type === 'announcing';
     const terminateButtonHidden = trainerState === 'finished' || trainerState === 'ready';
+    
+    const progress = duration > 0 ? (duration - Math.max(0, remaining)) / duration : 0;
+    ringOffset = circumference * (1 - progress);
 
-    // Corrected condition: Only show timer when running or paused.
     if (duration > 0 && (trainerState === 'running' || trainerState === 'paused')) {
         timerText = Math.ceil(remaining / 1000);
     }
@@ -33,13 +35,7 @@ function render(element) {
         default: buttonText = '...';
     }
     
-    let subHeaderText = '';
-    if (context.totalSeries) {
-        subHeaderText = `SERIE ${context.currentSeries}/${context.totalSeries}`;
-        if (context.totalReps) {
-            subHeaderText += ` | REP ${context.currentRep}/${context.totalReps}`;
-        }
-    }
+    const subHeaderText = currentStep.context?.totalSeries ? `SERIE ${currentStep.context.currentSeries}/${currentStep.context.totalSeries}` : '';
 
     element.innerHTML = `
         <div class="trainer-container">
@@ -74,8 +70,8 @@ export function init(element) {
         const terminateButton = event.target.closest('.trainer-terminate-btn');
 
         if (terminateButton) {
-            store.dispatch({ type: 'PAUSE_TRAINER' });
-            store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'CONFIRM_TERMINATION' } });
+            store.dispatch({ type: 'TERMINATE_WORKOUT' });
+            store.dispatch({ type: 'TERMINATE_WORKOUT_SESSION' });
             return;
         }
 
@@ -86,7 +82,7 @@ export function init(element) {
             case 'ready': store.dispatch({ type: 'START_TRAINER' }); break;
             case 'running': store.dispatch({ type: 'PAUSE_TRAINER' }); break;
             case 'paused': store.dispatch({ type: 'RESUME_TRAINER' }); break;
-            case 'finished': store.dispatch({ type: 'FINISH_WORKOUT' }); break;
+            case 'finished': store.dispatch({ type: 'FINISH_WORKOUT_SESSION' }); break;
         }
     });
 

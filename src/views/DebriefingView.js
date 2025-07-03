@@ -1,7 +1,7 @@
 import store from '../modules/store.js';
 
 function generateSummaryHtml(completedWorkout) {
-    if (!completedWorkout || !completedWorkout.fullPlan) return '<p>Nessun dato di allenamento disponibile.</p>';
+    if (!completedWorkout || !completedWorkout.items) return '<p>Nessun dato di allenamento disponibile.</p>';
 
     const title = completedWorkout.completed
         ? '<h2>Workout Completato!</h2>'
@@ -9,7 +9,7 @@ function generateSummaryHtml(completedWorkout) {
 
     const termPoint = completedWorkout.terminationPoint;
 
-    const itemsHtml = completedWorkout.fullPlan.map((item, index) => {
+    const itemsHtml = completedWorkout.items.map((item, index) => {
         let itemClass = 'debrief-item';
         let statusText = '';
         let animationDelay = `style="animation-delay: ${index * 50}ms;"`;
@@ -44,14 +44,14 @@ function generateSummaryHtml(completedWorkout) {
 }
 
 function generateTextForCoach(completedWorkout) {
-    if (!completedWorkout || !completedWorkout.fullPlan) return 'Nessun dato disponibile.';
+    if (!completedWorkout || !completedWorkout.items) return 'Nessun dato disponibile.';
     const date = new Date(completedWorkout.date).toLocaleDateString('it-IT');
     const status = completedWorkout.completed ? 'Completato' : 'Interrotto';
     let report = `Report Allenamento - ${date} (${status})\n====================\n\n`;
 
     const termPoint = completedWorkout.terminationPoint;
 
-    completedWorkout.fullPlan.forEach((item, index) => {
+    completedWorkout.items.forEach((item, index) => {
         let statusTag = '[✓]';
         if (!completedWorkout.completed && termPoint) {
             if (index < termPoint.itemIndex) statusTag = '[✓]';
@@ -74,9 +74,8 @@ function generateTextForCoach(completedWorkout) {
     return report;
 }
 
-
 function render(element) {
-    const { completedWorkout } = store.getState();
+    const { completedWorkout } = store.getState().trainer;
     const summaryHtml = generateSummaryHtml(completedWorkout);
     const actionsHtml = `
         <div class="debriefing-actions">
@@ -98,7 +97,7 @@ export function init(element) {
             store.dispatch({ type: 'CHANGE_VIEW', payload: 'calendar' });
         }
         if (event.target.closest('.copy-btn')) {
-            const { completedWorkout } = store.getState();
+            const { completedWorkout } = store.getState().trainer;
             const textToCopy = generateTextForCoach(completedWorkout);
             navigator.clipboard.writeText(textToCopy).then(() => {
                 store.dispatch({ type: 'SHOW_NOTICE', payload: { message: 'Riepilogo copiato!' } });
@@ -111,7 +110,10 @@ export function init(element) {
 
     store.subscribe(() => {
         if(element.classList.contains('view--active')) {
-            render(element);
+            const { completedWorkout } = store.getState().trainer;
+            if (completedWorkout) {
+              render(element);
+            }
         }
     });
     element.innerHTML = '';

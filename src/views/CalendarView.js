@@ -33,7 +33,7 @@ export function init(element) {
     const startButton = event.target.closest('.start-btn');
     if (startButton) {
       const date = dayCell.dataset.date;
-      store.dispatch({ type: 'START_WORKOUT', payload: { date } });
+      store.dispatch({ type: 'START_WORKOUT_SESSION', payload: { date } });
       return;
     }
 

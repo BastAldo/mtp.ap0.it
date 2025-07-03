@@ -8,7 +8,6 @@ import { loadFromStorage, saveToStorage } from './modules/storage.js';
 import { mockWorkouts } from './modules/_mockData.js';
 
 const WORKOUTS_STORAGE_KEY = 'workouts';
-const TICK_INTERVAL = 100;
 
 const views = {
     calendar: document.getElementById('calendar-view'),
@@ -49,29 +48,14 @@ function handleViewChange() {
   }
 }
 
-// --- Side Effect Handler for Trainer Timers (REFACTORED) ---
-let timerInterval = null;
-
-function handleTrainerEffects() {
-    const { trainerState } = store.getState();
-
-    // Pulisci sempre il timer se non siamo in 'running'
-    if (trainerState !== 'running' && timerInterval) {
-        clearInterval(timerInterval);
-        timerInterval = null;
-    }
-
-    // Avvia il timer solo se siamo in 'running' e non c'è già un timer attivo
-    if (trainerState === 'running' && !timerInterval) {
-        timerInterval = setInterval(() => {
-            store.dispatch({ type: 'TIMER_TICK', payload: { tick: TICK_INTERVAL } });
-        }, TICK_INTERVAL);
-    }
+// --- Motore Principale dell'Applicazione (basato su requestAnimationFrame) ---
+function gameLoop(timestamp) {
+    store.dispatch({ type: 'TICK', payload: { timestamp } });
+    requestAnimationFrame(gameLoop);
 }
 
-
 store.subscribe(handleViewChange);
-store.subscribe(handleTrainerEffects);
 
 initializeApp();
+requestAnimationFrame(gameLoop); // Avvia il ciclo principale dell'applicazione
 console.log('App "Mio Trainer Personale" inizializzata.');
