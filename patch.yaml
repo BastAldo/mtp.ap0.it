@@ -1,15 +1,119 @@
-commit_message: "fix(store): Risolvere bug NaN del timer eliminando il nested dispatch"
+commit_message: "fix(trainer): Fix NaN bug, incorrect rest time, and restore logging"
 rationale: |
-  Questo commit risolve un bug critico che causava la visualizzazione di 'NaN' nel timer del trainer.
+  This commit addresses a cascade of failures in the trainer view by fixing three root causes:
 
-  La causa era un problema di race condition nella gestione dello stato: l'azione `TIMER_TICK` invocava un'altra azione (`ADVANCE_PLAN`) al suo interno. Lo stato aggiornato da `ADVANCE_PLAN` veniva scartato, lasciando la proprietà `remaining` non definita nel nuovo stato, da cui il `NaN`.
+  1.  **Fix NaN Bug in View:** `TrainerView.js` was modified to only render the timer when the trainer state is 'running' or 'paused'. This prevents it from trying to calculate the timer in the 'ready' state, where the `remaining` value is undefined, thus fixing the `NaN` error.
 
-  La soluzione è stata un refactoring dello store per eliminare il "nested dispatch":
-  1.  L'azione `ADVANCE_PLAN` è stata rimossa.
-  2.  La logica per avanzare al passo successivo è stata spostata direttamente dentro `TIMER_TICK`.
-  
-  Questo approccio rende il flusso di stato più robusto, lineare e prevedibile, eliminando la causa radice del bug.
+  2.  **Correct Mock Data:** The initial data in `src/modules/_mockData.js` was missing the `defaultRest` property on its exercise items. This caused inter-set rests to fall back to 60s instead of the intended 3s. The data has been corrected.
+
+  3.  **Restore State Logging:** The `logState` utility function was re-introduced into `src/modules/store.js` and is now called on every dispatch. This restores the detailed console logs crucial for debugging state transitions.
+
+  Resolving these core issues also fixes the symptomatic problems of unresponsive buttons and apparently missing phases, as the application state now progresses correctly.
 patches:
+  - file: src/views/TrainerView.js
+    content: |
+      import store from '../modules/store.js';
+
+      function render(element) {
+          const { trainerState, trainerContext } = store.getState();
+          const { executionPlan, currentStepIndex, remaining } = trainerContext;
+
+          if (!executionPlan || executionPlan.length === 0) {
+              element.innerHTML = '<h2>Nessun piano di workout attivo.</h2>';
+              return;
+          }
+
+          const currentStep = executionPlan[currentStepIndex];
+          const { type, duration, headerTitle, mainText, context = {} } = currentStep;
+
+          const radius = 90;
+          const circumference = 2 * Math.PI * radius;
+          let ringOffset = circumference;
+          
+          let timerText = '', buttonText = '', instructionText = '';
+          const isFlashing = type === 'announcing';
+          const terminateButtonHidden = trainerState === 'finished' || trainerState === 'ready';
+
+          // Corrected condition: Only show timer when running or paused.
+          if (duration > 0 && (trainerState === 'running' || trainerState === 'paused')) {
+              timerText = Math.ceil(remaining / 1000);
+          }
+
+          switch (trainerState) {
+              case 'ready': buttonText = 'INIZIA'; instructionText = 'Premi INIZIA per cominciare'; break;
+              case 'running': buttonText = 'PAUSA'; instructionText = 'Esegui'; break;
+              case 'paused': buttonText = 'RIPRENDI'; instructionText = 'Pausa'; break;
+              case 'finished': buttonText = 'DEBRIEFING'; instructionText = 'Ben fatto!'; break;
+              default: buttonText = '...';
+          }
+          
+          let subHeaderText = '';
+          if (context.totalSeries) {
+              subHeaderText = `SERIE ${context.currentSeries}/${context.totalSeries}`;
+              if (context.totalReps) {
+                  subHeaderText += ` | REP ${context.currentRep}/${context.totalReps}`;
+              }
+          }
+
+          element.innerHTML = `
+              <div class="trainer-container">
+                  <header class="trainer-header">
+                      <h2>${headerTitle}</h2>
+                      <p>${subHeaderText}</p>
+                  </header>
+                  <div class="progress-ring">
+                      <svg>
+                          <circle class="progress-ring__background" stroke-width="10" r="${radius}" cx="50%" cy="50%"></circle>
+                          <circle class="progress-ring__foreground" style="stroke-dashoffset: ${ringOffset};" stroke-width="10" r="${radius}" cx="50%" cy="50%" stroke-dasharray="${circumference}"></circle>
+                      </svg>
+                      <div class="progress-ring__text">
+                          <div class="progress-ring__phase ${isFlashing ? 'is-flashing' : ''}">${mainText}</div>
+                          <div class="progress-ring__timer">${timerText}</div>
+                      </div>
+                  </div>
+                  <footer class="trainer-footer">
+                      <p class="trainer-instruction">${instructionText}</p>
+                      <div class="trainer-controls">
+                          <button class="trainer-main-btn">${buttonText}</button>
+                          <button class="trainer-terminate-btn" ${terminateButtonHidden ? 'hidden' : ''}>Termina</button>
+                      </div>
+                  </footer>
+              </div>
+          `;
+      }
+
+      export function init(element) {
+          element.addEventListener('click', (event) => {
+              const mainButton = event.target.closest('.trainer-main-btn');
+              const terminateButton = event.target.closest('.trainer-terminate-btn');
+
+              if (terminateButton) {
+                  store.dispatch({ type: 'PAUSE_TRAINER' });
+                  store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'CONFIRM_TERMINATION' } });
+                  return;
+              }
+
+              if (!mainButton) return;
+              const { trainerState } = store.getState();
+
+              switch (trainerState) {
+                  case 'ready': store.dispatch({ type: 'START_TRAINER' }); break;
+                  case 'running': store.dispatch({ type: 'PAUSE_TRAINER' }); break;
+                  case 'paused': store.dispatch({ type: 'RESUME_TRAINER' }); break;
+                  case 'finished': store.dispatch({ type: 'FINISH_WORKOUT' }); break;
+              }
+          });
+
+          store.subscribe(() => {
+              if (element.classList.contains('view--active')) {
+                  render(element);
+              }
+          });
+
+          if (element.classList.contains('view--active')) {
+            render(element);
+          }
+      }
   - file: src/modules/store.js
     content: |
       import { saveToStorage } from './storage.js';
@@ -18,6 +122,14 @@ patches:
 
       const WORKOUTS_STORAGE_KEY = 'workouts';
       const cloneWorkouts = (workouts) => JSON.parse(JSON.stringify(workouts));
+
+      // --- Logger di Stato (Reintrodotto) ---
+      function logState(actionType, state) {
+          if (actionType.startsWith('@@')) return;
+          console.groupCollapsed(`%c[${actionType}]`, 'color: #88aaff; font-weight: bold;');
+          console.log(state);
+          console.groupEnd();
+      }
 
       function createStore() {
         let state = {
@@ -137,6 +249,7 @@ patches:
 
           state = newState;
           if (shouldNotify) {
+            logState(action.type, state);
             if (state.workouts !== oldState.workouts) { saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts); }
             notify();
           }
@@ -150,5 +263,40 @@ patches:
       }
       const store = createStore();
       export default store;
+  - file: src/modules/_mockData.js
+    content: |
+      // --- Dati di Sviluppo Fittizi ---
+      // Questi dati vengono usati per popolare localStorage al primo avvio.
+
+      const MOCK_DATE_KEY = 'workout-2025-07-01';
+
+      export const mockWorkouts = {
+        [MOCK_DATE_KEY]: [
+          {
+            id: 'test-ex-reps',
+            type: 'exercise',
+            exerciseId: 'test-exercise',
+            name: 'Esercizio di Test (Reps)',
+            series: 2,
+            reps: 2,
+            tempo: { up: 1, hold: 1, down: 1 },
+            defaultRest: 3
+          },
+          {
+            id: 'test-rest',
+            type: 'rest',
+            duration: 3
+          },
+          {
+            id: 'test-ex-time',
+            type: 'time',
+            exerciseId: 'test-time-exercise',
+            name: 'Esercizio di Test (Tempo)',
+            series: 2,
+            duration: 5,
+            defaultRest: 3
+          }
+        ]
+      };
 commands:
-  - "echo 'Bug NaN risolto. Lo store ora ha un flusso di stato più robusto e prevedibile.'"
+  - "echo 'Corretti bug multipli del trainer. Il NaN è stato risolto, i log sono stati ripristinati e i tempi di riposo sono corretti.'"

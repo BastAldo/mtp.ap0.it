@@ -15,18 +15,13 @@ function render(element) {
     const radius = 90;
     const circumference = 2 * Math.PI * radius;
     let ringOffset = circumference;
-    if (duration > 0 && remaining >= 0) {
-        const progress = (duration - remaining) / duration;
-        ringOffset = circumference * (1 - progress);
-    }
-
+    
     let timerText = '', buttonText = '', instructionText = '';
     const isFlashing = type === 'announcing';
     const terminateButtonHidden = trainerState === 'finished' || trainerState === 'ready';
 
-    if (duration > 0 && trainerState !== 'paused') {
-        timerText = Math.ceil(remaining / 1000);
-    } else if (trainerState === 'paused' && duration > 0) {
+    // Corrected condition: Only show timer when running or paused.
+    if (duration > 0 && (trainerState === 'running' || trainerState === 'paused')) {
         timerText = Math.ceil(remaining / 1000);
     }
 

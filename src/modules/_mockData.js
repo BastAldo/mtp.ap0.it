@@ -12,7 +12,8 @@ export const mockWorkouts = {
       name: 'Esercizio di Test (Reps)',
       series: 2,
       reps: 2,
-      tempo: { up: 1, hold: 1, down: 1 }
+      tempo: { up: 1, hold: 1, down: 1 },
+      defaultRest: 3
     },
     {
       id: 'test-rest',
@@ -21,11 +22,12 @@ export const mockWorkouts = {
     },
     {
       id: 'test-ex-time',
-      type: 'time', // Corretto per chiarezza, anche se l'ultimo vinceva.
+      type: 'time',
       exerciseId: 'test-time-exercise',
       name: 'Esercizio di Test (Tempo)',
       series: 2,
-      duration: 5
+      duration: 5,
+      defaultRest: 3
     }
   ]
 };

@@ -5,6 +5,14 @@ import { generatePlan } from './planGenerator.js';
 const WORKOUTS_STORAGE_KEY = 'workouts';
 const cloneWorkouts = (workouts) => JSON.parse(JSON.stringify(workouts));
 
+// --- Logger di Stato (Reintrodotto) ---
+function logState(actionType, state) {
+    if (actionType.startsWith('@@')) return;
+    console.groupCollapsed(`%c[${actionType}]`, 'color: #88aaff; font-weight: bold;');
+    console.log(state);
+    console.groupEnd();
+}
+
 function createStore() {
   let state = {
     currentView: 'calendar',
@@ -123,6 +131,7 @@ function createStore() {
 
     state = newState;
     if (shouldNotify) {
+      logState(action.type, state);
       if (state.workouts !== oldState.workouts) { saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts); }
       notify();
     }
