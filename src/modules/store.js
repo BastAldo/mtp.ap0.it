@@ -1,11 +1,12 @@
 import { saveToStorage } from './storage.js';
 import { getExerciseById } from './exerciseRepository.js';
 import { generatePlan } from './planGenerator.js';
+import * as timer from './timer.js';
 
 const WORKOUTS_STORAGE_KEY = 'workouts';
 
 const trainerInitialState = {
-    status: 'idle', // idle, ready, running, paused, finished
+    status: 'idle',
     executionPlan: null,
     currentStepIndex: 0,
     remaining: 0,
@@ -26,6 +27,10 @@ function createStore() {
 
   const subscribers = new Set();
   function notify() { for (const callback of subscribers) { callback(); } }
+
+  function handleTimerTick(tick) {
+      dispatch({ type: 'TIMER_TICK', payload: { tick } });
+  }
 
   const dispatch = (action) => {
     if (action.type !== 'TIMER_TICK') {
@@ -48,11 +53,14 @@ function createStore() {
       case 'REMOVE_WORKOUT_ITEM': { const { date, itemId } = action.payload; const dateKey = `workout-${date}`; const updatedWorkout = (newState.workouts[dateKey] || []).filter(item => item.id !== itemId); newState.workouts = { ...newState.workouts, [dateKey]: updatedWorkout }; break; }
       case 'UPDATE_REST_DURATION': { const { date, itemId, newDuration } = action.payload; const dateKey = `workout-${date}`; const dayWorkout = (newState.workouts[dateKey] || []).map(item => item.id === itemId ? { ...item, duration: newDuration } : item); newState.workouts = { ...newState.workouts, [dateKey]: dayWorkout }; break; }
       case 'REORDER_WORKOUT_ITEMS': { const { date, draggedItemId, targetItemId } = action.payload; const dateKey = `workout-${date}`; const items = [...(newState.workouts[dateKey] || [])]; const draggedIndex = items.findIndex(item => item.id === draggedItemId); const targetIndex = items.findIndex(item => item.id === targetItemId); if (draggedIndex > -1 && targetIndex > -1) { const [draggedItem] = items.splice(draggedIndex, 1); items.splice(targetIndex, 0, draggedItem); newState.workouts = { ...newState.workouts, [dateKey]: items }; } break; }
+      
       case 'START_WORKOUT': {
         const { date } = action.payload;
         const workoutItems = newState.workouts[`workout-${date}`];
         if (workoutItems?.length > 0) {
           const plan = generatePlan(workoutItems);
+          console.log("--- Piano di Esecuzione Generato ---");
+          console.table(plan);
           newState.currentView = 'trainer';
           newState.trainer = { ...trainerInitialState, status: 'ready', executionPlan: plan, activeWorkout: { date, items: workoutItems } };
         }
@@ -63,10 +71,21 @@ function createStore() {
           newState.trainer.status = 'running';
           const firstStep = newState.trainer.executionPlan[0];
           newState.trainer.remaining = firstStep.duration;
+          timer.start(handleTimerTick);
         }
         break;
-      case 'PAUSE_TRAINER': if (newState.trainer.status === 'running') { newState.trainer.status = 'paused'; } break;
-      case 'RESUME_TRAINER': if (newState.trainer.status === 'paused') { newState.trainer.status = 'running'; } break;
+      case 'PAUSE_TRAINER':
+        if (newState.trainer.status === 'running') {
+          newState.trainer.status = 'paused';
+          timer.stop();
+        }
+        break;
+      case 'RESUME_TRAINER':
+        if (newState.trainer.status === 'paused') {
+          newState.trainer.status = 'running';
+          timer.start(handleTimerTick);
+        }
+        break;
       case 'TIMER_TICK':
         if (newState.trainer.status === 'running') {
           const newRemaining = newState.trainer.remaining - action.payload.tick;
@@ -80,6 +99,7 @@ function createStore() {
               if (nextStep.type === 'finished') {
                 newState.trainer.status = 'finished';
                 newState.trainer.completedWorkout = { ...newState.trainer.activeWorkout, completed: true };
+                timer.stop();
               }
             }
           } else {
@@ -94,12 +114,13 @@ function createStore() {
           const itemIndex = activeWorkout.items.findIndex(i => i.id === currentStep.item?.id);
           newState.trainer.status = 'finished';
           newState.trainer.completedWorkout = { ...activeWorkout, completed: false, terminationPoint: { itemIndex: itemIndex > -1 ? itemIndex : 0, currentSeries: currentStep.context?.currentSeries || 1 } };
+          timer.stop();
           newState.currentView = 'debriefing';
         }
         break;
       case 'FINISH_WORKOUT':
         if (newState.trainer.status === 'finished') {
-          newState.trainer = { ...trainerInitialState }; // Reset trainer state
+          newState.trainer = { ...trainerInitialState };
           newState.currentView = 'calendar';
         }
         break;
