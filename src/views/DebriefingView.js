@@ -77,9 +77,10 @@ function generateTextForCoach(completedWorkout) {
 }
 
 function render(element) {
-    const { completedWorkout } = store.getState().trainer;
-    if (!completedWorkout) return; // Safety check
+    const { trainer } = store.getState();
+    if (!trainer || !trainer.completedWorkout) return; 
 
+    const { completedWorkout } = trainer;
     const summaryHtml = generateSummaryHtml(completedWorkout);
     const actionsHtml = `
         <div class="debriefing-actions">
@@ -114,11 +115,8 @@ export function init(element) {
     });
 
     store.subscribe(() => {
-        if(element.classList.contains('view--active')) {
-            const { completedWorkout } = store.getState().trainer;
-            if (completedWorkout) {
-              render(element);
-            }
+        if (element.classList.contains('view--active')) {
+            render(element);
         }
     });
     element.innerHTML = '';

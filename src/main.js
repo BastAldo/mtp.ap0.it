@@ -1,3 +1,4 @@
+console.log('File loaded: main.js');
 import store from './modules/store.js';
 import { init as initCalendarView } from './views/CalendarView.js';
 import { init as initTrainerView } from './views/TrainerView.js';
@@ -17,6 +18,7 @@ const views = {
 const initializedViews = new Set();
 
 function initializeApp() {
+  console.log('Initializing App...');
   let workouts = loadFromStorage(WORKOUTS_STORAGE_KEY);
   if (!workouts) {
     saveToStorage(WORKOUTS_STORAGE_KEY, mockWorkouts);
@@ -28,11 +30,14 @@ function initializeApp() {
   initializedViews.add('calendar');
   initModal(document.getElementById('modal-container'));
   initNotice(document.getElementById('notice-container'));
+  console.log('App Initialized.');
 }
 
 let currentActiveView = views.calendar;
 function handleViewChange() {
   const { currentView } = store.getState();
+  if(!views[currentView]) return; // Safety check
+
   const newActiveViewEl = views[currentView];
 
   if (currentActiveView !== newActiveViewEl) {
@@ -57,4 +62,3 @@ store.subscribe(handleViewChange);
 
 initializeApp();
 requestAnimationFrame(gameLoop);
-console.log('App "Mio Trainer Personale" inizializzata.');

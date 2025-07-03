@@ -2,13 +2,13 @@ import store from '../modules/store.js';
 
 function render(element) {
     const { trainer } = store.getState();
-    const { status, executionPlan, currentStepIndex, remaining } = trainer;
-
-    if (!executionPlan || !executionPlan[currentStepIndex]) {
-        element.innerHTML = '<h2>Nessun workout attivo.</h2>';
+    // Defensive check: Do not render if the trainer isn't ready
+    if (!trainer || !trainer.executionPlan || !trainer.executionPlan[trainer.currentStepIndex]) {
+        element.innerHTML = '<h2>Caricamento...</h2>';
         return;
     }
-
+    
+    const { status, executionPlan, currentStepIndex, remaining } = trainer;
     const currentStep = executionPlan[currentStepIndex];
     const { type, duration, headerTitle, mainText } = currentStep;
 
@@ -31,7 +31,7 @@ function render(element) {
         case 'running': buttonText = 'PAUSA'; instructionText = 'Esegui'; break;
         case 'paused': buttonText = 'RIPRENDI'; instructionText = 'Pausa'; break;
         case 'finished': buttonText = 'DEBRIEFING'; instructionText = 'Ben fatto!'; break;
-        default: buttonText = '...';
+        default: buttonText = '...'; instructionText = 'Stato non valido';
     }
     
     const subHeaderText = currentStep.context?.totalSeries ? `SERIE ${currentStep.context.currentSeries}/${currentStep.context.totalSeries}` : '';
@@ -40,7 +40,7 @@ function render(element) {
         <div class="trainer-container">
             <header class="trainer-header">
                 <h2>${headerTitle}</h2>
-                <p>${subHeaderText}</p>
+                <p>${subHeaderText || ' '}</p>
             </header>
             <div class="progress-ring">
                 <svg>
@@ -67,6 +67,9 @@ export function init(element) {
     element.addEventListener('click', (event) => {
         const mainButton = event.target.closest('.trainer-main-btn');
         const terminateButton = event.target.closest('.trainer-terminate-btn');
+        
+        const { trainer } = store.getState();
+        if(!trainer) return; // Defensive check
 
         if (terminateButton) {
             store.dispatch({ type: 'TERMINATE_WORKOUT' });
@@ -74,9 +77,8 @@ export function init(element) {
         }
 
         if (!mainButton) return;
-        const { status } = store.getState().trainer;
-
-        switch (status) {
+        
+        switch (trainer.status) {
             case 'ready': store.dispatch({ type: 'START_TRAINER' }); break;
             case 'running': store.dispatch({ type: 'PAUSE_TRAINER' }); break;
             case 'paused': store.dispatch({ type: 'RESUME_TRAINER' }); break;
