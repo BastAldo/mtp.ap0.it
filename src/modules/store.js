@@ -10,7 +10,6 @@ const trainerInitialState = {
     status: 'idle',
     executionPlan: null,
     currentStepIndex: 0,
-    stepStartTime: 0,
     remaining: 0,
     activeWorkout: null,
     completedWorkout: null,
@@ -35,11 +34,11 @@ function createStore() {
   }
 
   const dispatch = (action) => {
-    if(action.type !== 'TICK') {
+    if(action.type !== 'TIMER_TICK') {
       console.log(`%c[${action.type}]`, 'color: #88aaff; font-weight: bold;', action.payload || '');
     }
     
-    const oldWorkouts = state.workouts;
+    const oldState = state;
     const newState = clone(state);
 
     switch (action.type) {
@@ -72,33 +71,26 @@ function createStore() {
       }
       case 'START_TRAINER':
           if (newState.trainer.status === 'ready') {
+              const firstStep = newState.trainer.executionPlan[0];
               newState.trainer.status = 'running';
-              newState.trainer.stepStartTime = performance.now();
-              newState.trainer.remaining = newState.trainer.executionPlan[0].duration;
+              newState.trainer.remaining = firstStep.duration;
           }
           break;
       case 'PAUSE_TRAINER':
           if (newState.trainer.status === 'running') newState.trainer.status = 'paused';
           break;
       case 'RESUME_TRAINER':
-          if (newState.trainer.status === 'paused') {
-              newState.trainer.status = 'running';
-              newState.trainer.stepStartTime = performance.now() - (newState.trainer.executionPlan[newState.trainer.currentStepIndex].duration - newState.trainer.remaining);
-          }
+          if (newState.trainer.status === 'paused') newState.trainer.status = 'running';
           break;
-      case 'TICK':
+      case 'TIMER_TICK':
           if (newState.trainer.status === 'running') {
-              const { timestamp } = action.payload;
-              const { executionPlan, currentStepIndex, stepStartTime } = newState.trainer;
-              const { duration } = executionPlan[currentStepIndex];
-              const newRemaining = duration - (timestamp - stepStartTime);
-
+              const newRemaining = newState.trainer.remaining - action.payload.tick;
               if (newRemaining <= 0) {
+                  const { executionPlan, currentStepIndex } = newState.trainer;
                   const nextStepIndex = currentStepIndex + 1;
                   if (nextStepIndex < executionPlan.length) {
                       const nextStep = executionPlan[nextStepIndex];
                       newState.trainer.currentStepIndex = nextStepIndex;
-                      newState.trainer.stepStartTime = timestamp;
                       newState.trainer.remaining = nextStep.duration;
                       if (nextStep.type === 'finished') {
                           newState.trainer.status = 'finished';
@@ -127,7 +119,7 @@ function createStore() {
     
     state = newState;
 
-    if (state.workouts !== oldWorkouts) {
+    if (state.workouts !== oldState.workouts) {
       saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
     }
     notify();
@@ -137,7 +129,7 @@ function createStore() {
       getState: () => state, 
       subscribe: (callback) => {
           subscribers.add(callback);
-          return () => subscribers.delete(callback); // Ritorna una funzione di unsubscribe
+          return () => subscribers.delete(callback);
       },
       dispatch 
   };
