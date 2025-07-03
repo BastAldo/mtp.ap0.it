@@ -4,7 +4,7 @@ import { generatePlan } from './planGenerator.js';
 import * as timer from './timer.js';
 
 const WORKOUTS_STORAGE_KEY = 'workouts';
-const ADVANCE_STEP_DELAY = 150; // ms, superiore alla transizione CSS (100ms)
+const ADVANCE_STEP_DELAY = 150;
 
 const trainerInitialState = {
     status: 'idle',
@@ -34,7 +34,7 @@ function createStore() {
   }
 
   const dispatch = (action) => {
-    if (action.type !== 'TIMER_TICK' && action.type !== 'ADVANCE_STEP') {
+    if (!['TIMER_TICK', 'ADVANCE_STEP', 'GO_TO_DEBRIEFING'].includes(action.type)) {
       console.log(`%c[${action.type}]`, 'color: #88aaff; font-weight: bold;', action.payload || '');
     }
 
@@ -56,12 +56,13 @@ function createStore() {
       case 'REORDER_WORKOUT_ITEMS': { const { date, draggedItemId, targetItemId } = action.payload; const dateKey = `workout-${date}`; const items = [...(newState.workouts[dateKey] || [])]; const draggedIndex = items.findIndex(item => item.id === draggedItemId); const targetIndex = items.findIndex(item => item.id === targetItemId); if (draggedIndex > -1 && targetIndex > -1) { const [draggedItem] = items.splice(draggedIndex, 1); items.splice(targetIndex, 0, draggedItem); newState.workouts = { ...newState.workouts, [dateKey]: items }; } break; }
       
       case 'START_WORKOUT': {
+        newState.trainer = { ...trainerInitialState }; // Reset before starting
         const { date } = action.payload;
         const workoutItems = newState.workouts[`workout-${date}`];
         if (workoutItems?.length > 0) {
           const plan = generatePlan(workoutItems);
           newState.currentView = 'trainer';
-          newState.trainer = { ...trainerInitialState, status: 'ready', executionPlan: plan, activeWorkout: { date, items: workoutItems } };
+          newState.trainer = { ...newState.trainer, status: 'ready', executionPlan: plan, activeWorkout: { date, items: workoutItems } };
         }
         break;
       }
@@ -108,6 +109,7 @@ function createStore() {
               if (nextStep.type === 'finished') {
                   newState.trainer.status = 'finished';
                   newState.trainer.completedWorkout = { ...newState.trainer.activeWorkout, completed: true };
+                  setTimeout(() => dispatch({ type: 'GO_TO_DEBRIEFING' }), 2000);
               } else {
                   timer.start(handleTimerTick);
               }
@@ -125,11 +127,12 @@ function createStore() {
           newState.currentView = 'debriefing';
         }
         break;
+      case 'GO_TO_DEBRIEFING':
+        newState.currentView = 'debriefing';
+        break;
       case 'FINISH_WORKOUT':
-        if (newState.trainer.status === 'finished') {
-          newState.trainer = { ...trainerInitialState };
-          newState.currentView = 'calendar';
-        }
+        newState.trainer = { ...trainerInitialState };
+        newState.currentView = 'calendar';
         break;
     }
 

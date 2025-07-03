@@ -47,42 +47,37 @@ function updateDynamicContent() {
     const { type, duration, headerTitle, mainText, context = {}, item } = currentStep;
     const isAnnouncing = type === 'announcing-phase';
 
-    // --- Update Header ---
     UI_ELEMENTS.headerTitle.textContent = headerTitle;
     UI_ELEMENTS.descriptionText.textContent = item?.description || '';
-
-    // --- Update Ring Content ---
+    
     let mainPhaseText = '';
     let timerText = '';
-
     if (status !== 'ready') {
         mainPhaseText = (type === 'rest') ? 'RIPOSO' : mainText;
         if (type === 'preparing') mainPhaseText = 'Preparati';
     }
     UI_ELEMENTS.mainPhaseText.textContent = mainPhaseText;
     UI_ELEMENTS.mainPhaseText.classList.toggle('is-flashing', isAnnouncing);
-
     if (duration > 0 && status !== 'ready') {
         timerText = String(Math.ceil(remaining / 1000));
     }
     UI_ELEMENTS.timerText.textContent = timerText;
     
-    // --- Update Footer ---
     let buttonText = '...';
     let instructionText = '';
     switch (status) {
         case 'ready': buttonText = 'INIZIA'; instructionText = 'Premi INIZIA per cominciare'; break;
         case 'running': buttonText = 'PAUSA'; instructionText = (type === 'rest') ? mainText : 'Esegui'; break;
         case 'paused': buttonText = 'RIPRENDI'; instructionText = 'Pausa'; break;
-        case 'finished': buttonText = 'DEBRIEFING'; instructionText = 'Ben fatto!'; break;
+        case 'finished': buttonText = 'Completato!'; instructionText = 'Ben fatto!'; break;
     }
     UI_ELEMENTS.mainButton.textContent = buttonText;
     UI_ELEMENTS.instructionText.textContent = instructionText;
+    UI_ELEMENTS.mainButton.disabled = (status === 'finished');
+    UI_ELEMENTS.terminateButton.disabled = (status === 'ready' || status === 'finished');
 
-    // --- Update Visuals ---
     const progress = (duration > 0 && !isAnnouncing && status === 'running') ? (duration - remaining) / duration : (remaining === 0 ? 1 : 0);
     UI_ELEMENTS.progressRing.style.strokeDashoffset = circumference * (1 - progress);
-    UI_ELEMENTS.terminateButton.classList.toggle('is-invisible', status === 'finished' || status === 'ready');
 }
 
 
@@ -95,22 +90,19 @@ export function init(element) {
             case 'ready': store.dispatch({ type: 'START_TRAINER' }); break;
             case 'running': store.dispatch({ type: 'PAUSE_TRAINER' }); break;
             case 'paused': store.dispatch({ type: 'RESUME_TRAINER' }); break;
-            case 'finished': store.dispatch({ type: 'FINISH_WORKOUT' }); break;
         }
     });
 
     UI_ELEMENTS.terminateButton.addEventListener('click', () => {
-        store.dispatch({ type: 'PAUSE_TRAINER' }); // Stoppa il timer per prevenire race conditions
+        store.dispatch({ type: 'PAUSE_TRAINER' });
         store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'CONFIRM_TERMINATION' } });
     });
-
-    // Prima sottoscrizione per l'aggiornamento completo
+    
     store.subscribe(() => {
         if (element.classList.contains('view--active')) {
             updateDynamicContent();
         }
     });
     
-    // Render iniziale
     updateDynamicContent();
 }
