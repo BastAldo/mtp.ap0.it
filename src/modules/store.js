@@ -28,17 +28,21 @@ function createStore() {
   };
 
   const subscribers = new Set();
-  function notify() { subscribers.forEach(callback => callback()); }
+  function notify() { 
+      for (const callback of subscribers) {
+          callback();
+      }
+  }
 
   const dispatch = (action) => {
     if(action.type !== 'TICK') {
       console.log(`%c[${action.type}]`, 'color: #88aaff; font-weight: bold;', action.payload || '');
     }
     
+    const oldWorkouts = state.workouts;
     const newState = clone(state);
 
     switch (action.type) {
-      // --- General App Logic ---
       case 'CHANGE_VIEW': newState.currentView = action.payload; break;
       case 'PREV_WEEK': { const d = new Date(newState.focusedDate); d.setDate(d.getDate() - 7); newState.focusedDate = d; break; }
       case 'NEXT_WEEK': { const d = new Date(newState.focusedDate); d.setDate(d.getDate() + 7); newState.focusedDate = d; break; }
@@ -46,13 +50,12 @@ function createStore() {
       case 'OPEN_MODAL': newState.isModalOpen = true; newState.modalContext = action.payload; break;
       case 'CLOSE_MODAL': newState.isModalOpen = false; newState.modalContext = null; break;
       case 'SHOW_NOTICE': newState.notice = { message: action.payload.message, id: Date.now() }; break;
-      case 'ADD_EXERCISE_ITEM': { const { date, exerciseId } = action.payload; const dateKey = `workout-${date}`; const exercise = getExerciseById(exerciseId); if (!exercise) break; const newItem = { ...exercise, id: `item-${Date.now()}`, type: exercise.type || 'exercise', exerciseId: exercise.id }; const newWorkouts = newState.workouts; const dayWorkout = newWorkouts[dateKey] || []; dayWorkout.push(newItem); newWorkouts[dateKey] = dayWorkout; newState.workouts = newWorkouts; newState.modalContext = { type: 'EDIT_WORKOUT', date }; break; }
-      case 'ADD_REST_ITEM': { const { date } = action.payload; const dateKey = `workout-${date}`; const newItem = { id: `item-${Date.now()}`, type: 'rest', duration: 60 }; const newWorkouts = newState.workouts; const dayWorkout = newWorkouts[dateKey] || []; dayWorkout.push(newItem); newWorkouts[dateKey] = dayWorkout; newState.workouts = newWorkouts; break; }
+      case 'ADD_EXERCISE_ITEM': { const { date, exerciseId } = action.payload; const dateKey = `workout-${date}`; const exercise = getExerciseById(exerciseId); if (!exercise) break; const newItem = { ...exercise, id: `item-${Date.now()}`, type: exercise.type || 'exercise', exerciseId: exercise.id }; const dayWorkout = newState.workouts[dateKey] || []; dayWorkout.push(newItem); newState.workouts[dateKey] = dayWorkout; newState.modalContext = { type: 'EDIT_WORKOUT', date }; break; }
+      case 'ADD_REST_ITEM': { const { date } = action.payload; const dateKey = `workout-${date}`; const newItem = { id: `item-${Date.now()}`, type: 'rest', duration: 60 }; const dayWorkout = newState.workouts[dateKey] || []; dayWorkout.push(newItem); newState.workouts[dateKey] = dayWorkout; break; }
       case 'REMOVE_WORKOUT_ITEM': { const { date, itemId } = action.payload; const dateKey = `workout-${date}`; newState.workouts[dateKey] = (newState.workouts[dateKey] || []).filter(item => item.id !== itemId); break; }
-      case 'UPDATE_REST_DURATION': { const { date, itemId, newDuration } = action.payload; const dateKey = `workout-${date}`; const dayWorkout = newState.workouts[dateKey] || []; const itemIndex = dayWorkout.findIndex(item => item.id === itemId); if (itemIndex > -1 && dayWorkout[itemIndex].type === 'rest') { dayWorkout[itemIndex].duration = newDuration; newState.workouts[dateKey] = dayWorkout; } break; }
-      case 'REORDER_WORKOUT_ITEMS': { const { date, draggedItemId, targetItemId } = action.payload; const dateKey = `workout-${date}`; const items = newState.workouts[dateKey] || []; const draggedIndex = items.findIndex(item => item.id === draggedItemId); const targetIndex = items.findIndex(item => item.id === targetItemId); if (draggedIndex > -1 && targetIndex > -1) { const [draggedItem] = items.splice(draggedIndex, 1); items.splice(targetIndex, 0, draggedItem); newState.workouts[dateKey] = items; } break; }
+      case 'UPDATE_REST_DURATION': { const { date, itemId, newDuration } = action.payload; const dateKey = `workout-${date}`; const dayWorkout = newState.workouts[dateKey] || []; const itemIndex = dayWorkout.findIndex(item => item.id === itemId); if (itemIndex > -1 && dayWorkout[itemIndex].type === 'rest') { dayWorkout[itemIndex].duration = newDuration; } break; }
+      case 'REORDER_WORKOUT_ITEMS': { const { date, draggedItemId, targetItemId } = action.payload; const dateKey = `workout-${date}`; const items = newState.workouts[dateKey] || []; const draggedIndex = items.findIndex(item => item.id === draggedItemId); const targetIndex = items.findIndex(item => item.id === targetItemId); if (draggedIndex > -1 && targetIndex > -1) { const [draggedItem] = items.splice(draggedIndex, 1); items.splice(targetIndex, 0, draggedItem); } break; }
       
-      // --- Trainer Logic (Simplified and Integrated) ---
       case 'START_WORKOUT': {
           const { date } = action.payload;
           const workoutItems = newState.workouts[`workout-${date}`];
@@ -124,13 +127,20 @@ function createStore() {
     
     state = newState;
 
-    if (state.workouts !== oldState.workouts) {
+    if (state.workouts !== oldWorkouts) {
       saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
     }
     notify();
   };
 
-  return { getState: () => state, subscribe, dispatch };
+  return { 
+      getState: () => state, 
+      subscribe: (callback) => {
+          subscribers.add(callback);
+          return () => subscribers.delete(callback); // Ritorna una funzione di unsubscribe
+      },
+      dispatch 
+  };
 }
 
 const store = createStore();
