@@ -78,7 +78,10 @@ function generateTextForCoach(completedWorkout) {
 
 function render(element) {
     const { trainer } = store.getState();
-    if (!trainer || !trainer.completedWorkout) return; 
+    if (!trainer || !trainer.completedWorkout) {
+        element.innerHTML = '<h2>Caricamento riepilogo...</h2>';
+        return;
+    }
 
     const { completedWorkout } = trainer;
     const summaryHtml = generateSummaryHtml(completedWorkout);
@@ -115,7 +118,7 @@ export function init(element) {
     });
 
     store.subscribe(() => {
-        if (element.classList.contains('view--active')) {
+        if(element.classList.contains('view--active')) {
             render(element);
         }
     });

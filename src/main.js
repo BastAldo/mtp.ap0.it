@@ -10,15 +10,15 @@ import { mockWorkouts } from './modules/_mockData.js';
 
 const WORKOUTS_STORAGE_KEY = 'workouts';
 
-const views = {
-    calendar: document.getElementById('calendar-view'),
-    trainer: document.getElementById('trainer-view'),
-    debriefing: document.getElementById('debriefing-view'),
-};
-const initializedViews = new Set();
-
 function initializeApp() {
   console.log('Initializing App...');
+  const views = {
+      calendar: document.getElementById('calendar-view'),
+      trainer: document.getElementById('trainer-view'),
+      debriefing: document.getElementById('debriefing-view'),
+  };
+  const initializedViews = new Set();
+
   let workouts = loadFromStorage(WORKOUTS_STORAGE_KEY);
   if (!workouts) {
     saveToStorage(WORKOUTS_STORAGE_KEY, mockWorkouts);
@@ -31,26 +31,25 @@ function initializeApp() {
   initModal(document.getElementById('modal-container'));
   initNotice(document.getElementById('notice-container'));
   console.log('App Initialized.');
-}
 
-let currentActiveView = views.calendar;
-function handleViewChange() {
-  const { currentView } = store.getState();
-  if(!views[currentView]) return; // Safety check
+  let currentActiveView = views.calendar;
+  store.subscribe(() => {
+      const { currentView } = store.getState();
+      if(!views[currentView]) return;
 
-  const newActiveViewEl = views[currentView];
+      const newActiveViewEl = views[currentView];
+      if (currentActiveView !== newActiveViewEl) {
+          currentActiveView.classList.remove('view--active');
+          newActiveViewEl.classList.add('view--active');
+          currentActiveView = newActiveViewEl;
 
-  if (currentActiveView !== newActiveViewEl) {
-    currentActiveView.classList.remove('view--active');
-    newActiveViewEl.classList.add('view--active');
-    currentActiveView = newActiveViewEl;
-
-    if (!initializedViews.has(currentView)) {
-      if (currentView === 'trainer') initTrainerView(views.trainer);
-      else if (currentView === 'debriefing') initDebriefingView(views.debriefing);
-      initializedViews.add(currentView);
-    }
-  }
+          if (!initializedViews.has(currentView)) {
+              if (currentView === 'trainer') initTrainerView(views.trainer);
+              else if (currentView === 'debriefing') initDebriefingView(views.debriefing);
+              initializedViews.add(currentView);
+          }
+      }
+  });
 }
 
 function gameLoop(timestamp) {
@@ -58,7 +57,10 @@ function gameLoop(timestamp) {
     requestAnimationFrame(gameLoop);
 }
 
-store.subscribe(handleViewChange);
-
-initializeApp();
-requestAnimationFrame(gameLoop);
+try {
+  initializeApp();
+  requestAnimationFrame(gameLoop);
+} catch (e) {
+  console.error("Errore fatale durante l'avvio dell'applicazione:", e);
+  document.body.innerHTML = `<div style="color: white; padding: 2rem;"><h1>Errore Critico</h1><p>L'applicazione non è riuscita a avviarsi. Controlla la console per i dettagli.</p><pre>${e.stack}</pre></div>`;
+}

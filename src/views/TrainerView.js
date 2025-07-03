@@ -2,7 +2,6 @@ import store from '../modules/store.js';
 
 function render(element) {
     const { trainer } = store.getState();
-    // Defensive check: Do not render if the trainer isn't ready
     if (!trainer || !trainer.executionPlan || !trainer.executionPlan[trainer.currentStepIndex]) {
         element.innerHTML = '<h2>Caricamento...</h2>';
         return;
@@ -10,7 +9,7 @@ function render(element) {
     
     const { status, executionPlan, currentStepIndex, remaining } = trainer;
     const currentStep = executionPlan[currentStepIndex];
-    const { type, duration, headerTitle, mainText } = currentStep;
+    const { type, duration, headerTitle, mainText, context = {} } = currentStep;
 
     const radius = 90;
     const circumference = 2 * Math.PI * radius;
@@ -23,7 +22,7 @@ function render(element) {
     const ringOffset = circumference * (1 - progress);
 
     if (duration > 0 && (status === 'running' || status === 'paused')) {
-        timerText = Math.ceil(remaining / 1000);
+        timerText = String(Math.ceil(remaining / 1000));
     }
 
     switch (status) {
@@ -34,13 +33,13 @@ function render(element) {
         default: buttonText = '...'; instructionText = 'Stato non valido';
     }
     
-    const subHeaderText = currentStep.context?.totalSeries ? `SERIE ${currentStep.context.currentSeries}/${currentStep.context.totalSeries}` : '';
+    const subHeaderText = context.totalSeries ? `SERIE ${context.currentSeries}/${context.totalSeries}` : '';
 
     element.innerHTML = `
         <div class="trainer-container">
             <header class="trainer-header">
                 <h2>${headerTitle}</h2>
-                <p>${subHeaderText || ' '}</p>
+                <p>${subHeaderText || '&nbsp;'}</p>
             </header>
             <div class="progress-ring">
                 <svg>
@@ -69,7 +68,7 @@ export function init(element) {
         const terminateButton = event.target.closest('.trainer-terminate-btn');
         
         const { trainer } = store.getState();
-        if(!trainer) return; // Defensive check
+        if(!trainer) return;
 
         if (terminateButton) {
             store.dispatch({ type: 'TERMINATE_WORKOUT' });
