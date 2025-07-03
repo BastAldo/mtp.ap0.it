@@ -49,32 +49,24 @@ function handleViewChange() {
   }
 }
 
-// --- Side Effect Handler for Trainer Timers (FIXED) ---
+// --- Side Effect Handler for Trainer Timers (REFACTORED) ---
 let timerInterval = null;
-let lastTrainerState = 'idle';
 
 function handleTrainerEffects() {
     const { trainerState } = store.getState();
 
-    // Se lo stato è cambiato, reagiamo.
-    if (trainerState !== lastTrainerState) {
-        // Regola n.1: Pulisci sempre il timer precedente.
-        if (timerInterval) {
-            clearInterval(timerInterval);
-            timerInterval = null;
-        }
-
-        // Regola n.2: Avvia un nuovo timer SOLO se lo stato lo richiede.
-        const statesWithTimers = ['preparing', 'announcing', 'action', 'rest'];
-        if (statesWithTimers.includes(trainerState)) {
-            // NON chiamare dispatch da qui. Lo store è l'unica fonte della verità
-            // per duration e remaining.
-            timerInterval = setInterval(() => {
-                store.dispatch({ type: 'TIMER_TICK', payload: { tick: TICK_INTERVAL } });
-            }, TICK_INTERVAL);
-        }
+    // Pulisci sempre il timer se non siamo in 'running'
+    if (trainerState !== 'running' && timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
     }
-    lastTrainerState = trainerState;
+
+    // Avvia il timer solo se siamo in 'running' e non c'è già un timer attivo
+    if (trainerState === 'running' && !timerInterval) {
+        timerInterval = setInterval(() => {
+            store.dispatch({ type: 'TIMER_TICK', payload: { tick: TICK_INTERVAL } });
+        }, TICK_INTERVAL);
+    }
 }
 
 

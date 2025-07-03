@@ -1,68 +1,56 @@
 import store from '../modules/store.js';
 
 function render(element) {
-    const { activeWorkout, trainerState, trainerContext } = store.getState();
-    if (!activeWorkout || !trainerContext.currentItem) {
-        element.innerHTML = '<h2>Nessun workout attivo.</h2>';
+    const { trainerState, trainerContext } = store.getState();
+    const { executionPlan, currentStepIndex, remaining } = trainerContext;
+
+    if (!executionPlan || executionPlan.length === 0) {
+        element.innerHTML = '<h2>Nessun piano di workout attivo.</h2>';
         return;
     }
 
-    const { currentItem, duration, remaining, stateBeforePause, currentPhase } = trainerContext;
+    const currentStep = executionPlan[currentStepIndex];
+    const { type, duration, headerTitle, mainText, context = {} } = currentStep;
+
     const radius = 90;
     const circumference = 2 * Math.PI * radius;
-
     let ringOffset = circumference;
     if (duration > 0 && remaining >= 0) {
         const progress = (duration - remaining) / duration;
         ringOffset = circumference * (1 - progress);
     }
 
-    let phaseText = '', instructionText = '', buttonText = '', timerText = '', isFlashing = false;
+    let timerText = '', buttonText = '', instructionText = '';
+    const isFlashing = type === 'announcing';
     const terminateButtonHidden = trainerState === 'finished' || trainerState === 'ready';
-    const isExercise = currentItem.type === 'exercise' || currentItem.type === 'time';
 
-    let displayPhase = currentPhase?.toUpperCase() || '';
-
-    switch (trainerState) {
-        case 'ready':
-            phaseText = 'PRONTO'; instructionText = 'Premi INIZIA per cominciare'; buttonText = 'INIZIA';
-            break;
-        case 'preparing':
-            phaseText = 'PREPARATI'; instructionText = 'Si parte...'; buttonText = 'PAUSA'; timerText = Math.ceil(remaining / 1000);
-            break;
-        case 'rest':
-            phaseText = 'RIPOSO'; instructionText = 'Recupera le forze'; buttonText = 'PAUSA'; timerText = Math.ceil(remaining / 1000);
-            break;
-        case 'announcing':
-            phaseText = currentItem.name; instructionText = `Prossimo Esercizio`; buttonText = 'PAUSA'; isFlashing = true;
-            break;
-        case 'action':
-            phaseText = displayPhase; instructionText = 'Esegui il movimento'; buttonText = 'PAUSA'; timerText = Math.ceil(remaining / 1000);
-            break;
-        case 'paused':
-            const pausedState = stateBeforePause || 'action';
-            if (pausedState === 'rest') phaseText = 'RIPOSO';
-            else if (pausedState === 'announcing') { phaseText = currentItem.name; isFlashing = true; }
-            else phaseText = (pausedState === 'preparing') ? 'PREPARATI' : displayPhase;
-            instructionText = 'Pausa'; buttonText = 'RIPRENDI';
-            if (pausedState !== 'announcing') timerText = Math.ceil(remaining / 1000);
-            break;
-        case 'finished':
-            phaseText = 'FINE'; instructionText = 'Workout completato!'; buttonText = 'DEBRIEFING';
-            break;
-        default:
-            phaseText = 'IDLE'; instructionText = 'Stato non riconosciuto'; buttonText = 'RESET';
+    if (duration > 0 && trainerState !== 'paused') {
+        timerText = Math.ceil(remaining / 1000);
+    } else if (trainerState === 'paused' && duration > 0) {
+        timerText = Math.ceil(remaining / 1000);
     }
 
-    const headerTitle = currentItem.name || 'Riposo';
-    const seriesText = isExercise ? `SERIE ${trainerContext.currentSeries || 1} / ${currentItem.series || 1}` : '';
-    const repsText = currentItem.type === 'exercise' ? `REP ${trainerContext.currentRep || 1} / ${currentItem.reps || 1}` : '';
+    switch (trainerState) {
+        case 'ready': buttonText = 'INIZIA'; instructionText = 'Premi INIZIA per cominciare'; break;
+        case 'running': buttonText = 'PAUSA'; instructionText = 'Esegui'; break;
+        case 'paused': buttonText = 'RIPRENDI'; instructionText = 'Pausa'; break;
+        case 'finished': buttonText = 'DEBRIEFING'; instructionText = 'Ben fatto!'; break;
+        default: buttonText = '...';
+    }
+    
+    let subHeaderText = '';
+    if (context.totalSeries) {
+        subHeaderText = `SERIE ${context.currentSeries}/${context.totalSeries}`;
+        if (context.totalReps) {
+            subHeaderText += ` | REP ${context.currentRep}/${context.totalReps}`;
+        }
+    }
 
     element.innerHTML = `
         <div class="trainer-container">
             <header class="trainer-header">
                 <h2>${headerTitle}</h2>
-                <p>${seriesText} ${repsText ? `| ${repsText}` : ''}</p>
+                <p>${subHeaderText}</p>
             </header>
             <div class="progress-ring">
                 <svg>
@@ -70,7 +58,7 @@ function render(element) {
                     <circle class="progress-ring__foreground" style="stroke-dashoffset: ${ringOffset};" stroke-width="10" r="${radius}" cx="50%" cy="50%" stroke-dasharray="${circumference}"></circle>
                 </svg>
                 <div class="progress-ring__text">
-                    <div class="progress-ring__phase ${isFlashing ? 'is-flashing' : ''}">${phaseText}</div>
+                    <div class="progress-ring__phase ${isFlashing ? 'is-flashing' : ''}">${mainText}</div>
                     <div class="progress-ring__timer">${timerText}</div>
                 </div>
             </div>
@@ -101,9 +89,9 @@ export function init(element) {
 
         switch (trainerState) {
             case 'ready': store.dispatch({ type: 'START_TRAINER' }); break;
+            case 'running': store.dispatch({ type: 'PAUSE_TRAINER' }); break;
             case 'paused': store.dispatch({ type: 'RESUME_TRAINER' }); break;
             case 'finished': store.dispatch({ type: 'FINISH_WORKOUT' }); break;
-            default: store.dispatch({ type: 'PAUSE_TRAINER' }); break;
         }
     });
 
@@ -112,7 +100,7 @@ export function init(element) {
             render(element);
         }
     });
-    // Initial render in case the view is already active
+
     if (element.classList.contains('view--active')) {
       render(element);
     }
