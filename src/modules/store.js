@@ -4,6 +4,7 @@ import { generatePlan } from './planGenerator.js';
 import * as timer from './timer.js';
 
 const WORKOUTS_STORAGE_KEY = 'workouts';
+const ADVANCE_STEP_DELAY = 150; // ms, superiore alla transizione CSS (100ms)
 
 const trainerInitialState = {
     status: 'idle',
@@ -33,7 +34,7 @@ function createStore() {
   }
 
   const dispatch = (action) => {
-    if (action.type !== 'TIMER_TICK') {
+    if (action.type !== 'TIMER_TICK' && action.type !== 'ADVANCE_STEP') {
       console.log(`%c[${action.type}]`, 'color: #88aaff; font-weight: bold;', action.payload || '');
     }
 
@@ -59,8 +60,6 @@ function createStore() {
         const workoutItems = newState.workouts[`workout-${date}`];
         if (workoutItems?.length > 0) {
           const plan = generatePlan(workoutItems);
-          console.log("--- Piano di Esecuzione Generato ---");
-          console.table(plan);
           newState.currentView = 'trainer';
           newState.trainer = { ...trainerInitialState, status: 'ready', executionPlan: plan, activeWorkout: { date, items: workoutItems } };
         }
@@ -90,31 +89,39 @@ function createStore() {
         if (newState.trainer.status === 'running') {
           const newRemaining = newState.trainer.remaining - action.payload.tick;
           if (newRemaining <= 0) {
-            const { executionPlan, currentStepIndex } = newState.trainer;
-            const nextStepIndex = currentStepIndex + 1;
-            if (nextStepIndex < executionPlan.length) {
-              const nextStep = executionPlan[nextStepIndex];
-              newState.trainer.currentStepIndex = nextStepIndex;
-              newState.trainer.remaining = nextStep.duration;
-              if (nextStep.type === 'finished') {
-                newState.trainer.status = 'finished';
-                newState.trainer.completedWorkout = { ...newState.trainer.activeWorkout, completed: true };
-                timer.stop();
-              }
-            }
+            newState.trainer.remaining = 0;
+            timer.stop();
+            setTimeout(() => dispatch({ type: 'ADVANCE_STEP' }), ADVANCE_STEP_DELAY);
           } else {
             newState.trainer.remaining = newRemaining;
           }
         }
         break;
+      case 'ADVANCE_STEP': {
+          const { executionPlan, currentStepIndex } = newState.trainer;
+          const nextStepIndex = currentStepIndex + 1;
+          if (nextStepIndex < executionPlan.length) {
+              const nextStep = executionPlan[nextStepIndex];
+              newState.trainer.currentStepIndex = nextStepIndex;
+              newState.trainer.remaining = nextStep.duration;
+
+              if (nextStep.type === 'finished') {
+                  newState.trainer.status = 'finished';
+                  newState.trainer.completedWorkout = { ...newState.trainer.activeWorkout, completed: true };
+              } else {
+                  timer.start(handleTimerTick);
+              }
+          }
+          break;
+      }
       case 'TERMINATE_WORKOUT':
         if (newState.trainer.status !== 'idle' && newState.trainer.status !== 'finished') {
+          timer.stop();
           const { executionPlan, currentStepIndex, activeWorkout } = newState.trainer;
           const currentStep = executionPlan[currentStepIndex];
           const itemIndex = activeWorkout.items.findIndex(i => i.id === currentStep.item?.id);
           newState.trainer.status = 'finished';
           newState.trainer.completedWorkout = { ...activeWorkout, completed: false, terminationPoint: { itemIndex: itemIndex > -1 ? itemIndex : 0, currentSeries: currentStep.context?.currentSeries || 1 } };
-          timer.stop();
           newState.currentView = 'debriefing';
         }
         break;

@@ -9,7 +9,7 @@ function renderStructure(element) {
         <div class="trainer-container">
             <header class="trainer-header">
                 <h2 data-ui="headerTitle"></h2>
-                <p data-ui="subHeaderText">&nbsp;</p>
+                <p data-ui="descriptionText" class="trainer-description"></p>
             </header>
             <div class="progress-ring">
                 <svg>
@@ -44,21 +44,30 @@ function updateDynamicContent() {
     const currentStep = executionPlan[currentStepIndex];
     if (!currentStep) return;
     
-    const { type, duration, headerTitle, mainText, context = {} } = currentStep;
+    const { type, duration, headerTitle, mainText, context = {}, item } = currentStep;
     const isAnnouncing = type === 'announcing-phase';
 
-    // --- Update Text Content ---
+    // --- Update Header ---
     UI_ELEMENTS.headerTitle.textContent = headerTitle;
-    UI_ELEMENTS.subHeaderText.textContent = context.totalSeries ? `SERIE ${context.currentSeries}/${context.totalSeries}` : '\u00A0'; // &nbsp;
-    UI_ELEMENTS.mainPhaseText.textContent = type === 'rest' ? 'RIPOSO' : mainText;
+    UI_ELEMENTS.descriptionText.textContent = item?.description || '';
+
+    // --- Update Ring Content ---
+    let mainPhaseText = '';
+    let timerText = '';
+
+    if (status !== 'ready') {
+        mainPhaseText = (type === 'rest') ? 'RIPOSO' : mainText;
+        if (type === 'preparing') mainPhaseText = 'Preparati';
+    }
+    UI_ELEMENTS.mainPhaseText.textContent = mainPhaseText;
     UI_ELEMENTS.mainPhaseText.classList.toggle('is-flashing', isAnnouncing);
 
-    let timerText = '';
-    if (duration > 0 && (status === 'running' || status === 'paused' || type === 'preparing')) {
+    if (duration > 0 && status !== 'ready') {
         timerText = String(Math.ceil(remaining / 1000));
     }
     UI_ELEMENTS.timerText.textContent = timerText;
     
+    // --- Update Footer ---
     let buttonText = '...';
     let instructionText = '';
     switch (status) {
@@ -71,9 +80,9 @@ function updateDynamicContent() {
     UI_ELEMENTS.instructionText.textContent = instructionText;
 
     // --- Update Visuals ---
-    const progress = (duration > 0 && type !== 'announcing-phase') ? (duration - Math.max(0, remaining)) / duration : 0;
+    const progress = (duration > 0 && !isAnnouncing && status === 'running') ? (duration - remaining) / duration : (remaining === 0 ? 1 : 0);
     UI_ELEMENTS.progressRing.style.strokeDashoffset = circumference * (1 - progress);
-    UI_ELEMENTS.terminateButton.hidden = status === 'finished' || status === 'ready';
+    UI_ELEMENTS.terminateButton.classList.toggle('is-invisible', status === 'finished' || status === 'ready');
 }
 
 
@@ -91,12 +100,17 @@ export function init(element) {
     });
 
     UI_ELEMENTS.terminateButton.addEventListener('click', () => {
+        store.dispatch({ type: 'PAUSE_TRAINER' }); // Stoppa il timer per prevenire race conditions
         store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'CONFIRM_TERMINATION' } });
     });
 
+    // Prima sottoscrizione per l'aggiornamento completo
     store.subscribe(() => {
         if (element.classList.contains('view--active')) {
             updateDynamicContent();
         }
     });
+    
+    // Render iniziale
+    updateDynamicContent();
 }

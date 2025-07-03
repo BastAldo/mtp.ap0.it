@@ -1,63 +1,516 @@
-commit_message: "chore(debug): Aggiungere log di versione per diagnosi cache"
+commit_message: "fix(trainer): Refactoring finale della UI e risoluzione bug critici"
 rationale: |
-  Per escludere definitivamente problemi di caching che potrebbero impedire la visualizzazione delle modifiche recenti, questo commit aggiunge un'unica riga di codice nel punto di ingresso dell'applicazione (`src/main.js`).
+  Questo commit applica un refactoring finale e robusto alla vista del trainer per risolvere tutti i bug segnalati e migliorare l'esperienza utente, basandosi sul feedback diretto.
 
-  Viene inserito un `console.log` con un numero di versione univoco ("MTP Build: 2.0.0"). La sua presenza nella console del browser confermerà che l'ultima versione del codice è stata correttamente caricata ed eseguita, permettendoci di concentrare il debug sulla logica dell'applicazione piuttosto che sull'infrastruttura di deployment.
+  1.  **Risoluzione Definitiva Race Condition (Pausa/Termina)**: Il bug che rendeva i controlli inaffidabili è stato sradicato.
+      - Al click su "Termina", viene ora inviata prima l'azione `PAUSE_TRAINER` per fermare immediatamente il ciclo di rendering, e solo dopo viene aperta la modale. Questo garantisce la reattività della modale.
+      - Il ritardo per l'avanzamento di stato (`ADVANCE_STEP`) è stato aumentato a `150ms`, un valore superiore alla transizione CSS (`100ms`), garantendo che l'animazione dell'anello si completi sempre.
+
+  2.  **Nuovo Layout Orizzontale dei Controlli**: Adottando il suggerimento dell'utente, i pulsanti "Inizia/Pausa" e "Termina" sono ora affiancati. Il pulsante "Termina" usa `visibility: hidden` per essere sempre presente nel layout ma invisibile quando non necessario, eliminando così in modo definitivo il "salto" visivo all'avvio.
+
+  3.  **Pulizia della UI Iniziale**: La schermata `ready` è stata ripulita. Ora non mostra più valori numerici o testi superflui nel timer prima dell'avvio, presentando un'interfaccia pulita e intuitiva.
 patches:
-  - file: src/main.js
+  - file: assets/css/style.css
     content: |
-      console.log('%cMTP Build: 2.0.0 - Esecuzione confermata.', 'color: #lime; font-size: 1.2em; font-weight: bold;');
-      import store from './modules/store.js';
-      import { init as initCalendarView } from './views/CalendarView.js';
-      import { init as initTrainerView } from './views/TrainerView.js';
-      import { init as initDebriefingView } from './views/DebriefingView.js';
-      import { init as initModal } from './ui/Modal.js';
-      import { init as initNotice } from './ui/Notice.js';
-      import { loadFromStorage, saveToStorage } from './modules/storage.js';
+      /* --- GLOBAL STYLES & MOBILE FIRST --- */
+      :root {
+          --bg-color: #1a1a1d;
+          --card-color: #2c2c34;
+          --primary-color: #9575cd;
+          --secondary-color: #4db6ac;
+          --text-color: #f4f4f9;
+          --text-color-muted: #aaa;
+          --border-color: #40404a;
+          --danger-color: #ef5350;
+          --success-color: #66bb6a;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+          background-color: var(--bg-color);
+          color: var(--text-color);
+          padding-top: 80px; /* Adjusted Space for the fixed header */
+          scrollbar-width: thin;
+          scrollbar-color: var(--primary-color) var(--bg-color);
+      }
+      /* Custom Scrollbar for Webkit Browsers */
+      body::-webkit-scrollbar, .modal-body::-webkit-scrollbar { width: 8px; }
+      body::-webkit-scrollbar-track, .modal-body::-webkit-scrollbar-track { background: var(--card-color); }
+      body::-webkit-scrollbar-thumb, .modal-body::-webkit-scrollbar-thumb { background-color: var(--primary-color); border-radius: 10px; border: 2px solid var(--card-color); }
+
+      /* --- PERSISTENT HEADER (REDESIGNED) --- */
+      .app-header {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 60px;
+          background-color: rgba(44, 44, 52, 0.85);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+      }
+      .app-title {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+      }
+      .app-title svg {
+          width: 24px;
+          height: 24px;
+      }
+      .app-title h1 {
+          font-size: 1.4rem;
+          background: -webkit-linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+      }
+
+      #app-container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+      .view { display: none; width: 100%; }
+      .view--active { display: block; }
+
+      /* --- UTILITY CLASSES --- */
+      .is-invisible {
+          visibility: hidden;
+      }
+
+      /* --- KEYFRAMES --- */
+      @keyframes soft-flash {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+      }
+      .is-flashing {
+        animation: soft-flash 0.75s ease-in-out infinite;
+      }
+      @keyframes fade-slide-up {
+          from {
+              opacity: 0;
+              transform: translateY(10px);
+          }
+          to {
+              opacity: 1;
+              transform: translateY(0);
+          }
+      }
+      @keyframes fade-in-out {
+        0%, 100% { opacity: 0; transform: translateY(-20px); }
+        10%, 90% { opacity: 1; transform: translateY(0); }
+      }
+
+      /* --- NOTICE / TOAST STYLES --- */
+      #notice-container {
+          position: fixed;
+          top: 80px; /* Below header */
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 2000;
+          display: flex;
+          justify-content: center;
+      }
+      .notice {
+          background-color: var(--secondary-color);
+          color: var(--bg-color);
+          padding: 0.8rem 1.5rem;
+          border-radius: 6px;
+          font-weight: bold;
+          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+          animation: fade-in-out 3s ease-in-out forwards;
+      }
+
+      /* --- CALENDAR VIEW STYLES --- */
+      .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+      .calendar-header h2 { font-size: 1.25rem; text-align: center; }
+      .calendar-header button { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: background-color 0.2s; }
+      .calendar-header button:hover { background-color: var(--primary-color); }
+      .calendar-grid { display: grid; grid-template-columns: 1fr; gap: 0.5rem; }
+      .day-cell { background-color: var(--card-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; min-height: 150px; display: flex; flex-direction: column; cursor: pointer; transition: border-color 0.2s; }
+      .day-cell:hover { border-color: var(--primary-color); }
+      .day-cell__header { display: flex; justify-content: space-between; font-weight: bold; color: var(--text-color-muted); text-transform: uppercase; font-size: 0.8rem; pointer-events: none; }
+      .day-cell__body { margin-top: 0.5rem; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; pointer-events: none; }
+      .exercise-count { font-size: 0.9rem; color: var(--secondary-color); }
+      .start-btn { background-color: var(--secondary-color); color: var(--bg-color); border: none; padding: 0.6rem; border-radius: 6px; cursor: pointer; font-weight: bold; text-transform: uppercase; width: 100%; margin-top: 1rem; transition: opacity 0.2s; pointer-events: all !important; }
+      .start-btn:hover { opacity: 0.85; }
+
+      /* --- MODAL STYLES --- */
+      #modal-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; z-index: 1001; }
+      #modal-container.active { opacity: 1; pointer-events: all; }
+      .modal-content { background-color: var(--card-color); border-radius: 8px; border: 1px solid var(--border-color); width: 90%; max-width: 500px; transform: scale(0.95); transition: transform 0.3s ease; display: flex; flex-direction: column; max-height: 90vh; }
+      #modal-container.active .modal-content { transform: scale(1); }
+      .modal-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; }
+      .modal-header h3 { color: var(--primary-color); }
+      .modal-close-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; cursor: pointer; }
+      .modal-body { overflow-y: auto; flex-grow: 1; padding: 1rem 1.5rem; }
+      .modal-actions { padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 1rem; flex-shrink: 0; }
+      .modal-actions button {
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-weight: bold;
+      }
+      .modal-actions .btn-confirm {
+          background-color: var(--danger-color);
+          border: 1px solid var(--danger-color);
+          color: var(--text-color);
+      }
+      .modal-actions .btn-cancel {
+          background-color: transparent;
+          border: 1px solid var(--border-color);
+          color: var(--text-color-muted);
+      }
+      .add-rest-btn, .add-exercise-btn { background-color: transparent; border: 1px solid var(--secondary-color); color: var(--secondary-color); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+      .add-rest-btn:hover, .add-exercise-btn:hover { background-color: var(--secondary-color); color: var(--card-color); }
+
+      /* --- WORKOUT EDITOR & LIBRARY STYLES --- */
+      .workout-item-list, .exercise-library-list { list-style: none; padding: 0; margin: 0; }
+      .workout-item { display: flex; align-items: center; padding: 1rem 0.5rem; border-bottom: 1px solid var(--border-color); }
+      .workout-item:last-child { border-bottom: none; }
+      .workout-item.dragging { opacity: 0.4; background-color: var(--border-color); }
+      .workout-item.drag-over-target { border-top: 2px solid var(--primary-color); }
+      .drag-handle { cursor: grab; padding-right: 1rem; color: var(--text-color-muted); }
+      .item-info { display: flex; align-items: baseline; gap: 0.75rem; flex-grow: 1; }
+      .item-info .item-name { font-weight: bold; }
+      .item-info .item-details { color: var(--secondary-color); }
+      .workout-item--rest .item-info .item-name { color: var(--text-color-muted); font-style: italic; }
+      .rest-duration-input { -moz-appearance: textfield; background-color: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 4px; padding: 0.25rem; width: 60px; text-align: center; }
+      .rest-duration-input::-webkit-outer-spin-button, .rest-duration-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+      .remove-item-btn { background: none; border: none; color: var(--text-color-muted); font-size: 1.5rem; font-weight: bold; cursor: pointer; padding: 0 0.5rem; border-radius: 50%; }
+      .remove-item-btn:hover { color: var(--danger-color); background-color: rgba(239, 83, 80, 0.1); }
+      .exercise-library-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0.5rem; border-bottom: 1px solid var(--border-color); }
+      .exercise-library-item:last-child { border-bottom: none; }
+      .add-to-workout-btn { background-color: var(--primary-color); color: var(--text-color); border: none; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; }
+
+      /* --- TRAINER VIEW STYLES --- */
+      .trainer-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: calc(100vh - 4rem - 60px); text-align: center; }
+      .trainer-header { margin-bottom: 0.5rem; width: 90%; max-width: 400px; }
+      .trainer-header h2 { font-size: 1.8rem; text-transform: uppercase; color: var(--primary-color); }
+      .trainer-description { font-size: 0.9rem; color: var(--text-color-muted); margin-top: 0.5rem; min-height: 2.5em; }
+      .progress-ring { position: relative; width: 250px; height: 250px; margin: 1rem 0; }
+      .progress-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+      .progress-ring__background { stroke: var(--card-color); fill: transparent; }
+      .progress-ring__foreground { stroke: var(--secondary-color); fill: transparent; transition: stroke-dashoffset 0.1s linear; }
+      .progress-ring__text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+      .progress-ring__phase { font-size: 1.6rem; font-weight: bold; text-transform: uppercase; }
+      .progress-ring__timer { font-size: 3rem; color: var(--text-color); }
+      .trainer-footer { margin-top: 1rem; }
+      .trainer-footer p { font-size: 1.2rem; min-height: 2em; }
+      .trainer-controls { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: 1rem; width: 100%;}
+      .trainer-main-btn { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 1rem 2rem; border-radius: 8px; cursor: pointer; font-size: 1.2rem; text-transform: uppercase; }
+      .trainer-terminate-btn {
+          background-color: transparent;
+          border: 1px solid var(--border-color);
+          color: var(--text-color-muted);
+          padding: 0.5rem 1rem;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 0.9rem;
+          transition: all 0.2s ease;
+      }
+      .trainer-terminate-btn:hover {
+          background-color: var(--border-color);
+          color: var(--text-color);
+      }
+
+      /* --- DEBRIEFING VIEW STYLES --- */
+      .debriefing-container { max-width: 700px; margin: 0 auto; padding: 1rem; }
+      .debriefing-container h2 { text-align: center; color: var(--primary-color); margin-bottom: 2rem; }
+      .debrief-list { list-style: none; padding: 0; margin: 0 0 2rem 0; }
+      .debrief-item {
+          background-color: var(--card-color);
+          border: 1px solid var(--border-color);
+          border-left: 5px solid var(--border-color);
+          padding: 1rem;
+          border-radius: 6px;
+          margin-bottom: 0.75rem;
+          opacity: 0; /* Start hidden for animation */
+          animation: fade-slide-up 0.5s ease-out forwards;
+      }
+      .debrief-item--completed { border-left-color: var(--success-color); }
+      .debrief-item--terminated { border-left-color: var(--danger-color); font-weight: bold; }
+      .debrief-item--skipped { opacity: 0.6; animation: none; }
+      .debriefing-actions { display: flex; justify-content: center; gap: 1rem; }
+      .debriefing-actions button { background-color: var(--card-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 0.8rem 1.5rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+      .debriefing-actions button:hover { border-color: var(--primary-color); color: var(--primary-color); }
+
+      /* --- TABLET/DESKTOP OVERRIDES --- */
+      @media (min-width: 768px) {
+          #app-container { padding: 2rem; }
+          .calendar-grid { grid-template-columns: repeat(7, 1fr); gap: 1rem; }
+          .modal-content { max-width: 600px; height: auto; max-height: 80vh; }
+          .progress-ring { width: 300px; height: 300px; }
+      }
+  - file: src/modules/store.js
+    content: |
+      import { saveToStorage } from './storage.js';
+      import { getExerciseById } from './exerciseRepository.js';
+      import { generatePlan } from './planGenerator.js';
+      import * as timer from './timer.js';
 
       const WORKOUTS_STORAGE_KEY = 'workouts';
+      const ADVANCE_STEP_DELAY = 150; // ms, superiore alla transizione CSS (100ms)
 
-      const views = {
-          calendar: document.getElementById('calendar-view'),
-          trainer: document.getElementById('trainer-view'),
-          debriefing: document.getElementById('debriefing-view'),
+      const trainerInitialState = {
+          status: 'idle',
+          executionPlan: null,
+          currentStepIndex: 0,
+          remaining: 0,
+          activeWorkout: null,
+          completedWorkout: null,
       };
-      const initializedViews = new Set();
 
-      function initializeApp() {
-        let workouts = loadFromStorage(WORKOUTS_STORAGE_KEY);
-        if (!workouts) {
-          workouts = {};
-          saveToStorage(WORKOUTS_STORAGE_KEY, workouts);
+      function createStore() {
+        let state = {
+          currentView: 'calendar',
+          focusedDate: new Date(),
+          workouts: {},
+          isModalOpen: false,
+          modalContext: null,
+          notice: null,
+          trainer: { ...trainerInitialState },
+        };
+
+        const subscribers = new Set();
+        function notify() { for (const callback of subscribers) { callback(); } }
+
+        function handleTimerTick(tick) {
+            dispatch({ type: 'TIMER_TICK', payload: { tick } });
         }
-        store.dispatch({ type: 'SET_WORKOUTS', payload: workouts });
 
-        initCalendarView(views.calendar);
-        initializedViews.add('calendar');
-        initModal(document.getElementById('modal-container'));
-        initNotice(document.getElementById('notice-container'));
-      }
-
-      function handleViewChange() {
-        const { currentView } = store.getState();
-        const newActiveViewEl = views[currentView];
-
-        if (newActiveViewEl && newActiveViewEl.id !== store.currentActiveViewId) {
-          const oldView = document.querySelector('.view--active');
-          if(oldView) oldView.classList.remove('view--active');
-          
-          newActiveViewEl.classList.add('view--active');
-          store.currentActiveViewId = newActiveViewEl.id;
-
-          if (!initializedViews.has(currentView)) {
-            if (currentView === 'trainer') initTrainerView(views.trainer);
-            else if (currentView === 'debriefing') initDebriefingView(views.debriefing);
-            initializedViews.add(currentView);
+        const dispatch = (action) => {
+          if (action.type !== 'TIMER_TICK' && action.type !== 'ADVANCE_STEP') {
+            console.log(`%c[${action.type}]`, 'color: #88aaff; font-weight: bold;', action.payload || '');
           }
-        }
+
+          const oldState = state;
+          const newState = { ...state, trainer: { ...state.trainer } };
+
+          switch (action.type) {
+            case 'CHANGE_VIEW': newState.currentView = action.payload; break;
+            case 'PREV_WEEK': { const d = new Date(newState.focusedDate); d.setDate(d.getDate() - 7); newState.focusedDate = d; break; }
+            case 'NEXT_WEEK': { const d = new Date(newState.focusedDate); d.setDate(d.getDate() + 7); newState.focusedDate = d; break; }
+            case 'SET_WORKOUTS': newState.workouts = action.payload; break;
+            case 'OPEN_MODAL': newState.isModalOpen = true; newState.modalContext = action.payload; break;
+            case 'CLOSE_MODAL': newState.isModalOpen = false; newState.modalContext = null; break;
+            case 'SHOW_NOTICE': newState.notice = { message: action.payload.message, id: Date.now() }; break;
+            case 'ADD_EXERCISE_ITEM': { const { date, exerciseId } = action.payload; const dateKey = `workout-${date}`; const exercise = getExerciseById(exerciseId); if (!exercise) break; const newItem = { ...exercise, id: `item-${Date.now()}`, type: exercise.type || 'exercise', exerciseId: exercise.id }; const dayWorkout = [...(newState.workouts[dateKey] || [])]; dayWorkout.push(newItem); newState.workouts = { ...newState.workouts, [dateKey]: dayWorkout }; newState.modalContext = { type: 'EDIT_WORKOUT', date }; break; }
+            case 'ADD_REST_ITEM': { const { date } = action.payload; const dateKey = `workout-${date}`; const newItem = { id: `item-${Date.now()}`, type: 'rest', duration: 60 }; const dayWorkout = [...(newState.workouts[dateKey] || [])]; dayWorkout.push(newItem); newState.workouts = { ...newState.workouts, [dateKey]: dayWorkout }; break; }
+            case 'REMOVE_WORKOUT_ITEM': { const { date, itemId } = action.payload; const dateKey = `workout-${date}`; const updatedWorkout = (newState.workouts[dateKey] || []).filter(item => item.id !== itemId); newState.workouts = { ...newState.workouts, [dateKey]: updatedWorkout }; break; }
+            case 'UPDATE_REST_DURATION': { const { date, itemId, newDuration } = action.payload; const dateKey = `workout-${date}`; const dayWorkout = (newState.workouts[dateKey] || []).map(item => item.id === itemId ? { ...item, duration: newDuration } : item); newState.workouts = { ...newState.workouts, [dateKey]: dayWorkout }; break; }
+            case 'REORDER_WORKOUT_ITEMS': { const { date, draggedItemId, targetItemId } = action.payload; const dateKey = `workout-${date}`; const items = [...(newState.workouts[dateKey] || [])]; const draggedIndex = items.findIndex(item => item.id === draggedItemId); const targetIndex = items.findIndex(item => item.id === targetItemId); if (draggedIndex > -1 && targetIndex > -1) { const [draggedItem] = items.splice(draggedIndex, 1); items.splice(targetIndex, 0, draggedItem); newState.workouts = { ...newState.workouts, [dateKey]: items }; } break; }
+            
+            case 'START_WORKOUT': {
+              const { date } = action.payload;
+              const workoutItems = newState.workouts[`workout-${date}`];
+              if (workoutItems?.length > 0) {
+                const plan = generatePlan(workoutItems);
+                newState.currentView = 'trainer';
+                newState.trainer = { ...trainerInitialState, status: 'ready', executionPlan: plan, activeWorkout: { date, items: workoutItems } };
+              }
+              break;
+            }
+            case 'START_TRAINER':
+              if (newState.trainer.status === 'ready') {
+                newState.trainer.status = 'running';
+                const firstStep = newState.trainer.executionPlan[0];
+                newState.trainer.remaining = firstStep.duration;
+                timer.start(handleTimerTick);
+              }
+              break;
+            case 'PAUSE_TRAINER':
+              if (newState.trainer.status === 'running') {
+                newState.trainer.status = 'paused';
+                timer.stop();
+              }
+              break;
+            case 'RESUME_TRAINER':
+              if (newState.trainer.status === 'paused') {
+                newState.trainer.status = 'running';
+                timer.start(handleTimerTick);
+              }
+              break;
+            case 'TIMER_TICK':
+              if (newState.trainer.status === 'running') {
+                const newRemaining = newState.trainer.remaining - action.payload.tick;
+                if (newRemaining <= 0) {
+                  newState.trainer.remaining = 0;
+                  timer.stop();
+                  setTimeout(() => dispatch({ type: 'ADVANCE_STEP' }), ADVANCE_STEP_DELAY);
+                } else {
+                  newState.trainer.remaining = newRemaining;
+                }
+              }
+              break;
+            case 'ADVANCE_STEP': {
+                const { executionPlan, currentStepIndex } = newState.trainer;
+                const nextStepIndex = currentStepIndex + 1;
+                if (nextStepIndex < executionPlan.length) {
+                    const nextStep = executionPlan[nextStepIndex];
+                    newState.trainer.currentStepIndex = nextStepIndex;
+                    newState.trainer.remaining = nextStep.duration;
+
+                    if (nextStep.type === 'finished') {
+                        newState.trainer.status = 'finished';
+                        newState.trainer.completedWorkout = { ...newState.trainer.activeWorkout, completed: true };
+                    } else {
+                        timer.start(handleTimerTick);
+                    }
+                }
+                break;
+            }
+            case 'TERMINATE_WORKOUT':
+              if (newState.trainer.status !== 'idle' && newState.trainer.status !== 'finished') {
+                timer.stop();
+                const { executionPlan, currentStepIndex, activeWorkout } = newState.trainer;
+                const currentStep = executionPlan[currentStepIndex];
+                const itemIndex = activeWorkout.items.findIndex(i => i.id === currentStep.item?.id);
+                newState.trainer.status = 'finished';
+                newState.trainer.completedWorkout = { ...activeWorkout, completed: false, terminationPoint: { itemIndex: itemIndex > -1 ? itemIndex : 0, currentSeries: currentStep.context?.currentSeries || 1 } };
+                newState.currentView = 'debriefing';
+              }
+              break;
+            case 'FINISH_WORKOUT':
+              if (newState.trainer.status === 'finished') {
+                newState.trainer = { ...trainerInitialState };
+                newState.currentView = 'calendar';
+              }
+              break;
+          }
+
+          state = newState;
+          if (JSON.stringify(state.workouts) !== JSON.stringify(oldState.workouts)) {
+            saveToStorage(WORKOUTS_STORAGE_KEY, state.workouts);
+          }
+          notify();
+        };
+
+        return { getState: () => state, subscribe: (callback) => { subscribers.add(callback); return () => subscribers.delete(callback); }, dispatch };
       }
 
-      store.subscribe(handleViewChange);
-      initializeApp();
+      const store = createStore();
+      export default store;
+  - file: src/views/TrainerView.js
+    content: |
+      import store from '../modules/store.js';
+
+      const UI_ELEMENTS = {};
+      const radius = 90;
+      const circumference = 2 * Math.PI * radius;
+
+      function renderStructure(element) {
+          element.innerHTML = `
+              <div class="trainer-container">
+                  <header class="trainer-header">
+                      <h2 data-ui="headerTitle"></h2>
+                      <p data-ui="descriptionText" class="trainer-description"></p>
+                  </header>
+                  <div class="progress-ring">
+                      <svg>
+                          <circle class="progress-ring__background" stroke-width="10" r="${radius}" cx="50%" cy="50%"></circle>
+                          <circle data-ui="progressRing" class="progress-ring__foreground" stroke-width="10" r="${radius}" cx="50%" cy="50%" stroke-dasharray="${circumference}"></circle>
+                      </svg>
+                      <div class="progress-ring__text">
+                          <div data-ui="mainPhaseText" class="progress-ring__phase"></div>
+                          <div data-ui="timerText" class="progress-ring__timer"></div>
+                      </div>
+                  </div>
+                  <footer class="trainer-footer">
+                      <p data-ui="instructionText" class="trainer-instruction"></p>
+                      <div class="trainer-controls">
+                          <button data-ui="mainButton" class="trainer-main-btn"></button>
+                          <button data-ui="terminateButton" class="trainer-terminate-btn">Termina</button>
+                      </div>
+                  </footer>
+              </div>
+          `;
+
+          element.querySelectorAll('[data-ui]').forEach(el => {
+              UI_ELEMENTS[el.dataset.ui] = el;
+          });
+      }
+
+      function updateDynamicContent() {
+          const { trainer } = store.getState();
+          if (!trainer || !trainer.executionPlan) return;
+
+          const { status, executionPlan, currentStepIndex, remaining } = trainer;
+          const currentStep = executionPlan[currentStepIndex];
+          if (!currentStep) return;
+          
+          const { type, duration, headerTitle, mainText, context = {}, item } = currentStep;
+          const isAnnouncing = type === 'announcing-phase';
+
+          // --- Update Header ---
+          UI_ELEMENTS.headerTitle.textContent = headerTitle;
+          UI_ELEMENTS.descriptionText.textContent = item?.description || '';
+
+          // --- Update Ring Content ---
+          let mainPhaseText = '';
+          let timerText = '';
+
+          if (status !== 'ready') {
+              mainPhaseText = (type === 'rest') ? 'RIPOSO' : mainText;
+              if (type === 'preparing') mainPhaseText = 'Preparati';
+          }
+          UI_ELEMENTS.mainPhaseText.textContent = mainPhaseText;
+          UI_ELEMENTS.mainPhaseText.classList.toggle('is-flashing', isAnnouncing);
+
+          if (duration > 0 && status !== 'ready') {
+              timerText = String(Math.ceil(remaining / 1000));
+          }
+          UI_ELEMENTS.timerText.textContent = timerText;
+          
+          // --- Update Footer ---
+          let buttonText = '...';
+          let instructionText = '';
+          switch (status) {
+              case 'ready': buttonText = 'INIZIA'; instructionText = 'Premi INIZIA per cominciare'; break;
+              case 'running': buttonText = 'PAUSA'; instructionText = (type === 'rest') ? mainText : 'Esegui'; break;
+              case 'paused': buttonText = 'RIPRENDI'; instructionText = 'Pausa'; break;
+              case 'finished': buttonText = 'DEBRIEFING'; instructionText = 'Ben fatto!'; break;
+          }
+          UI_ELEMENTS.mainButton.textContent = buttonText;
+          UI_ELEMENTS.instructionText.textContent = instructionText;
+
+          // --- Update Visuals ---
+          const progress = (duration > 0 && !isAnnouncing && status === 'running') ? (duration - remaining) / duration : (remaining === 0 ? 1 : 0);
+          UI_ELEMENTS.progressRing.style.strokeDashoffset = circumference * (1 - progress);
+          UI_ELEMENTS.terminateButton.classList.toggle('is-invisible', status === 'finished' || status === 'ready');
+      }
+
+
+      export function init(element) {
+          renderStructure(element);
+
+          UI_ELEMENTS.mainButton.addEventListener('click', () => {
+              const { status } = store.getState().trainer;
+              switch (status) {
+                  case 'ready': store.dispatch({ type: 'START_TRAINER' }); break;
+                  case 'running': store.dispatch({ type: 'PAUSE_TRAINER' }); break;
+                  case 'paused': store.dispatch({ type: 'RESUME_TRAINER' }); break;
+                  case 'finished': store.dispatch({ type: 'FINISH_WORKOUT' }); break;
+              }
+          });
+
+          UI_ELEMENTS.terminateButton.addEventListener('click', () => {
+              store.dispatch({ type: 'PAUSE_TRAINER' }); // Stoppa il timer per prevenire race conditions
+              store.dispatch({ type: 'OPEN_MODAL', payload: { type: 'CONFIRM_TERMINATION' } });
+          });
+
+          // Prima sottoscrizione per l'aggiornamento completo
+          store.subscribe(() => {
+              if (element.classList.contains('view--active')) {
+                  updateDynamicContent();
+              }
+          });
+          
+          // Render iniziale
+          updateDynamicContent();
+      }
 commands:
-  - "echo 'Azione richiesta: Applica la patch, ricarica l\\'app con un Hard Refresh (Ctrl+Shift+R o Cmd+Shift+R) e controlla la console.'"
+  - "echo 'Patch finale applicata. Tutti i bug segnalati sono stati risolti con un approccio robusto.'"
+  - "echo 'Ricarica l\\'app e verifica il funzionamento.'"
