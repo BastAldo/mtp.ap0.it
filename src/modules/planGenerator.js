@@ -19,10 +19,29 @@ function createActionSteps(item, seriesIndex) {
   return steps;
 }
 
+function enrichPlanWithPhaseAnnouncements(plan) {
+  const enrichedPlan = [];
+  for (const step of plan) {
+    // Inserisce un annuncio di fase prima di ogni passo di tipo 'action'
+    if (step.type === 'action') {
+      enrichedPlan.push({
+        type: 'announcing-phase',
+        duration: 750, // 0.75 secondi come da documentazione
+        headerTitle: step.headerTitle,
+        mainText: step.mainText,
+        context: step.context,
+        item: step.item,
+      });
+    }
+    enrichedPlan.push(step);
+  }
+  return enrichedPlan;
+}
+
 export function generatePlan(workoutItems) {
   if (!workoutItems || workoutItems.length === 0) return [];
 
-  const plan = [
+  let plan = [
     { type: 'preparing', duration: 3000, headerTitle: 'Preparati', mainText: 'Si comincia...' }
   ];
 
@@ -35,24 +54,16 @@ export function generatePlan(workoutItems) {
         mainText: 'Come da programma',
         item
       });
-    } else { // exercise or time
-      plan.push({
-        type: 'announcing',
-        duration: 2000,
-        headerTitle: 'Prossimo Esercizio',
-        mainText: item.name,
-        item
-      });
-
+    } else {
       const totalSeries = item.series || 1;
       for (let i = 1; i <= totalSeries; i++) {
         plan.push(...createActionSteps(item, i));
-        // NOTA: Il riposo tra le serie non è più automatico.
-        // Deve essere aggiunto esplicitamente come item di tipo 'rest' nel workout editor.
       }
     }
   });
 
-  plan.push({ type: 'finished', duration: 0, headerTitle: 'Fine', mainText: 'Workout Completato!' });
-  return plan;
+  const finalPlan = enrichPlanWithPhaseAnnouncements(plan);
+
+  finalPlan.push({ type: 'finished', duration: 0, headerTitle: 'Fine', mainText: 'Workout Completato!' });
+  return finalPlan;
 }

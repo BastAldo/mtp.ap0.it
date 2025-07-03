@@ -61,7 +61,7 @@ function createStore() {
           if (workoutItems?.length > 0) {
               const plan = generatePlan(workoutItems);
               console.log("--- Piano di Esecuzione Generato ---");
-              console.table(plan); // Stampa il piano per il debug
+              console.table(plan);
 
               newState.currentView = 'trainer';
               newState.trainer = {

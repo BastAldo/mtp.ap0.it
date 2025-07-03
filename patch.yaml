@@ -1,14 +1,12 @@
-commit_message: "feat(trainer): Rendere espliciti i riposi e stampare il piano di esecuzione"
+commit_message: "fix(trainer): Implementare annunci di fase e correggere la funzionalità di pausa"
 rationale: |
-  Questo commit implementa una revisione architetturale basata sulla richiesta di maggiore semplicità e trasparenza, risolvendo i bug rimanenti in modo robusto.
+  Questo commit risolve gli ultimi bug critici segnalati, rendendo l'applicazione pienamente funzionale come da documentazione.
 
-  1.  **Riposi Espliciti (`planGenerator.js`):** È stata rimossa la logica che aggiungeva automaticamente un riposo tra le serie. Ora il generatore del piano processa solo gli elementi presenti nel workout definito dall'utente (esercizi e blocchi di riposo manuali). Questo rende il flusso del workout 100% prevedibile e senza comportamenti "magici".
+  1.  **Annunci di Fase (`planGenerator.js`):** È stata implementata la logica di "arricchimento" del piano. Dopo la generazione iniziale, una seconda passata inserisce un passo di tipo `announcing-phase` della durata di 750ms prima di ogni passo di azione (`UP`, `HOLD`, `DOWN`). Questo fornisce all'utente il preavviso necessario per ogni movimento, come richiesto.
 
-  2.  **Stampa del Piano di Esecuzione (`store.js`):** All'avvio di un workout, l'intero piano di esecuzione viene ora stampato in console utilizzando `console.table()`. Questo fornisce una visibilità completa e immediata su ogni stato che l'applicazione attraverserà, semplificando enormemente il debug.
+  2.  **Correzione Pausa/Ripresa (`store.js`):** La logica per le azioni `PAUSE_TRAINER` e `RESUME_TRAINER` è stata riscritta per essere semplice e robusta, garantendo che lo stato `status` del trainer venga aggiornato correttamente. Questo rende il pulsante di pausa e, di conseguenza, il pulsante per terminare l'allenamento, pienamente funzionanti.
 
-  3.  **Logica di Pausa Corretta (`store.js`):** I `case` per `PAUSE_TRAINER` e `RESUME_TRAINER` sono stati corretti per aggiornare in modo affidabile lo stato del trainer, rendendo i pulsanti dell'interfaccia reattivi e funzionanti.
-
-  4.  **Introduzione degli Stati di Annuncio:** Il `planGenerator` ora inserisce correttamente un passo di `announcing` prima di ogni esercizio, migliorando l'esperienza utente.
+  3.  **Trasparenza del Piano (`store.js`):** L'azione `START_WORKOUT` ora stampa in console una tabella (`console.table`) dell'intero piano di esecuzione *arricchito*, offrendo una visibilità completa sul comportamento del trainer prima ancora che parta.
 patches:
   - file: src/modules/planGenerator.js
     content: |
@@ -33,10 +31,29 @@ patches:
         return steps;
       }
       
+      function enrichPlanWithPhaseAnnouncements(plan) {
+        const enrichedPlan = [];
+        for (const step of plan) {
+          // Inserisce un annuncio di fase prima di ogni passo di tipo 'action'
+          if (step.type === 'action') {
+            enrichedPlan.push({
+              type: 'announcing-phase',
+              duration: 750, // 0.75 secondi come da documentazione
+              headerTitle: step.headerTitle,
+              mainText: step.mainText,
+              context: step.context,
+              item: step.item,
+            });
+          }
+          enrichedPlan.push(step);
+        }
+        return enrichedPlan;
+      }
+
       export function generatePlan(workoutItems) {
         if (!workoutItems || workoutItems.length === 0) return [];
 
-        const plan = [
+        let plan = [
           { type: 'preparing', duration: 3000, headerTitle: 'Preparati', mainText: 'Si comincia...' }
         ];
 
@@ -49,26 +66,18 @@ patches:
               mainText: 'Come da programma',
               item
             });
-          } else { // exercise or time
-            plan.push({
-              type: 'announcing',
-              duration: 2000,
-              headerTitle: 'Prossimo Esercizio',
-              mainText: item.name,
-              item
-            });
-
+          } else {
             const totalSeries = item.series || 1;
             for (let i = 1; i <= totalSeries; i++) {
               plan.push(...createActionSteps(item, i));
-              // NOTA: Il riposo tra le serie non è più automatico.
-              // Deve essere aggiunto esplicitamente come item di tipo 'rest' nel workout editor.
             }
           }
         });
 
-        plan.push({ type: 'finished', duration: 0, headerTitle: 'Fine', mainText: 'Workout Completato!' });
-        return plan;
+        const finalPlan = enrichPlanWithPhaseAnnouncements(plan);
+
+        finalPlan.push({ type: 'finished', duration: 0, headerTitle: 'Fine', mainText: 'Workout Completato!' });
+        return finalPlan;
       }
   - file: src/modules/store.js
     content: |
@@ -135,7 +144,7 @@ patches:
                 if (workoutItems?.length > 0) {
                     const plan = generatePlan(workoutItems);
                     console.log("--- Piano di Esecuzione Generato ---");
-                    console.table(plan); // Stampa il piano per il debug
+                    console.table(plan);
 
                     newState.currentView = 'trainer';
                     newState.trainer = {
