@@ -1,13 +1,11 @@
-// --- Reducer Puro per la Logica del Trainer ---
-
 const initialState = {
-    status: 'idle', // idle, ready, running, paused, finished
+    status: 'idle',
     executionPlan: null,
     currentStepIndex: 0,
     stepStartTime: 0,
     remaining: 0,
-    activeWorkout: null,    // Dati originali del workout attivo
-    completedWorkout: null, // Dati per il debriefing
+    activeWorkout: null,
+    completedWorkout: null,
 };
 
 function advanceStep(state) {
@@ -23,7 +21,7 @@ function advanceStep(state) {
       ...state,
       status: 'finished',
       currentStepIndex: nextStepIndex,
-      completedWorkout: { completed: true }
+      completedWorkout: { ...state.activeWorkout, completed: true }
     };
   }
   
@@ -37,12 +35,13 @@ function advanceStep(state) {
 
 export function trainerReducer(state = initialState, action) {
     switch (action.type) {
-        case 'START_WORKOUT_PLAN': {
+        case 'SET_PLAN': {
+          const { plan, workoutItems, date } = action.payload;
           return {
             ...initialState,
             status: 'ready',
-            executionPlan: action.payload,
-            activeWorkout: { date: new Date().toISOString(), items: action.payload.map(p => p.item).filter(Boolean) }
+            executionPlan: plan,
+            activeWorkout: { date, items: workoutItems }
           };
         }
 
@@ -68,7 +67,6 @@ export function trainerReducer(state = initialState, action) {
 
         case 'RESUME_TRAINER': {
             if (state.status === 'paused') {
-                // Ricalcola lo stepStartTime per riprendere correttamente
                 return { ...state, status: 'running', stepStartTime: performance.now() - (state.executionPlan[state.currentStepIndex].duration - state.remaining) };
             }
             return state;
@@ -90,18 +88,22 @@ export function trainerReducer(state = initialState, action) {
         }
 
         case 'TERMINATE_WORKOUT': {
+          if (state.status === 'idle' || state.status === 'finished') return state;
+
           const currentStep = state.executionPlan[state.currentStepIndex];
+          const itemIndex = state.activeWorkout.items.findIndex(i => i.id === currentStep.item?.id);
           const terminationPoint = {
-            itemIndex: state.activeWorkout.items.findIndex(i => i.id === currentStep.item?.id) || 0,
+            itemIndex: itemIndex > -1 ? itemIndex : 0,
             currentSeries: currentStep.context?.currentSeries || 1,
           };
-          return { ...state, status: 'finished', completedWorkout: { completed: false, terminationPoint }};
+
+          return {
+              ...state,
+              status: 'finished',
+              completedWorkout: { ...state.activeWorkout, completed: false, terminationPoint }
+          };
         }
         
-        case 'RESET_TRAINER': {
-          return { ...initialState, completedWorkout: action.payload };
-        }
-
         default:
             return state;
     }

@@ -1,5 +1,3 @@
-// --- Fabbriche di Passi (Step Factories) ---
-
 function createPreparingStep() {
   return { type: 'preparing', duration: 3000, headerTitle: 'Preparati', mainText: 'Si comincia...' };
 }
@@ -39,7 +37,6 @@ function createFinishedStep() {
   return { type: 'finished', duration: 0, headerTitle: 'Fine', mainText: 'Workout Completato!' };
 }
 
-// --- Compositore del Piano ---
 export function generatePlan(workoutItems) {
   if (!workoutItems || workoutItems.length === 0) return [];
 

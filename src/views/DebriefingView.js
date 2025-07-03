@@ -1,7 +1,9 @@
 import store from '../modules/store.js';
 
 function generateSummaryHtml(completedWorkout) {
-    if (!completedWorkout || !completedWorkout.items) return '<p>Nessun dato di allenamento disponibile.</p>';
+    if (!completedWorkout || !completedWorkout.items) {
+        return '<p>Nessun dato di allenamento disponibile.</p>';
+    }
 
     const title = completedWorkout.completed
         ? '<h2>Workout Completato!</h2>'
@@ -76,6 +78,8 @@ function generateTextForCoach(completedWorkout) {
 
 function render(element) {
     const { completedWorkout } = store.getState().trainer;
+    if (!completedWorkout) return; // Safety check
+
     const summaryHtml = generateSummaryHtml(completedWorkout);
     const actionsHtml = `
         <div class="debriefing-actions">
@@ -98,6 +102,7 @@ export function init(element) {
         }
         if (event.target.closest('.copy-btn')) {
             const { completedWorkout } = store.getState().trainer;
+            if (!completedWorkout) return;
             const textToCopy = generateTextForCoach(completedWorkout);
             navigator.clipboard.writeText(textToCopy).then(() => {
                 store.dispatch({ type: 'SHOW_NOTICE', payload: { message: 'Riepilogo copiato!' } });

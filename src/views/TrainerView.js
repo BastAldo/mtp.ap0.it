@@ -1,11 +1,11 @@
 import store from '../modules/store.js';
 
 function render(element) {
-    const { trainerState, trainerContext } = store.getState();
-    const { executionPlan, currentStepIndex, remaining } = trainerContext;
+    const { trainer } = store.getState();
+    const { status, executionPlan, currentStepIndex, remaining } = trainer;
 
-    if (!executionPlan || executionPlan.length === 0 || !executionPlan[currentStepIndex]) {
-        element.innerHTML = '<h2>Nessun piano di workout attivo.</h2>';
+    if (!executionPlan || !executionPlan[currentStepIndex]) {
+        element.innerHTML = '<h2>Nessun workout attivo.</h2>';
         return;
     }
 
@@ -14,20 +14,19 @@ function render(element) {
 
     const radius = 90;
     const circumference = 2 * Math.PI * radius;
-    let ringOffset = circumference;
     
     let timerText = '', buttonText = '', instructionText = '';
     const isFlashing = type === 'announcing';
-    const terminateButtonHidden = trainerState === 'finished' || trainerState === 'ready';
+    const terminateButtonHidden = status === 'finished' || status === 'ready';
     
     const progress = duration > 0 ? (duration - Math.max(0, remaining)) / duration : 0;
-    ringOffset = circumference * (1 - progress);
+    const ringOffset = circumference * (1 - progress);
 
-    if (duration > 0 && (trainerState === 'running' || trainerState === 'paused')) {
+    if (duration > 0 && (status === 'running' || status === 'paused')) {
         timerText = Math.ceil(remaining / 1000);
     }
 
-    switch (trainerState) {
+    switch (status) {
         case 'ready': buttonText = 'INIZIA'; instructionText = 'Premi INIZIA per cominciare'; break;
         case 'running': buttonText = 'PAUSA'; instructionText = 'Esegui'; break;
         case 'paused': buttonText = 'RIPRENDI'; instructionText = 'Pausa'; break;
@@ -71,18 +70,17 @@ export function init(element) {
 
         if (terminateButton) {
             store.dispatch({ type: 'TERMINATE_WORKOUT' });
-            store.dispatch({ type: 'TERMINATE_WORKOUT_SESSION' });
             return;
         }
 
         if (!mainButton) return;
-        const { trainerState } = store.getState();
+        const { status } = store.getState().trainer;
 
-        switch (trainerState) {
+        switch (status) {
             case 'ready': store.dispatch({ type: 'START_TRAINER' }); break;
             case 'running': store.dispatch({ type: 'PAUSE_TRAINER' }); break;
             case 'paused': store.dispatch({ type: 'RESUME_TRAINER' }); break;
-            case 'finished': store.dispatch({ type: 'FINISH_WORKOUT_SESSION' }); break;
+            case 'finished': store.dispatch({ type: 'FINISH_WORKOUT' }); break;
         }
     });
 

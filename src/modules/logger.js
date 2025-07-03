@@ -1,28 +1,21 @@
-// --- Middleware di Logging Intelligente ---
-
 function formatLogMessage(action, state) {
-    const { type, payload } = action;
-    const { currentView, trainerState, trainerContext } = state;
+    const { type } = action;
+    const { currentView, trainer } = state;
 
     let message = `View: ${currentView}`;
 
-    if (currentView === 'trainer' && trainerContext.executionPlan) {
-        const { executionPlan, currentStepIndex } = trainerContext;
+    if (currentView === 'trainer' && trainer.executionPlan) {
+        const { status, executionPlan, currentStepIndex } = trainer;
         const step = executionPlan[currentStepIndex];
         if (step) {
-            message += ` | Trainer: ${trainerState} | Step: ${step.type} (${step.headerTitle})`;
+            message += ` | Trainer: ${status} | Step: ${step.type} (${step.headerTitle})`;
         }
     }
     
-    if(payload) {
-      message += ` | Payload: ${JSON.stringify(payload)}`;
-    }
-
     return message;
 }
 
 export function logger(action, state) {
-    // Ignora le azioni "rumorose" per mantenere la console pulita
     const noisyActions = ['TICK'];
     if (noisyActions.includes(action.type)) {
         return;

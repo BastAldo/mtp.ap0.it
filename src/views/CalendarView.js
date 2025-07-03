@@ -33,7 +33,7 @@ export function init(element) {
     const startButton = event.target.closest('.start-btn');
     if (startButton) {
       const date = dayCell.dataset.date;
-      store.dispatch({ type: 'START_WORKOUT_SESSION', payload: { date } });
+      store.dispatch({ type: 'START_WORKOUT', payload: { date } });
       return;
     }
 
@@ -61,7 +61,7 @@ export function init(element) {
 
       let bodyContent = '';
       if (workoutForDay?.length > 0) {
-        const exerciseCount = workoutForDay.filter(item => item.type === 'exercise').length;
+        const exerciseCount = workoutForDay.filter(item => item.type !== 'rest').length;
         bodyContent = `<div class="exercise-count">${exerciseCount} esercizi</div><button class="start-btn">START</button>`;
       }
       dayCell.innerHTML = `<div class="day-cell__header"><span>${dayDate.toLocaleDateString('it-IT', { weekday: 'long' })}</span><span>${dayDate.getDate()}</span></div><div class="day-cell__body">${bodyContent}</div>`;

@@ -48,7 +48,6 @@ function handleViewChange() {
   }
 }
 
-// --- Motore Principale dell'Applicazione (basato su requestAnimationFrame) ---
 function gameLoop(timestamp) {
     store.dispatch({ type: 'TICK', payload: { timestamp } });
     requestAnimationFrame(gameLoop);
@@ -57,5 +56,5 @@ function gameLoop(timestamp) {
 store.subscribe(handleViewChange);
 
 initializeApp();
-requestAnimationFrame(gameLoop); // Avvia il ciclo principale dell'applicazione
+requestAnimationFrame(gameLoop);
 console.log('App "Mio Trainer Personale" inizializzata.');
