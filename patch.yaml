@@ -1,12 +1,8 @@
-commit_message: "docs(flowchart): Creare diagramma esecuzione workout (Livello 2)"
+commit_message: "fix(docs): Correggere sintassi Mermaid nel flowchart di esecuzione"
 rationale: |
-  Questo commit introduce il flowchart di Livello 2, `03_training_session_flow.md`, che dettaglia il flusso di esecuzione di un allenamento all'interno della vista "Player".
-  Il diagramma illustra:
-  - La richiesta dell'ExecutionPlan al backend.
-  - Il loop principale che itera sui "frame" della lista.
-  - La logica di rendering e temporizzazione di ogni singolo frame.
-  - La transizione finale alla vista di riepilogo.
-  Questo completa la documentazione funzionale per il core dell'esperienza utente.
+  Questo commit corregge un errore di sintassi nel diagramma di flusso `03_training_session_flow.md`.
+  La presenza di parentesi quadre all'interno dell'etichetta di un nodo (`Leggi Frame[Indice]`) causava un errore nel parser di Mermaid, impedendone la corretta visualizzazione.
+  L'etichetta è stata riformulata per rimuovere i caratteri speciali, rendendo la sintassi valida e compatibile con tutti i renderer.
 patches:
   - file: "docs/flowcharts/03_training_session_flow.md"
     content: |
@@ -17,10 +13,10 @@ patches:
       ```mermaid
       graph TD
           A[Start: Utente clicca 'Avvia Allenamento'] --> B[Richiesta ExecutionPlan al Backend];
-          
+
           subgraph Player Loop
               B --> C[Carica ExecutionPlan e Inizializza Indice a 0];
-              C --> D{Leggi Frame[Indice]};
+              C --> D{Leggi Frame Corrente};
               D --> E{Render UI in base a 'frame.type'<br>Mostra 'frame.label' e 'metadata'};
               E --> F[Avvia Timer con 'frame.durationSeconds'];
               F --> G{Timer Finito?};
@@ -29,6 +25,6 @@ patches:
               H --> I{Fine della lista?};
               I -- No --> D;
           end
-          
+
           I -- Sì --> J[Transizione a Vista Riepilogo];
       ```
