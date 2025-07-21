@@ -23,7 +23,7 @@ graph TD
         F -- Aggiungi Riposo --> J[Aggiungi blocco Riposo alla lista];
         J --> E;
 
-        F -- Riordina Elemento --> K[Utente trascina (Drag and Drop)<br>un esercizio o un riposo];
+        F -- Riordina Elemento --> K[Utente trascina Drag and Drop<br>un esercizio o un riposo];
         K --> L[Aggiorna ordine lista];
         L --> E;
         

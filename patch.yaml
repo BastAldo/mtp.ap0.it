@@ -1,12 +1,8 @@
-commit_message: "docs(flowchart): Creare diagramma gestione workout (Livello 2)"
+commit_message: "fix(docs): Correggere sintassi Mermaid nel flowchart di gestione"
 rationale: |
-  Questo commit introduce il flowchart di Livello 2, `02_workout_management_flow.md`, come pianificato.
-  Questo diagramma espande il blocco "Editor Allenamento" definito nel flusso generale e dettaglia le interazioni specifiche dell'utente durante la creazione e la modifica di un allenamento, tra cui:
-  - L'aggiunta di esercizi e riposi.
-  - La modifica dei parametri (serie, ripetizioni, tempo).
-  - Il riordino degli elementi tramite drag-and-drop.
-  - Il salvataggio finale.
-  Questo fornisce la documentazione dettagliata necessaria per implementare questa funzionalità chiave.
+  Questo commit corregge un errore di sintassi nel diagramma di flusso `02_workout_management_flow.md`.
+  La presenza di parentesi tonde all'interno dell'etichetta di un nodo causava un errore nel parser di Mermaid, impedendo la corretta visualizzazione del diagramma.
+  Rimuovendo le parentesi, la sintassi diventa valida e universalmente compatibile, garantendo che il flowchart venga renderizzato come previsto.
 patches:
   - file: "docs/flowcharts/02_workout_management_flow.md"
     content: |
@@ -35,7 +31,7 @@ patches:
               F -- Aggiungi Riposo --> J[Aggiungi blocco Riposo alla lista];
               J --> E;
 
-              F -- Riordina Elemento --> K[Utente trascina (Drag and Drop)<br>un esercizio o un riposo];
+              F -- Riordina Elemento --> K[Utente trascina Drag and Drop<br>un esercizio o un riposo];
               K --> L[Aggiorna ordine lista];
               L --> E;
               
