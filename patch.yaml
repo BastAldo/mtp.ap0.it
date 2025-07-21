@@ -1,94 +1,38 @@
-commit_message: "docs: Aggiungere documentazione core e comandi di pulizia"
+commit_message: "fix(docs): Correggere sintassi Mermaid per compatibilità"
 rationale: |
-  Questo commit stabilisce le fondamenta architetturali del progetto, basandosi sulla conoscenza completa e definitiva dello script `patcher.py`.
-  1.  Crea i documenti di specifica (`api_contract.md`, `frontend_trainer_statemachine.md`) e la guida al workflow (`workflow_e_strumenti.md`). Ogni file viene creato o sovrascritto interamente, in accordo con il funzionamento dello script.
-  2.  Aggiunge la documentazione sullo script stesso, per garantire che tutte le istanze future operino correttamente.
-  3.  Utilizza la sezione `commands` per elencare le istruzioni di pulizia manuale, il metodo corretto previsto dallo script per operazioni esterne alla modifica dei file.
+  Questo commit corregge il flowchart nel file `frontend_trainer_statemachine.md`.
+  La sintassi precedente utilizzava spazi nei nomi dei subgraph, causando problemi di rendering in alcuni visualizzatori, come quello segnalato in VS Code.
+  La nuova sintassi è più robusta e universalmente compatibile, garantendo che il diagramma sia visualizzabile correttamente in un'ampia gamma di strumenti.
 patches:
-  - file: "docs/api_contract.md"
-    content: |
-      # Contratto API e Dati Mock
-
-      Questo documento definisce il contratto dati tra il frontend e il backend. Il frontend svilupperà basandosi su queste strutture. Il backend dovrà implementare API che restituiscano dati conformi a questo contratto.
-
-      ## 1. Oggetto Workout
-      ```json
-      {
-        "id": "workout-uuid-001",
-        "date": "2025-07-21",
-        "name": "Spinta A - Petto e Tricipiti",
-        "items": [
-          { "exerciseId": "ex-001", "exerciseName": "Panca Piana", "sets": 3, "reps": 8 },
-          { "exerciseId": "ex-003", "exerciseName": "Plank", "sets": 2, "durationSeconds": 60 }
-        ]
-      }
-      ```
-
-      ## 2. Oggetto ExecutionPlan
-      ```json
-      [
-        { "type": "PREPARE", "durationSeconds": 5 },
-        { "type": "ANNOUNCE", "exerciseName": "Panca Piana" },
-        { "type": "EXERCISE", "set": 1, "reps": 8 },
-        { "type": "REST", "durationSeconds": 90 },
-        { "type": "EXERCISE", "set": 2, "reps": 8 },
-        { "type": "REST", "durationSeconds": 90 },
-        { "type": "EXERCISE", "set": 3, "reps": 8 },
-        { "type": "FINISHED" }
-      ]
-      ```
   - file: "docs/flowcharts/frontend_trainer_statemachine.md"
     content: |
       # Flowchart: Macchina a Stati del TrainerView
 
+      Questo flowchart descrive la logica di stato del componente `TrainerView`. La sintassi è stata ottimizzata per la massima compatibilità.
+
       ```mermaid
       graph TD
+          %% Il grafo è definito da cima a basso (Top Down)
+
           subgraph Inizio
               A[Idle] -->|Avvia Allenamento| B(Inizializzazione)
           end
-          subgraph Ciclo Esecuzione
-              B --> C{Step Corrente?}
-              C -->|PREPARE| D[Preparazione]
+
+          subgraph Ciclo_Esecuzione
+              B --> C{Controllo Step}
+              C -->|step: PREPARE| D[Preparazione]
               D --> C
-              C -->|ANNOUNCE| E[Annuncio Esercizio]
+              C -->|step: ANNOUNCE| E[Annuncio Esercizio]
               E --> C
-              C -->|EXERCISE / TIMED| F[Esecuzione]
+              C -->|step: EXERCISE_OR_TIMED| F[Esecuzione Esercizio]
               F --> C
-              C -->|REST| G[Riposo]
+              C -->|step: REST| G[Riposo]
               G --> C
           end
+
           subgraph Fine
-              C -->|FINISHED| H[Completato]
-              H -->|Chiudi| I(Reset)
+              C -->|step: FINISHED| H[Completato]
+              H -->|Chiudi| I(Reset Stato)
               I --> A
           end
       ```
-  - file: "docs/workflow_e_strumenti.md"
-    content: |
-      # Guida al Workflow e allo script patcher.py
-
-      ## Funzionamento di `patcher.py`
-      Lo script `patcher.py` è il nostro meccanismo per applicare modifiche. Legge un file `patch.yaml` e opera in due fasi.
-
-      ### 1. Sezione `patches`
-      Questa è una lista di oggetti, ciascuno con una chiave `file` e una `content`. Per ogni oggetto:
-      - Lo script apre il file specificato in modalità scrittura (`'w'`).
-      - **Questo SOVRASCRIVE completamente il contenuto del file esistente o CREA il file se non esiste.** Non ci sono azioni complesse come `ADD` o `REPLACE` parziali.
-
-      ### 2. Sezione `commands`
-      Questa è una lista di stringhe. Lo script **NON esegue** questi comandi. Li **mostra** all'utente come istruzioni da eseguire manualmente dopo l'applicazione del patch. È il metodo corretto per operazioni come l'eliminazione di file.
-
-      #### Esempio Corretto:
-      ```yaml
-      patches:
-        - file: "README.md"
-          content: "Nuovo contenuto del README."
-      commands:
-        - "echo 'Per completare, eliminare i file temporanei:'"
-        - "rm -f *.tmp"
-      ```
-commands:
-  - "echo 'Documentazione creata. Eseguire i comandi seguenti per pulire il progetto dal codice legacy:'"
-  - "rm index.html"
-  - "rm workouts.js"
-  - "rm -rf src/"
