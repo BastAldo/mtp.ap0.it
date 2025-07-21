@@ -1,8 +1,8 @@
-commit_message: "docs(flowchart): Add L3 ExecutionPlan generation flowchart"
+commit_message: "docs(flowchart): Fix Mermaid syntax in ExecutionPlan flowchart"
 rationale: |
-  In accordo con il piano approvato, questo commit introduce il primo diagramma di flusso di Livello 3, che documenta la logica fondamentale del backend ("Regista") per la generazione dell'ExecutionPlan.
+  Questo commit corregge un errore di sintassi nel diagramma di flusso `04_execution_plan_generation.md`. I caratteri speciali (`[]`) nel testo di un nodo non erano stati correttamente escapati, causando un errore di parsing da parte di Mermaid.
 
-  Il diagramma aderisce al Principio di Massima Granularità astenendosi dal descrivere ogni singola micro-operazione. Invece, mappa il flusso principale e delega la logica complessa di scomposizione di un esercizio a un "sub-processo". Questo mantiene il diagramma pulito, focalizzato e facilmente comprensibile, stabilendo un modello per la futura documentazione granulare.
+  La correzione racchiude il testo del nodo problematico tra doppi apici, come richiesto dalla sintassi di Mermaid per trattare il contenuto come una stringa letterale. Questo risolve l'errore di rendering e ripristina la corretta visualizzazione della documentazione.
 patches:
   - file: "docs/flowcharts/04_execution_plan_generation.md"
     content: |
@@ -14,7 +14,7 @@ patches:
       graph TD
           subgraph Regista / planGenerator
               A(Start: Riceve Definizione Allenamento);
-              B[Inizializza ExecutionPlan = []];
+              B["Inizializza ExecutionPlan = []"];
               
               A --> B;
               B --> C{Loop: Per ogni 'item' nella Definizione};

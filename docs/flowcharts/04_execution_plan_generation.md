@@ -6,7 +6,7 @@ Questo diagramma descrive l'algoritmo di alto livello che il "Regista" (backend)
 graph TD
     subgraph Regista / planGenerator
         A(Start: Riceve Definizione Allenamento);
-        B[Inizializza ExecutionPlan = []];
+        B["Inizializza ExecutionPlan = []"];
         
         A --> B;
         B --> C{Loop: Per ogni 'item' nella Definizione};
