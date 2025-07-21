@@ -1,10 +1,8 @@
-commit_message: "docs(flowchart): Completare il diagramma di flusso principale (Livello 1)"
+commit_message: "fix(docs): Correggere sintassi Mermaid nel flowchart principale"
 rationale: |
-  In base al feedback dell'utente, questo commit aggiorna il flowchart di Livello 1 (`01_main_flow.md`) per renderlo una mappa completa ma generica di tutte le funzionalità principali dell'applicazione.
-  Il nuovo diagramma ora mostra chiaramente i due percorsi principali che un utente può intraprendere dalla vista Calendario:
-  1.  Il flusso di **Gestione**: per creare o modificare un allenamento.
-  2.  Il flusso di **Esecuzione**: per avviare un allenamento esistente.
-  Questo fornisce una visione d'insieme completa, come richiesto, prima di passare ai diagrammi di dettaglio di Livello 2.
+  Questo commit corregge un errore di sintassi nel diagramma di flusso principale (`01_main_flow.md`).
+  La presenza di apici singoli all'interno di un'etichetta impediva al renderer Mermaid di visualizzare correttamente una parte del diagramma.
+  Rimuovendo gli apici, la sintassi diventa pulita e universalmente compatibile, garantendo che il flowchart venga renderizzato correttamente.
 patches:
   - file: "docs/flowcharts/01_main_flow.md"
     content: |
@@ -17,12 +15,12 @@ patches:
           A[Avvio App] --> B(Vista Calendario);
 
           subgraph Flusso di Gestione
-              B --> |Clicca su un giorno vuoto o 'Modifica'| C(Editor Allenamento);
+              B --> |Clicca su giorno vuoto o Modifica| C(Editor Allenamento);
               C --> |Salva modifiche| B;
           end
 
           subgraph Flusso di Esecuzione
-              B --> |Clicca 'Avvia Allenamento'| D(Player);
+              B --> |Clicca Avvia Allenamento| D(Player);
               D --> |Fine Allenamento| E(Riepilogo);
               E --> |Chiudi| B;
           end
