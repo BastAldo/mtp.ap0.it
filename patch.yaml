@@ -1,98 +1,50 @@
-commit_message: "docs: Aggiungere documenti core e fornire comandi di pulizia"
+commit_message: "docs: Aggiungere guida su workflow e uso del patcher"
 rationale: |
-  Questo commit adotta l'approccio corretto basato sull'analisi completa dello script patcher.
-  1. Crea i documenti architetturali fondamentali (`api_contract.md`, `frontend_trainer_statemachine.md`) usando l'azione `CREATE`.
-  2. Utilizza la sezione `informational_messages` per istruire l'utente su come rimuovere in modo pulito e definitivo tutto il codice sorgente legacy. Questo metodo è più pulito ed efficiente rispetto al precedente workaround di svuotamento dei file.
+  Per garantire coerenza tra tutte le istanze dell'architetto, questo commit introduce un documento fondamentale: `workflow_e_strumenti.md`.
+  Questo file spiega il funzionamento dello script `patcher.py`, con un focus specifico sulla gestione delle operazioni sui file.
+  Chiarisce che le operazioni distruttive (come l'eliminazione) non vengono eseguite direttamente, ma vengono gestite tramite la sezione `informational_messages`, che istruisce l'utente sui comandi manuali da eseguire.
+  Questa documentazione è cruciale per prevenire errori e standardizzare il nostro processo di lavoro.
 patches:
-  - file: "docs/api_contract.md"
+  - file: "docs/workflow_e_strumenti.md"
     actions:
       - type: "CREATE"
         content: |
-          # Contratto API e Dati Mock
+          # Guida al Workflow e agli Strumenti
 
-          Questo documento definisce il contratto dati tra il frontend e il backend. Il frontend svilupperà basandosi su queste strutture. Il backend dovrà implementare API che restituiscano dati conformi a questo contratto.
+          Questo documento è la fonte di verità per il nostro processo di sviluppo e per l'utilizzo degli strumenti interni, in particolare lo script `patcher.py`.
 
-          ## 1. Oggetto Workout
+          ## Il Ruolo di `patcher.py`
 
-          ```json
-          {
-            "id": "workout-uuid-001",
-            "date": "2025-07-21",
-            "name": "Spinta A - Petto e Tricipiti",
-            "items": [
-              {
-                "exerciseId": "ex-001",
-                "exerciseName": "Panca Piana Bilanciere",
-                "sets": 3,
-                "reps": 8
-              },
-              {
-                "exerciseId": "ex-002",
-                "exerciseName": "Dip alle Parallele",
-                "sets": 3,
-                "reps": 10
-              },
-              {
-                "exerciseId": "ex-003",
-                "exerciseName": "Plank",
-                "sets": 2,
-                "durationSeconds": 60
-              }
-            ]
-          }
+          Lo script `patcher.py` è il nostro unico meccanismo per applicare modifiche al repository. Applica una serie di operazioni definite in un file `patch.yaml`.
+
+          ## Struttura del `patch.yaml`
+
+          Il file YAML ha due sezioni principali: `patches` e `informational_messages`.
+
+          ### 1. La Sezione `patches`
+
+          Questa sezione gestisce la creazione e la modifica dei contenuti dei file. Le azioni supportate sono:
+
+          * `CREATE`: Crea un nuovo file con il contenuto specificato.
+          * `REPLACE`: Sostituisce un blocco di linee in un file esistente.
+          * `ADD_AFTER`: Inserisce un blocco di codice dopo una linea specifica.
+
+          **IMPORTANTE**: Lo script **non supporta un'azione di eliminazione (`DELETE`)** diretta.
+
+          ### 2. La Sezione `informational_messages`
+
+          Questa sezione è il metodo corretto per gestire operazioni che esulano dalla modifica dei contenuti, come l'eliminazione di file e directory.
+
+          Lo script non esegue i comandi in questa sezione. Invece, li **visualizza** all'utente come istruzioni da eseguire manualmente dopo l'applicazione del patch.
+
+          #### Esempio Corretto per l'Eliminazione
+
+          Per eliminare la directory `src`, non si deve tentare un'azione non supportata. L'approccio corretto è:
+
+          ```yaml
+          informational_messages:
+            - "echo 'Eseguire il seguente comando per la pulizia:'"
+            - "rm -rf src/"
           ```
 
-          ## 2. Oggetto ExecutionPlan
-
-          ```json
-          [
-            { "type": "PREPARE", "durationSeconds": 5 },
-            { "type": "ANNOUNCE", "exerciseName": "Panca Piana Bilanciere" },
-            { "type": "EXERCISE", "set": 1, "reps": 8 },
-            { "type": "REST", "durationSeconds": 90 },
-            { "type": "EXERCISE", "set": 2, "reps": 8 },
-            { "type": "REST", "durationSeconds": 90 },
-            { "type": "EXERCISE", "set": 3, "reps": 8 },
-            { "type": "FINISHED" }
-          ]
-          ```
-  - file: "docs/flowcharts/frontend_trainer_statemachine.md"
-    actions:
-      - type: "CREATE"
-        content: |
-          # Flowchart: Macchina a Stati del TrainerView
-
-          Questo flowchart descrive la logica di stato del componente `TrainerView`.
-
-          ```mermaid
-          graph TD
-              subgraph Inizio
-                  A[Idle] -->|Avvia Allenamento| B(Inizializzazione)
-              end
-
-              subgraph "Ciclo di Esecuzione"
-                  B --> C{Step Corrente?}
-                  C -->|PREPARE| D[Stato: Preparazione]
-                  D --> C
-
-                  C -->|ANNOUNCE| E[Stato: Annuncio]
-                  E --> C
-
-                  C -->|EXERCISE / EXERCISE_TIMED| F[Stato: Esecuzione]
-                  F --> C
-
-                  C -->|REST| G[Stato: Riposo]
-                  G --> C
-              end
-
-              subgraph Fine
-                  C -->|FINISHED| H[Stato: Completato]
-                  H -->|Torna al Calendario| I(Reset Stato)
-                  I --> A
-              end
-          ```
-informational_messages:
-  - "echo 'Documentazione creata. Eseguire i seguenti comandi per rimuovere il codice legacy:'"
-  - "rm index.html"
-  - "rm workouts.js"
-  - "rm -rf src/"
+          Questo garantisce che l'intento sia chiaro e che l'operazione venga eseguita in modo sicuro dall'utente.
