@@ -1,34 +1,38 @@
-commit_message: "docs(flowchart): Aggiungere logica di Pausa e Termina al Player"
+commit_message: "docs(flowchart): Add L3 ExecutionPlan generation flowchart"
 rationale: |
-  Questo commit aggiorna il flowchart di esecuzione dell'allenamento (`03_training_session_flow.md`) per includere due interazioni utente fondamentali: la possibilità di mettere in pausa l'allenamento e di terminarlo in anticipo.
-  Il nuovo diagramma ora mostra chiaramente come queste azioni interrompono il normale flusso di esecuzione dei frame, rendendo la documentazione della vista Player più completa e realistica.
+  In accordo con il piano approvato, questo commit introduce il primo diagramma di flusso di Livello 3, che documenta la logica fondamentale del backend ("Regista") per la generazione dell'ExecutionPlan.
+
+  Il diagramma aderisce al Principio di Massima Granularità astenendosi dal descrivere ogni singola micro-operazione. Invece, mappa il flusso principale e delega la logica complessa di scomposizione di un esercizio a un "sub-processo". Questo mantiene il diagramma pulito, focalizzato e facilmente comprensibile, stabilendo un modello per la futura documentazione granulare.
 patches:
-  - file: "docs/flowcharts/03_training_session_flow.md"
-    content: |
-      # Livello 2: Flusso di Esecuzione dell'Allenamento (Player)
+  - file: "docs/flowcharts/04_execution_plan_generation.md"
+    actions:
+      - type: "CREATE"
+        content: |
+          # Livello 3: Flusso di Generazione dell'ExecutionPlan (Regista)
 
-      Questo diagramma dettaglia le operazioni all'interno del Player, includendo le interazioni di pausa e interruzione.
+          Questo diagramma descrive l'algoritmo di alto livello che il "Regista" (backend) usa per trasformare la definizione di un allenamento in un `ExecutionPlan` sequenziale, pronto per essere eseguito dal "Player" (frontend).
 
-      ```mermaid
-      graph TD
-          A[Start: Utente clicca 'Avvia Allenamento'] --> B[Richiesta ExecutionPlan al Backend];
-          
-          subgraph Player Loop
-              B --> C[Carica ExecutionPlan e Inizializza Indice a 0];
-              C --> D{Leggi Frame Corrente};
-              D --> E{Render UI e avvia Timer};
+          ```mermaid
+          graph TD
+              subgraph Regista / planGenerator
+                  A(Start: Riceve Definizione Allenamento);
+                  B[Inizializza ExecutionPlan = []];
+                  
+                  A --> B;
+                  B --> C{Loop: Per ogni 'item' nella Definizione};
+                  
+                  C --> D{item.type === 'EXERCISE' ?};
+                  
+                  D -- No (è un Riposo) --> F[Genera singolo Frame 'REST'];
+                  F --> G[Accoda Frame all'ExecutionPlan];
+                  
+                  D -- Sì --> E["Sub-Process: Genera Frame Esercizio(item)<br><i>(logica per serie, ripetizioni, fasi, etc.)</i>"];
+                  E --> H[Accoda i Frame restituiti<br>all'ExecutionPlan];
+                  
+                  G --> I{Ancora item?};
+                  H --> I;
 
-              E --> F{Azione Utente o Timer Finito?};
-              
-              F -- Timer Finito --> G{Incrementa Indice};
-              G --> H{Fine della lista?};
-              H -- No --> D;
-              
-              F -- Clicca Pausa --> I[Stato: In Pausa];
-              I --> |Clicca Riprendi| E;
-          end
-          
-          H -- Sì --> K[Transizione a Vista Riepilogo];
-          F -- Clicca Termina --> K;
-
-      ```
+                  I -- Sì --> C;
+                  I -- No --> J(End: Restituisce ExecutionPlan);
+              end
+          ```
