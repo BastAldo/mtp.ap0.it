@@ -1,27 +1,48 @@
-commit_message: "fix(docs): Correggere sintassi Mermaid nel flowchart principale"
+commit_message: "docs(flowchart): Creare diagramma gestione workout (Livello 2)"
 rationale: |
-  Questo commit corregge un errore di sintassi nel diagramma di flusso principale (`01_main_flow.md`).
-  La presenza di apici singoli all'interno di un'etichetta impediva al renderer Mermaid di visualizzare correttamente una parte del diagramma.
-  Rimuovendo gli apici, la sintassi diventa pulita e universalmente compatibile, garantendo che il flowchart venga renderizzato correttamente.
+  Questo commit introduce il flowchart di Livello 2, `02_workout_management_flow.md`, come pianificato.
+  Questo diagramma espande il blocco "Editor Allenamento" definito nel flusso generale e dettaglia le interazioni specifiche dell'utente durante la creazione e la modifica di un allenamento, tra cui:
+  - L'aggiunta di esercizi e riposi.
+  - La modifica dei parametri (serie, ripetizioni, tempo).
+  - Il riordino degli elementi tramite drag-and-drop.
+  - Il salvataggio finale.
+  Questo fornisce la documentazione dettagliata necessaria per implementare questa funzionalità chiave.
 patches:
-  - file: "docs/flowcharts/01_main_flow.md"
+  - file: "docs/flowcharts/02_workout_management_flow.md"
     content: |
-      # Livello 1: Flusso Funzionale Generale
+      # Livello 2: Flusso di Gestione dell'Allenamento (Editor)
 
-      Questo diagramma illustra una mappa completa ma generica di tutte le funzionalità principali dell'applicazione e dei percorsi che l'utente può intraprendere.
+      Questo diagramma dettaglia le operazioni all'interno dell'Editor Allenamento.
 
       ```mermaid
       graph TD
-          A[Avvio App] --> B(Vista Calendario);
+          A(Start: Utente clicca su un giorno nel Calendario) --> B{Allenamento Esistente?};
+          
+          B -- No --> C[Crea nuovo Allenamento vuoto];
+          B -- Sì --> D[Carica Allenamento esistente];
 
-          subgraph Flusso di Gestione
-              B --> |Clicca su giorno vuoto o Modifica| C(Editor Allenamento);
-              C --> |Salva modifiche| B;
+          subgraph Editor
+              C --> E(Mostra lista vuota);
+              D --> E(Mostra lista esercizi e riposi);
+              
+              E --> F{Azione Utente?};
+              
+              F -- Aggiungi Esercizio --> G[Apri Libreria Esercizi];
+              G --> H[Utente seleziona esercizio];
+              H --> I[Aggiungi esercizio alla lista];
+              I --> E;
+
+              F -- Aggiungi Riposo --> J[Aggiungi blocco Riposo alla lista];
+              J --> E;
+
+              F -- Riordina Elemento --> K[Utente trascina (Drag and Drop)<br>un esercizio o un riposo];
+              K --> L[Aggiorna ordine lista];
+              L --> E;
+              
+              F -- Modifica Elemento --> M[Utente modifica Serie/Reps/Tempo];
+              M --> E;
           end
 
-          subgraph Flusso di Esecuzione
-              B --> |Clicca Avvia Allenamento| D(Player);
-              D --> |Fine Allenamento| E(Riepilogo);
-              E --> |Chiudi| B;
-          end
+          F -- Salva --> N[Salva la struttura dell'Allenamento];
+          N --> O(Ritorna alla Vista Calendario);
       ```
