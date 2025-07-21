@@ -29,3 +29,8 @@ To ensure robustness and eliminate complex runtime logic, the Trainer view opera
 
 ## 5. Data Persistence
 All workout data is persisted in `localStorage` via the `storage.js` module.
+
+## 6. Nota Storica: Superamento dell'Architettura Precedente
+È importante notare che l'architettura "Regista/Player" con un piano di esecuzione pre-compilato è stata una decisione deliberata per riprogettare da zero l'applicazione e superare le criticità di una precedente versione basata su JavaScript.
+
+La vecchia implementazione soffriva di bug complessi legati alla gestione dello stato in tempo reale. L'approccio attuale, che sposta tutta la logica complessa nella fase di "compilazione" del piano (`planGenerator.js`), elimina interamente quella classe di problemi, rendendo il Player un esecutore semplice e robusto. Qualsiasi bug residuo, come quello menzionato nel documento di stato (`05_STATUS.md`), è da considerarsi un difetto di implementazione nel reset del runner, non un difetto dell'architettura di base.

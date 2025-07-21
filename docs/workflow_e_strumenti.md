@@ -1,22 +1,50 @@
-# Guida al Workflow e allo script patcher.py
+# Guida al Workflow e allo Script `patcher.py`
 
-## Funzionamento di `patcher.py`
-Lo script `patcher.py` è il nostro meccanismo per applicare modifiche. Legge un file `patch.yaml` e opera in due fasi.
+Questa guida descrive il corretto utilizzo dello script `patcher.py`, lo strumento standard per applicare modifiche al progetto in modo controllato e documentato.
 
-### 1. Sezione `patches`
-Questa è una lista di oggetti, ciascuno con una chiave `file` e una `content`. Per ogni oggetto:
-- Lo script apre il file specificato in modalità scrittura (`'w'`).
-- **Questo SOVRASCRIVE completamente il contenuto del file esistente o CREA il file se non esiste.** Non ci sono azioni complesse come `ADD` o `REPLACE` parziali.
+## Principio di Funzionamento
 
-### 2. Sezione `commands`
-Questa è una lista di stringhe. Lo script **NON esegue** questi comandi. Li **mostra** all'utente come istruzioni da eseguire manualmente dopo l'applicazione del patch. È il metodo corretto per operazioni come l'eliminazione di file.
+Lo script `patcher.py` è progettato per essere semplice e robusto. Il suo unico compito è leggere un file `patch.yaml` e **sovrascrivere completamente** i file specificati con il nuovo contenuto fornito.
 
-#### Esempio Corretto:
+**Importante**: Lo script non esegue operazioni complesse come l'inserimento di righe o la sostituzione parziale di blocchi di testo. L'intera logica di modifica risiede nella preparazione del nuovo contenuto completo del file.
+
+## Struttura del `patch.yaml`
+
+Il file `patch.yaml` deve avere la seguente struttura:
+
 ```yaml
+commit_message: "Un messaggio di commit chiaro e conciso"
+rationale: |
+  Una giustificazione dettagliata delle modifiche, che spiega
+  il perché e il come dell'intervento.
 patches:
-  - file: "README.md"
-    content: "Nuovo contenuto del README."
-commands:
-  - "echo 'Per completare, eliminare i file temporanei:'"
-  - "rm -f *.tmp"
+  - file: "percorso/al/primo/file.md"
+    content: |
+      TUTTO il nuovo contenuto
+      del primo file va qui.
+      Questo sovrascriverà completamente il file esistente.
+  - file: "src/nuovo_modulo.rs"
+    content: |
+      Contenuto completo di un file
+      che deve essere creato.
+```
+
+### Sezione `patches`
+- È una lista di oggetti.
+- Ogni oggetto deve contenere due chiavi: `file` e `content`.
+- `file`: Il percorso relativo del file da creare o sovrascrivere.
+- `content`: L'intero contenuto che il file dovrà avere dopo l'applicazione della patch.
+
+### Cosa NON Fare: Esempio di Errore Comune
+
+La seguente sintassi **NON è valida** e verrà ignorata dallo script, portando a risultati inattesi:
+
+```yaml
+# ESEMPIO SCORRETTO - NON USARE QUESTO FORMATO
+patches:
+  - file: "src/main.rs"
+    actions: # La chiave "actions" non esiste
+      - type: "ADD_AFTER"
+        line: 25
+        content: "Questo non funzionerà"
 ```

@@ -1,36 +1,164 @@
-commit_message: "docs(flowchart): Fix Mermaid syntax in ExecutionPlan flowchart"
+commit_message: "docs: Enhance patcher guide and clarify architecture"
 rationale: |
-  Questo commit corregge un errore di sintassi nel diagramma di flusso `04_execution_plan_generation.md`. I caratteri speciali (`[]`) nel testo di un nodo non erano stati correttamente escapati, causando un errore di parsing da parte di Mermaid.
+  Questo commit applica due importanti miglioramenti alla documentazione, basati su una corretta comprensione dello script patcher.py.
 
-  La correzione racchiude il testo del nodo problematico tra doppi apici, come richiesto dalla sintassi di Mermaid per trattare il contenuto come una stringa letterale. Questo risolve l'errore di rendering e ripristina la corretta visualizzazione della documentazione.
+  1.  **Migliora la guida del Patcher**: Il file `docs/workflow_e_strumenti.md` è stato riscritto per descrivere in modo inequivocabile il funzionamento dello script `patcher.py`. Ora include una sezione sulla struttura YAML richiesta e esempi chiari di utilizzo corretto e scorretto, per prevenire futuri errori.
+
+  2.  **Applica le modifiche alla documentazione**: Le modifiche all'architettura (`02_ARCHITECTURE.md`) e al contratto API (`api_contract.md`), precedentemente approvate, sono state applicate fornendo il contenuto completo dei file, come richiesto dal patcher. Questo garantisce l'aggiunta della nota storica e la chiarificazione dei tipi di frame (`ANNOUNCE` vs `INFO`).
+
+  Tutte le modifiche sono contenute in un unico `patch.yaml` corretto e funzionale.
 patches:
-  - file: "docs/flowcharts/04_execution_plan_generation.md"
+  - file: "docs/workflow_e_strumenti.md"
     content: |
-      # Livello 3: Flusso di Generazione dell'ExecutionPlan (Regista)
+      # Guida al Workflow e allo Script `patcher.py`
 
-      Questo diagramma descrive l'algoritmo di alto livello che il "Regista" (backend) usa per trasformare la definizione di un allenamento in un `ExecutionPlan` sequenziale, pronto per essere eseguito dal "Player" (frontend).
+      Questa guida descrive il corretto utilizzo dello script `patcher.py`, lo strumento standard per applicare modifiche al progetto in modo controllato e documentato.
 
-      ```mermaid
-      graph TD
-          subgraph Regista / planGenerator
-              A(Start: Riceve Definizione Allenamento);
-              B["Inizializza ExecutionPlan = []"];
-              
-              A --> B;
-              B --> C{Loop: Per ogni 'item' nella Definizione};
-              
-              C --> D{item.type === 'EXERCISE' ?};
-              
-              D -- No (è un Riposo) --> F[Genera singolo Frame 'REST'];
-              F --> G[Accoda Frame all'ExecutionPlan];
-              
-              D -- Sì --> E["Sub-Process: Genera Frame Esercizio(item)<br><i>(logica per serie, ripetizioni, fasi, etc.)</i>"];
-              E --> H[Accoda i Frame restituiti<br>all'ExecutionPlan];
-              
-              G --> I{Ancora item?};
-              H --> I;
+      ## Principio di Funzionamento
 
-              I -- Sì --> C;
-              I -- No --> J(End: Restituisce ExecutionPlan);
-          end
+      Lo script `patcher.py` è progettato per essere semplice e robusto. Il suo unico compito è leggere un file `patch.yaml` e **sovrascrivere completamente** i file specificati con il nuovo contenuto fornito.
+
+      **Importante**: Lo script non esegue operazioni complesse come l'inserimento di righe o la sostituzione parziale di blocchi di testo. L'intera logica di modifica risiede nella preparazione del nuovo contenuto completo del file.
+
+      ## Struttura del `patch.yaml`
+
+      Il file `patch.yaml` deve avere la seguente struttura:
+
+      ```yaml
+      commit_message: "Un messaggio di commit chiaro e conciso"
+      rationale: |
+        Una giustificazione dettagliata delle modifiche, che spiega
+        il perché e il come dell'intervento.
+      patches:
+        - file: "percorso/al/primo/file.md"
+          content: |
+            TUTTO il nuovo contenuto
+            del primo file va qui.
+            Questo sovrascriverà completamente il file esistente.
+        - file: "src/nuovo_modulo.rs"
+          content: |
+            Contenuto completo di un file
+            che deve essere creato.
+      ```
+
+      ### Sezione `patches`
+      - È una lista di oggetti.
+      - Ogni oggetto deve contenere due chiavi: `file` e `content`.
+      - `file`: Il percorso relativo del file da creare o sovrascrivere.
+      - `content`: L'intero contenuto che il file dovrà avere dopo l'applicazione della patch.
+
+      ### Cosa NON Fare: Esempio di Errore Comune
+
+      La seguente sintassi **NON è valida** e verrà ignorata dallo script, portando a risultati inattesi:
+
+      ```yaml
+      # ESEMPIO SCORRETTO - NON USARE QUESTO FORMATO
+      patches:
+        - file: "src/main.rs"
+          actions: # La chiave "actions" non esiste
+            - type: "ADD_AFTER"
+              line: 25
+              content: "Questo non funzionerà"
+      ```
+
+  - file: "docs/02_ARCHITECTURE.md"
+    content: |
+      # Application Architecture
+
+      This document outlines the high-level architecture for the "Mio Trainer Personale" SPA.
+
+      ## 1. Core Principles
+      -   **Modularity:** The application is broken down into distinct, single-responsibility modules.
+      -   **State-Driven UI:** The user interface is a function of the application's state.
+
+      ## 2. State Management: Centralized Store
+      The application uses a centralized state store (`src/modules/store.js`) as the Single Source of Truth (SSoT).
+      -   **State:** A single, read-only JavaScript object.
+      -   **Actions:** State is modified by dispatching predefined "actions".
+      -   **Subscriptions:** UI modules subscribe to the store to re-render on state changes.
+
+      ## 3. Core Architectural Pattern: Pre-compiled Execution Plan
+      To ensure robustness and eliminate complex runtime logic, the Trainer view operates on a "pre-compiled plan" architecture.
+      -   **Status**: Accepted & Implemented
+      -   **Context**: Dynamic state machines for workouts are prone to bugs.
+      -   **Decision**: Before a workout starts, `planGenerator.js` creates a complete, sequential array of "step objects". Each step object contains all necessary data for its execution and rendering (`type`, `duration`, `headerTitle`, `mainText`, etc.).
+      -   **Execution**: The `store.js` module acts as a simple "runner". During the workout, it just increments an index (`currentStepIndex`) to move to the next step in the pre-compiled array. All complex logic is handled upfront by the generator, not at runtime.
+      -   **Benefits**: This approach makes the runtime logic extremely simple, predictable, and easy to debug. The entire workout flow can be inspected before it even starts.
+
+      ## 4. Directory Structure
+      -   `docs/`: Project documentation.
+      -   `src/`: Application source code.
+          -   `modules/`: Core logic (store, plan generator, etc.).
+          -   `views/`: UI rendering and event handling for major components.
+          -   `data/`: Static data sources (e.g., exercise library).
+
+      ## 5. Data Persistence
+      All workout data is persisted in `localStorage` via the `storage.js` module.
+
+      ## 6. Nota Storica: Superamento dell'Architettura Precedente
+      È importante notare che l'architettura "Regista/Player" con un piano di esecuzione pre-compilato è stata una decisione deliberata per riprogettare da zero l'applicazione e superare le criticità di una precedente versione basata su JavaScript.
+
+      La vecchia implementazione soffriva di bug complessi legati alla gestione dello stato in tempo reale. L'approccio attuale, che sposta tutta la logica complessa nella fase di "compilazione" del piano (`planGenerator.js`), elimina interamente quella classe di problemi, rendendo il Player un esecutore semplice e robusto. Qualsiasi bug residuo, come quello menzionato nel documento di stato (`05_STATUS.md`), è da considerarsi un difetto di implementazione nel reset del runner, non un difetto dell'architettura di base.
+
+  - file: "docs/api_contract.md"
+    content: |
+      # Contratto API: ExecutionPlan
+
+      Il `ExecutionPlan` è il contratto dati fondamentale tra backend e frontend. È una **lista di "frame"** che il backend pre-compila e il frontend esegue.
+
+      ## Struttura del Frame
+      Ogni frame nell'array `ExecutionPlan` è un oggetto che descrive un singolo, atomico passo dell'allenamento.
+
+      ### Descrizione dei Tipi di Frame (`type`)
+
+      - **`INFO`**: Un frame puramente informativo e contestuale. Dura tipicamente alcuni secondi (es. 3s) e viene usato per comunicazioni come "SQUAT - SERIE 1/2" o "PROSSIMO ESERCIZIO...". Non ha un impatto diretto sull'azione imminente.
+
+      - **`ANNOUNCE`**: **Un "primer" neurologico**. Questo è un frame visivo brevissimo (es. 0.7s) il cui unico scopo è preparare il cervello dell'utente al movimento *immediatamente successivo*. Mostra la stessa etichetta del frame `ACTION` che lo segue (es. "SU", "GIÙ", "TENUTA") per ridurre il carico cognitivo e il tempo di reazione. **Non è una notifica generica**.
+
+      - **`ACTION`**: L'esecuzione di una fase specifica di un movimento. Ha una durata definita e una `label` che descrive l'azione (es. "SU", "GIÙ").
+
+      - **`REST`**: Un periodo di riposo tra serie o esercizi.
+
+      ### Struttura Oggetto Frame
+
+      ```typescript
+      interface Frame {
+        type: "ANNOUNCE" | "ACTION" | "REST" | "INFO";
+        label: string; // Testo principale da visualizzare (es: "SU", "RIPOSO")
+        durationSeconds: number; // Durata di visualizzazione del frame
+        metadata?: { // Dati contestuali opzionali per la UI
+          exerciseName?: string;
+          seriesTotal?: number;
+          seriesCurrent?: number;
+          repsTotal?: number;
+          repsCurrent?: number;
+        }
+      }
+      ```
+
+      ## Esempio Pratico: 1 Serie di Squat
+      Questo esempio mostra come uno squat (2 ripetizioni) con fasi `up`(2s), `hold`(1s) e `down`(3s) viene scomposto dal "Regista" (backend) in una lista di frame per il "Player" (frontend).
+
+      ```json
+      [
+        { "type": "INFO", "label": "SQUAT - SERIE 1/2", "durationSeconds": 3, "metadata": {"seriesCurrent": 1, "seriesTotal": 2} },
+
+        { "type": "ANNOUNCE", "label": "SU", "durationSeconds": 0.7, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
+        { "type": "ACTION", "label": "SU", "durationSeconds": 2, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
+        { "type": "ANNOUNCE", "label": "TENUTA", "durationSeconds": 0.7, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
+        { "type": "ACTION", "label": "TENUTA", "durationSeconds": 1, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
+        { "type": "ANNOUNCE", "label": "GIÙ", "durationSeconds": 0.7, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
+        { "type": "ACTION", "label": "GIÙ", "durationSeconds": 3, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
+
+        { "type": "ANNOUNCE", "label": "SU", "durationSeconds": 0.7, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
+        { "type": "ACTION", "label": "SU", "durationSeconds": 2, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
+        { "type": "ANNOUNCE", "label": "TENUTA", "durationSeconds": 0.7, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
+        { "type": "ACTION", "label": "TENUTA", "durationSeconds": 1, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
+        { "type": "ANNOUNCE", "label": "GIÙ", "durationSeconds": 0.7, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
+        { "type": "ACTION", "label": "GIÙ", "durationSeconds": 3, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
+
+        { "type": "REST", "label": "RIPOSO", "durationSeconds": 90 },
+
+        { "type": "INFO", "label": "PROSSIMO ESERCIZIO...", "durationSeconds": 3 }
+      ]
       ```
