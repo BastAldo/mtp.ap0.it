@@ -1,38 +1,56 @@
-commit_message: "fix(docs): Correggere sintassi Mermaid per compatibilità"
+commit_message: "docs(api): Ripristinare esempio essenziale in api_contract"
 rationale: |
-  Questo commit corregge il flowchart nel file `frontend_trainer_statemachine.md`.
-  La sintassi precedente utilizzava spazi nei nomi dei subgraph, causando problemi di rendering in alcuni visualizzatori, come quello segnalato in VS Code.
-  La nuova sintassi è più robusta e universalmente compatibile, garantendo che il diagramma sia visualizzabile correttamente in un'ampia gamma di strumenti.
+  In seguito a un'importante correzione di rotta, questo commit ripristina l'esempio pratico di `ExecutionPlan` all'interno del file `api_contract.md`.
+  L'esempio, che mostra come uno squat viene scomposto in frame granulari, è fondamentale per tradurre la teoria astratta dell'architettura in una specifica tecnica chiara e inequivocabile per gli sviluppatori.
+  L'obiettivo è avere un documento che sia sia essenziale nella definizione che dettagliato nell'esempio.
 patches:
-  - file: "docs/flowcharts/frontend_trainer_statemachine.md"
+  - file: "docs/api_contract.md"
     content: |
-      # Flowchart: Macchina a Stati del TrainerView
+      # Contratto API: ExecutionPlan
 
-      Questo flowchart descrive la logica di stato del componente `TrainerView`. La sintassi è stata ottimizzata per la massima compatibilità.
+      Il `ExecutionPlan` è il contratto dati fondamentale tra backend e frontend. È una **lista di "frame"** che il backend pre-compila e il frontend esegue.
 
-      ```mermaid
-      graph TD
-          %% Il grafo è definito da cima a basso (Top Down)
+      ## Struttura del Frame
+      Ogni frame nell'array `ExecutionPlan` è un oggetto con la seguente struttura essenziale:
 
-          subgraph Inizio
-              A[Idle] -->|Avvia Allenamento| B(Inizializzazione)
-          end
+      ```typescript
+      interface Frame {
+        type: "ANNOUNCE" | "ACTION" | "REST" | "INFO";
+        label: string; // Testo principale da visualizzare (es: "SU", "RIPOSO")
+        durationSeconds: number; // Durata di visualizzazione del frame
+        metadata?: { // Dati contestuali opzionali per la UI
+          exerciseName?: string;
+          seriesTotal?: number;
+          seriesCurrent?: number;
+          repsTotal?: number;
+          repsCurrent?: number;
+        }
+      }
+      ```
 
-          subgraph Ciclo_Esecuzione
-              B --> C{Controllo Step}
-              C -->|step: PREPARE| D[Preparazione]
-              D --> C
-              C -->|step: ANNOUNCE| E[Annuncio Esercizio]
-              E --> C
-              C -->|step: EXERCISE_OR_TIMED| F[Esecuzione Esercizio]
-              F --> C
-              C -->|step: REST| G[Riposo]
-              G --> C
-          end
+      ## Esempio Pratico: 1 Serie di Squat
+      Questo esempio mostra come uno squat (2 ripetizioni) con fasi `up`(2s), `hold`(1s) e `down`(3s) viene scomposto dal "Regista" (backend) in una lista di frame per il "Player" (frontend).
 
-          subgraph Fine
-              C -->|step: FINISHED| H[Completato]
-              H -->|Chiudi| I(Reset Stato)
-              I --> A
-          end
+      ```json
+      [
+        { "type": "INFO", "label": "SQUAT - SERIE 1/2", "durationSeconds": 3, "metadata": {"seriesCurrent": 1, "seriesTotal": 2} },
+
+        { "type": "ANNOUNCE", "label": "SU", "durationSeconds": 0.7, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
+        { "type": "ACTION", "label": "SU", "durationSeconds": 2, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
+        { "type": "ANNOUNCE", "label": "TENUTA", "durationSeconds": 0.7, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
+        { "type": "ACTION", "label": "TENUTA", "durationSeconds": 1, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
+        { "type": "ANNOUNCE", "label": "GIÙ", "durationSeconds": 0.7, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
+        { "type": "ACTION", "label": "GIÙ", "durationSeconds": 3, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
+
+        { "type": "ANNOUNCE", "label": "SU", "durationSeconds": 0.7, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
+        { "type": "ACTION", "label": "SU", "durationSeconds": 2, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
+        { "type": "ANNOUNCE", "label": "TENUTA", "durationSeconds": 0.7, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
+        { "type": "ACTION", "label": "TENUTA", "durationSeconds": 1, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
+        { "type": "ANNOUNCE", "label": "GIÙ", "durationSeconds": 0.7, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
+        { "type": "ACTION", "label": "GIÙ", "durationSeconds": 3, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
+
+        { "type": "REST", "label": "RIPOSO", "durationSeconds": 90 },
+
+        { "type": "INFO", "label": "PROSSIMO ESERCIZIO...", "durationSeconds": 3 }
+      ]
       ```

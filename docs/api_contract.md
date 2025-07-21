@@ -1,30 +1,48 @@
-# Contratto API e Dati Mock
+# Contratto API: ExecutionPlan
 
-Questo documento definisce il contratto dati tra il frontend e il backend. Il frontend svilupperà basandosi su queste strutture. Il backend dovrà implementare API che restituiscano dati conformi a questo contratto.
+Il `ExecutionPlan` è il contratto dati fondamentale tra backend e frontend. È una **lista di "frame"** che il backend pre-compila e il frontend esegue.
 
-## 1. Oggetto Workout
-```json
-{
-  "id": "workout-uuid-001",
-  "date": "2025-07-21",
-  "name": "Spinta A - Petto e Tricipiti",
-  "items": [
-    { "exerciseId": "ex-001", "exerciseName": "Panca Piana", "sets": 3, "reps": 8 },
-    { "exerciseId": "ex-003", "exerciseName": "Plank", "sets": 2, "durationSeconds": 60 }
-  ]
+## Struttura del Frame
+Ogni frame nell'array `ExecutionPlan` è un oggetto con la seguente struttura essenziale:
+
+```typescript
+interface Frame {
+  type: "ANNOUNCE" | "ACTION" | "REST" | "INFO";
+  label: string; // Testo principale da visualizzare (es: "SU", "RIPOSO")
+  durationSeconds: number; // Durata di visualizzazione del frame
+  metadata?: { // Dati contestuali opzionali per la UI
+    exerciseName?: string;
+    seriesTotal?: number;
+    seriesCurrent?: number;
+    repsTotal?: number;
+    repsCurrent?: number;
+  }
 }
 ```
 
-## 2. Oggetto ExecutionPlan
+## Esempio Pratico: 1 Serie di Squat
+Questo esempio mostra come uno squat (2 ripetizioni) con fasi `up`(2s), `hold`(1s) e `down`(3s) viene scomposto dal "Regista" (backend) in una lista di frame per il "Player" (frontend).
+
 ```json
 [
-  { "type": "PREPARE", "durationSeconds": 5 },
-  { "type": "ANNOUNCE", "exerciseName": "Panca Piana" },
-  { "type": "EXERCISE", "set": 1, "reps": 8 },
-  { "type": "REST", "durationSeconds": 90 },
-  { "type": "EXERCISE", "set": 2, "reps": 8 },
-  { "type": "REST", "durationSeconds": 90 },
-  { "type": "EXERCISE", "set": 3, "reps": 8 },
-  { "type": "FINISHED" }
+  { "type": "INFO", "label": "SQUAT - SERIE 1/2", "durationSeconds": 3, "metadata": {"seriesCurrent": 1, "seriesTotal": 2} },
+
+  { "type": "ANNOUNCE", "label": "SU", "durationSeconds": 0.7, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
+  { "type": "ACTION", "label": "SU", "durationSeconds": 2, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
+  { "type": "ANNOUNCE", "label": "TENUTA", "durationSeconds": 0.7, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
+  { "type": "ACTION", "label": "TENUTA", "durationSeconds": 1, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
+  { "type": "ANNOUNCE", "label": "GIÙ", "durationSeconds": 0.7, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
+  { "type": "ACTION", "label": "GIÙ", "durationSeconds": 3, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
+
+  { "type": "ANNOUNCE", "label": "SU", "durationSeconds": 0.7, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
+  { "type": "ACTION", "label": "SU", "durationSeconds": 2, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
+  { "type": "ANNOUNCE", "label": "TENUTA", "durationSeconds": 0.7, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
+  { "type": "ACTION", "label": "TENUTA", "durationSeconds": 1, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
+  { "type": "ANNOUNCE", "label": "GIÙ", "durationSeconds": 0.7, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
+  { "type": "ACTION", "label": "GIÙ", "durationSeconds": 3, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
+
+  { "type": "REST", "label": "RIPOSO", "durationSeconds": 90 },
+
+  { "type": "INFO", "label": "PROSSIMO ESERCIZIO...", "durationSeconds": 3 }
 ]
 ```
