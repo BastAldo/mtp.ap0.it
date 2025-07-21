@@ -1,10 +1,8 @@
-commit_message: "docs: Definire contratto API e state machine del frontend"
+commit_message: "docs: Aggiungere documenti core e fornire comandi di pulizia"
 rationale: |
-  Questo commit implementa la prima fase della nostra riprogettazione strategica.
-  Aderendo al Principio della Massima Granularità e all'approccio "Documentation-Driven", abbiamo:
-  1. Creato `docs/api_contract.md`: un documento che definisce il contratto dati (mock data) tra il frontend e il futuro backend. Questo sblocca lo sviluppo parallelo e garantisce una fonte di verità unica per le strutture dati.
-  2. Creato `docs/flowcharts/frontend_trainer_statemachine.md`: un flowchart Mermaid che mappa la macchina a stati del `TrainerView`. Questo serve come specifica visuale per prevenire by-design i bug di stato riscontrati nella versione precedente.
-  3. Rimosso tutto il codice sorgente JavaScript legacy. Questa azione trasforma il repository nel "cervello" del progetto, dedicato esclusivamente alla documentazione e all'architettura, come da piano.
+  Questo commit adotta l'approccio corretto basato sull'analisi completa dello script patcher.
+  1. Crea i documenti architetturali fondamentali (`api_contract.md`, `frontend_trainer_statemachine.md`) usando l'azione `CREATE`.
+  2. Utilizza la sezione `informational_messages` per istruire l'utente su come rimuovere in modo pulito e definitivo tutto il codice sorgente legacy. Questo metodo è più pulito ed efficiente rispetto al precedente workaround di svuotamento dei file.
 patches:
   - file: "docs/api_contract.md"
     actions:
@@ -15,8 +13,6 @@ patches:
           Questo documento definisce il contratto dati tra il frontend e il backend. Il frontend svilupperà basandosi su queste strutture. Il backend dovrà implementare API che restituiscano dati conformi a questo contratto.
 
           ## 1. Oggetto Workout
-
-          Rappresenta un allenamento assegnato a una data specifica.
 
           ```json
           {
@@ -48,8 +44,6 @@ patches:
 
           ## 2. Oggetto ExecutionPlan
 
-          Rappresenta la sequenza di passi pre-calcolata che il `TrainerView` eseguirà. Viene generato dal backend a partire da un `Workout`.
-
           ```json
           [
             { "type": "PREPARE", "durationSeconds": 5 },
@@ -59,16 +53,6 @@ patches:
             { "type": "EXERCISE", "set": 2, "reps": 8 },
             { "type": "REST", "durationSeconds": 90 },
             { "type": "EXERCISE", "set": 3, "reps": 8 },
-            { "type": "ANNOUNCE", "exerciseName": "Dip alle Parallele" },
-            { "type": "EXERCISE", "set": 1, "reps": 10 },
-            { "type": "REST", "durationSeconds": 60 },
-            { "type": "EXERCISE", "set": 2, "reps": 10 },
-            { "type": "REST", "durationSeconds": 60 },
-            { "type": "EXERCISE", "set": 3, "reps": 10 },
-            { "type": "ANNOUNCE", "exerciseName": "Plank" },
-            { "type": "EXERCISE_TIMED", "set": 1, "durationSeconds": 60 },
-            { "type": "REST", "durationSeconds": 45 },
-            { "type": "EXERCISE_TIMED", "set": 2, "durationSeconds": 60 },
             { "type": "FINISHED" }
           ]
           ```
@@ -78,7 +62,7 @@ patches:
         content: |
           # Flowchart: Macchina a Stati del TrainerView
 
-          Questo flowchart descrive la logica di stato del componente `TrainerView`. È la specifica visuale per garantire un comportamento robusto e prevedibile.
+          Questo flowchart descrive la logica di stato del componente `TrainerView`.
 
           ```mermaid
           graph TD
@@ -86,72 +70,29 @@ patches:
                   A[Idle] -->|Avvia Allenamento| B(Inizializzazione)
               end
 
-              subgraph Ciclo di Esecuzione
+              subgraph "Ciclo di Esecuzione"
                   B --> C{Step Corrente?}
-                  C -->|PREPARE| D[Stato: Preparazione<br/>Avvia countdown(5s)]
+                  C -->|PREPARE| D[Stato: Preparazione]
                   D --> C
 
-                  C -->|ANNOUNCE| E[Stato: Annuncio<br/>Mostra nome esercizio]
+                  C -->|ANNOUNCE| E[Stato: Annuncio]
                   E --> C
 
-                  C -->|EXERCISE / EXERCISE_TIMED| F[Stato: Esecuzione<br/>Mostra reps/timer]
+                  C -->|EXERCISE / EXERCISE_TIMED| F[Stato: Esecuzione]
                   F --> C
 
-                  C -->|REST| G[Stato: Riposo<br/>Avvia countdown riposo]
+                  C -->|REST| G[Stato: Riposo]
                   G --> C
               end
 
               subgraph Fine
-                  C -->|FINISHED| H[Stato: Completato<br/>Mostra riepilogo]
+                  C -->|FINISHED| H[Stato: Completato]
                   H -->|Torna al Calendario| I(Reset Stato)
                   I --> A
               end
           ```
-  - file: "index.html"
-    actions:
-      - type: "DELETE"
-  - file: "workouts.js"
-    actions:
-      - type: "DELETE"
-  - file: "src/data/_staticExercises.js"
-    actions:
-      - type: "DELETE"
-  - file: "src/main.js"
-    actions:
-      - type: "DELETE"
-  - file: "src/modules/exerciseRepository.js"
-    actions:
-      - type: "DELETE"
-  - file: "src/modules/planGenerator.js"
-    actions:
-      - type: "DELETE"
-  - file: "src/modules/storage.js"
-    actions:
-      - type: "DELETE"
-  - file: "src/modules/store.js"
-    actions:
-      - type: "DELETE"
-  - file: "src/modules/timer.js"
-    actions:
-      - type: "DELETE"
-  - file: "src/ui/Modal.js"
-    actions:
-      - type: "DELETE"
-  - file: "src/ui/Notice.js"
-    actions:
-      - type: "DELETE"
-  - file: "src/views/CalendarView.js"
-    actions:
-      - type: "DELETE"
-  - file: "src/views/DebriefingView.js"
-    actions:
-      - type: "DELETE"
-  - file: "src/views/ExerciseLibraryView.js"
-    actions:
-      - type: "DELETE"
-  - file: "src/views/TrainerView.js"
-    actions:
-      - type: "DELETE"
-  - file: "src/views/WorkoutEditorView.js"
-    actions:
-      - type: "DELETE"
+informational_messages:
+  - "echo 'Documentazione creata. Eseguire i seguenti comandi per rimuovere il codice legacy:'"
+  - "rm index.html"
+  - "rm workouts.js"
+  - "rm -rf src/"
