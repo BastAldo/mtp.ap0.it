@@ -1,30 +1,34 @@
-commit_message: "fix(docs): Correggere sintassi Mermaid nel flowchart di esecuzione"
+commit_message: "docs(flowchart): Aggiungere logica di Pausa e Termina al Player"
 rationale: |
-  Questo commit corregge un errore di sintassi nel diagramma di flusso `03_training_session_flow.md`.
-  La presenza di parentesi quadre all'interno dell'etichetta di un nodo (`Leggi Frame[Indice]`) causava un errore nel parser di Mermaid, impedendone la corretta visualizzazione.
-  L'etichetta è stata riformulata per rimuovere i caratteri speciali, rendendo la sintassi valida e compatibile con tutti i renderer.
+  Questo commit aggiorna il flowchart di esecuzione dell'allenamento (`03_training_session_flow.md`) per includere due interazioni utente fondamentali: la possibilità di mettere in pausa l'allenamento e di terminarlo in anticipo.
+  Il nuovo diagramma ora mostra chiaramente come queste azioni interrompono il normale flusso di esecuzione dei frame, rendendo la documentazione della vista Player più completa e realistica.
 patches:
   - file: "docs/flowcharts/03_training_session_flow.md"
     content: |
       # Livello 2: Flusso di Esecuzione dell'Allenamento (Player)
 
-      Questo diagramma dettaglia le operazioni all'interno del Player durante una sessione di allenamento attiva.
+      Questo diagramma dettaglia le operazioni all'interno del Player, includendo le interazioni di pausa e interruzione.
 
       ```mermaid
       graph TD
           A[Start: Utente clicca 'Avvia Allenamento'] --> B[Richiesta ExecutionPlan al Backend];
-
+          
           subgraph Player Loop
               B --> C[Carica ExecutionPlan e Inizializza Indice a 0];
               C --> D{Leggi Frame Corrente};
-              D --> E{Render UI in base a 'frame.type'<br>Mostra 'frame.label' e 'metadata'};
-              E --> F[Avvia Timer con 'frame.durationSeconds'];
-              F --> G{Timer Finito?};
-              G -- No --> F;
-              G -- Sì --> H{Incrementa Indice};
-              H --> I{Fine della lista?};
-              I -- No --> D;
-          end
+              D --> E{Render UI e avvia Timer};
 
-          I -- Sì --> J[Transizione a Vista Riepilogo];
+              E --> F{Azione Utente o Timer Finito?};
+              
+              F -- Timer Finito --> G{Incrementa Indice};
+              G --> H{Fine della lista?};
+              H -- No --> D;
+              
+              F -- Clicca Pausa --> I[Stato: In Pausa];
+              I --> |Clicca Riprendi| E;
+          end
+          
+          H -- Sì --> K[Transizione a Vista Riepilogo];
+          F -- Clicca Termina --> K;
+
       ```

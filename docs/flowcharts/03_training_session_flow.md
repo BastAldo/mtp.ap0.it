@@ -1,22 +1,27 @@
 # Livello 2: Flusso di Esecuzione dell'Allenamento (Player)
 
-Questo diagramma dettaglia le operazioni all'interno del Player durante una sessione di allenamento attiva.
+Questo diagramma dettaglia le operazioni all'interno del Player, includendo le interazioni di pausa e interruzione.
 
 ```mermaid
 graph TD
     A[Start: Utente clicca 'Avvia Allenamento'] --> B[Richiesta ExecutionPlan al Backend];
-
+    
     subgraph Player Loop
         B --> C[Carica ExecutionPlan e Inizializza Indice a 0];
         C --> D{Leggi Frame Corrente};
-        D --> E{Render UI in base a 'frame.type'<br>Mostra 'frame.label' e 'metadata'};
-        E --> F[Avvia Timer con 'frame.durationSeconds'];
-        F --> G{Timer Finito?};
-        G -- No --> F;
-        G -- Sì --> H{Incrementa Indice};
-        H --> I{Fine della lista?};
-        I -- No --> D;
-    end
+        D --> E{Render UI e avvia Timer};
 
-    I -- Sì --> J[Transizione a Vista Riepilogo];
+        E --> F{Azione Utente o Timer Finito?};
+        
+        F -- Timer Finito --> G{Incrementa Indice};
+        G --> H{Fine della lista?};
+        H -- No --> D;
+        
+        F -- Clicca Pausa --> I[Stato: In Pausa];
+        I --> |Clicca Riprendi| E;
+    end
+    
+    H -- Sì --> K[Transizione a Vista Riepilogo];
+    F -- Clicca Termina --> K;
+
 ```
