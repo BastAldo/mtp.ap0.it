@@ -1,50 +1,94 @@
-commit_message: "docs: Aggiungere guida su workflow e uso del patcher"
+commit_message: "docs: Aggiungere documentazione core e comandi di pulizia"
 rationale: |
-  Per garantire coerenza tra tutte le istanze dell'architetto, questo commit introduce un documento fondamentale: `workflow_e_strumenti.md`.
-  Questo file spiega il funzionamento dello script `patcher.py`, con un focus specifico sulla gestione delle operazioni sui file.
-  Chiarisce che le operazioni distruttive (come l'eliminazione) non vengono eseguite direttamente, ma vengono gestite tramite la sezione `informational_messages`, che istruisce l'utente sui comandi manuali da eseguire.
-  Questa documentazione è cruciale per prevenire errori e standardizzare il nostro processo di lavoro.
+  Questo commit stabilisce le fondamenta architetturali del progetto, basandosi sulla conoscenza completa e definitiva dello script `patcher.py`.
+  1.  Crea i documenti di specifica (`api_contract.md`, `frontend_trainer_statemachine.md`) e la guida al workflow (`workflow_e_strumenti.md`). Ogni file viene creato o sovrascritto interamente, in accordo con il funzionamento dello script.
+  2.  Aggiunge la documentazione sullo script stesso, per garantire che tutte le istanze future operino correttamente.
+  3.  Utilizza la sezione `commands` per elencare le istruzioni di pulizia manuale, il metodo corretto previsto dallo script per operazioni esterne alla modifica dei file.
 patches:
+  - file: "docs/api_contract.md"
+    content: |
+      # Contratto API e Dati Mock
+
+      Questo documento definisce il contratto dati tra il frontend e il backend. Il frontend svilupperà basandosi su queste strutture. Il backend dovrà implementare API che restituiscano dati conformi a questo contratto.
+
+      ## 1. Oggetto Workout
+      ```json
+      {
+        "id": "workout-uuid-001",
+        "date": "2025-07-21",
+        "name": "Spinta A - Petto e Tricipiti",
+        "items": [
+          { "exerciseId": "ex-001", "exerciseName": "Panca Piana", "sets": 3, "reps": 8 },
+          { "exerciseId": "ex-003", "exerciseName": "Plank", "sets": 2, "durationSeconds": 60 }
+        ]
+      }
+      ```
+
+      ## 2. Oggetto ExecutionPlan
+      ```json
+      [
+        { "type": "PREPARE", "durationSeconds": 5 },
+        { "type": "ANNOUNCE", "exerciseName": "Panca Piana" },
+        { "type": "EXERCISE", "set": 1, "reps": 8 },
+        { "type": "REST", "durationSeconds": 90 },
+        { "type": "EXERCISE", "set": 2, "reps": 8 },
+        { "type": "REST", "durationSeconds": 90 },
+        { "type": "EXERCISE", "set": 3, "reps": 8 },
+        { "type": "FINISHED" }
+      ]
+      ```
+  - file: "docs/flowcharts/frontend_trainer_statemachine.md"
+    content: |
+      # Flowchart: Macchina a Stati del TrainerView
+
+      ```mermaid
+      graph TD
+          subgraph Inizio
+              A[Idle] -->|Avvia Allenamento| B(Inizializzazione)
+          end
+          subgraph Ciclo Esecuzione
+              B --> C{Step Corrente?}
+              C -->|PREPARE| D[Preparazione]
+              D --> C
+              C -->|ANNOUNCE| E[Annuncio Esercizio]
+              E --> C
+              C -->|EXERCISE / TIMED| F[Esecuzione]
+              F --> C
+              C -->|REST| G[Riposo]
+              G --> C
+          end
+          subgraph Fine
+              C -->|FINISHED| H[Completato]
+              H -->|Chiudi| I(Reset)
+              I --> A
+          end
+      ```
   - file: "docs/workflow_e_strumenti.md"
-    actions:
-      - type: "CREATE"
-        content: |
-          # Guida al Workflow e agli Strumenti
+    content: |
+      # Guida al Workflow e allo script patcher.py
 
-          Questo documento è la fonte di verità per il nostro processo di sviluppo e per l'utilizzo degli strumenti interni, in particolare lo script `patcher.py`.
+      ## Funzionamento di `patcher.py`
+      Lo script `patcher.py` è il nostro meccanismo per applicare modifiche. Legge un file `patch.yaml` e opera in due fasi.
 
-          ## Il Ruolo di `patcher.py`
+      ### 1. Sezione `patches`
+      Questa è una lista di oggetti, ciascuno con una chiave `file` e una `content`. Per ogni oggetto:
+      - Lo script apre il file specificato in modalità scrittura (`'w'`).
+      - **Questo SOVRASCRIVE completamente il contenuto del file esistente o CREA il file se non esiste.** Non ci sono azioni complesse come `ADD` o `REPLACE` parziali.
 
-          Lo script `patcher.py` è il nostro unico meccanismo per applicare modifiche al repository. Applica una serie di operazioni definite in un file `patch.yaml`.
+      ### 2. Sezione `commands`
+      Questa è una lista di stringhe. Lo script **NON esegue** questi comandi. Li **mostra** all'utente come istruzioni da eseguire manualmente dopo l'applicazione del patch. È il metodo corretto per operazioni come l'eliminazione di file.
 
-          ## Struttura del `patch.yaml`
-
-          Il file YAML ha due sezioni principali: `patches` e `informational_messages`.
-
-          ### 1. La Sezione `patches`
-
-          Questa sezione gestisce la creazione e la modifica dei contenuti dei file. Le azioni supportate sono:
-
-          * `CREATE`: Crea un nuovo file con il contenuto specificato.
-          * `REPLACE`: Sostituisce un blocco di linee in un file esistente.
-          * `ADD_AFTER`: Inserisce un blocco di codice dopo una linea specifica.
-
-          **IMPORTANTE**: Lo script **non supporta un'azione di eliminazione (`DELETE`)** diretta.
-
-          ### 2. La Sezione `informational_messages`
-
-          Questa sezione è il metodo corretto per gestire operazioni che esulano dalla modifica dei contenuti, come l'eliminazione di file e directory.
-
-          Lo script non esegue i comandi in questa sezione. Invece, li **visualizza** all'utente come istruzioni da eseguire manualmente dopo l'applicazione del patch.
-
-          #### Esempio Corretto per l'Eliminazione
-
-          Per eliminare la directory `src`, non si deve tentare un'azione non supportata. L'approccio corretto è:
-
-          ```yaml
-          informational_messages:
-            - "echo 'Eseguire il seguente comando per la pulizia:'"
-            - "rm -rf src/"
-          ```
-
-          Questo garantisce che l'intento sia chiaro e che l'operazione venga eseguita in modo sicuro dall'utente.
+      #### Esempio Corretto:
+      ```yaml
+      patches:
+        - file: "README.md"
+          content: "Nuovo contenuto del README."
+      commands:
+        - "echo 'Per completare, eliminare i file temporanei:'"
+        - "rm -f *.tmp"
+      ```
+commands:
+  - "echo 'Documentazione creata. Eseguire i comandi seguenti per pulire il progetto dal codice legacy:'"
+  - "rm index.html"
+  - "rm workouts.js"
+  - "rm -rf src/"
