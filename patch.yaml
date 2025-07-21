@@ -1,56 +1,23 @@
-commit_message: "docs(api): Ripristinare esempio essenziale in api_contract"
+commit_message: "docs(flowchart): Creare diagramma di navigazione principale (Livello 1)"
 rationale: |
-  In seguito a un'importante correzione di rotta, questo commit ripristina l'esempio pratico di `ExecutionPlan` all'interno del file `api_contract.md`.
-  L'esempio, che mostra come uno squat viene scomposto in frame granulari, è fondamentale per tradurre la teoria astratta dell'architettura in una specifica tecnica chiara e inequivocabile per gli sviluppatori.
-  L'obiettivo è avere un documento che sia sia essenziale nella definizione che dettagliato nell'esempio.
+  Questo commit dà inizio alla nuova strategia di documentazione gerarchica.
+  1.  **Pulizia**: Rimuove il flowchart obsoleto (`frontend_player_logic.md`) tramite un comando post-esecuzione.
+  2.  **Creazione**: Genera il primo e più importante diagramma di alto livello (`01_main_flow.md`), che descrive la navigazione essenziale tra le viste dell'applicazione.
+  Questo approccio focalizzato, uno step alla volta, garantisce massima chiarezza e dettaglio.
+commands:
+  - "echo 'Pulizia del vecchio flowchart...'"
+  - "rm docs/flowcharts/frontend_player_logic.md"
 patches:
-  - file: "docs/api_contract.md"
+  - file: "docs/flowcharts/01_main_flow.md"
     content: |
-      # Contratto API: ExecutionPlan
+      # Livello 1: Flusso di Navigazione Principale
 
-      Il `ExecutionPlan` è il contratto dati fondamentale tra backend e frontend. È una **lista di "frame"** che il backend pre-compila e il frontend esegue.
+      Questo diagramma illustra la navigazione di alto livello tra le viste principali dell'applicazione. Rappresenta la "mappa" fondamentale del sito.
 
-      ## Struttura del Frame
-      Ogni frame nell'array `ExecutionPlan` è un oggetto con la seguente struttura essenziale:
-
-      ```typescript
-      interface Frame {
-        type: "ANNOUNCE" | "ACTION" | "REST" | "INFO";
-        label: string; // Testo principale da visualizzare (es: "SU", "RIPOSO")
-        durationSeconds: number; // Durata di visualizzazione del frame
-        metadata?: { // Dati contestuali opzionali per la UI
-          exerciseName?: string;
-          seriesTotal?: number;
-          seriesCurrent?: number;
-          repsTotal?: number;
-          repsCurrent?: number;
-        }
-      }
-      ```
-
-      ## Esempio Pratico: 1 Serie di Squat
-      Questo esempio mostra come uno squat (2 ripetizioni) con fasi `up`(2s), `hold`(1s) e `down`(3s) viene scomposto dal "Regista" (backend) in una lista di frame per il "Player" (frontend).
-
-      ```json
-      [
-        { "type": "INFO", "label": "SQUAT - SERIE 1/2", "durationSeconds": 3, "metadata": {"seriesCurrent": 1, "seriesTotal": 2} },
-
-        { "type": "ANNOUNCE", "label": "SU", "durationSeconds": 0.7, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
-        { "type": "ACTION", "label": "SU", "durationSeconds": 2, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
-        { "type": "ANNOUNCE", "label": "TENUTA", "durationSeconds": 0.7, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
-        { "type": "ACTION", "label": "TENUTA", "durationSeconds": 1, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
-        { "type": "ANNOUNCE", "label": "GIÙ", "durationSeconds": 0.7, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
-        { "type": "ACTION", "label": "GIÙ", "durationSeconds": 3, "metadata": {"repsCurrent": 1, "repsTotal": 2} },
-
-        { "type": "ANNOUNCE", "label": "SU", "durationSeconds": 0.7, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
-        { "type": "ACTION", "label": "SU", "durationSeconds": 2, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
-        { "type": "ANNOUNCE", "label": "TENUTA", "durationSeconds": 0.7, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
-        { "type": "ACTION", "label": "TENUTA", "durationSeconds": 1, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
-        { "type": "ANNOUNCE", "label": "GIÙ", "durationSeconds": 0.7, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
-        { "type": "ACTION", "label": "GIÙ", "durationSeconds": 3, "metadata": {"repsCurrent": 2, "repsTotal": 2} },
-
-        { "type": "REST", "label": "RIPOSO", "durationSeconds": 90 },
-
-        { "type": "INFO", "label": "PROSSIMO ESERCIZIO...", "durationSeconds": 3 }
-      ]
+      ```mermaid
+      graph TD
+          A[Avvio Applicazione] --> B(Vista Calendario);
+          B --> |Utente clicca 'Avvia Allenamento'| C(Vista Player);
+          C --> |Allenamento Terminato| D(Vista Riepilogo);
+          D --> |Utente clicca 'Torna al Calendario'| B;
       ```
