@@ -1,23 +1,29 @@
-commit_message: "docs(flowchart): Creare diagramma di navigazione principale (Livello 1)"
+commit_message: "docs(flowchart): Completare il diagramma di flusso principale (Livello 1)"
 rationale: |
-  Questo commit dà inizio alla nuova strategia di documentazione gerarchica.
-  1.  **Pulizia**: Rimuove il flowchart obsoleto (`frontend_player_logic.md`) tramite un comando post-esecuzione.
-  2.  **Creazione**: Genera il primo e più importante diagramma di alto livello (`01_main_flow.md`), che descrive la navigazione essenziale tra le viste dell'applicazione.
-  Questo approccio focalizzato, uno step alla volta, garantisce massima chiarezza e dettaglio.
-commands:
-  - "echo 'Pulizia del vecchio flowchart...'"
-  - "rm docs/flowcharts/frontend_player_logic.md"
+  In base al feedback dell'utente, questo commit aggiorna il flowchart di Livello 1 (`01_main_flow.md`) per renderlo una mappa completa ma generica di tutte le funzionalità principali dell'applicazione.
+  Il nuovo diagramma ora mostra chiaramente i due percorsi principali che un utente può intraprendere dalla vista Calendario:
+  1.  Il flusso di **Gestione**: per creare o modificare un allenamento.
+  2.  Il flusso di **Esecuzione**: per avviare un allenamento esistente.
+  Questo fornisce una visione d'insieme completa, come richiesto, prima di passare ai diagrammi di dettaglio di Livello 2.
 patches:
   - file: "docs/flowcharts/01_main_flow.md"
     content: |
-      # Livello 1: Flusso di Navigazione Principale
+      # Livello 1: Flusso Funzionale Generale
 
-      Questo diagramma illustra la navigazione di alto livello tra le viste principali dell'applicazione. Rappresenta la "mappa" fondamentale del sito.
+      Questo diagramma illustra una mappa completa ma generica di tutte le funzionalità principali dell'applicazione e dei percorsi che l'utente può intraprendere.
 
       ```mermaid
       graph TD
-          A[Avvio Applicazione] --> B(Vista Calendario);
-          B --> |Utente clicca 'Avvia Allenamento'| C(Vista Player);
-          C --> |Allenamento Terminato| D(Vista Riepilogo);
-          D --> |Utente clicca 'Torna al Calendario'| B;
+          A[Avvio App] --> B(Vista Calendario);
+
+          subgraph Flusso di Gestione
+              B --> |Clicca su un giorno vuoto o 'Modifica'| C(Editor Allenamento);
+              C --> |Salva modifiche| B;
+          end
+
+          subgraph Flusso di Esecuzione
+              B --> |Clicca 'Avvia Allenamento'| D(Player);
+              D --> |Fine Allenamento| E(Riepilogo);
+              E --> |Chiudi| B;
+          end
       ```

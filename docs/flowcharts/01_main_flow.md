@@ -1,11 +1,19 @@
-# Livello 1: Flusso di Navigazione Principale
+# Livello 1: Flusso Funzionale Generale
 
-Questo diagramma illustra la navigazione di alto livello tra le viste principali dell'applicazione. Rappresenta la "mappa" fondamentale del sito.
+Questo diagramma illustra una mappa completa ma generica di tutte le funzionalità principali dell'applicazione e dei percorsi che l'utente può intraprendere.
 
 ```mermaid
 graph TD
-    A[Avvio Applicazione] --> B(Vista Calendario);
-    B --> |Utente clicca 'Avvia Allenamento'| C(Vista Player);
-    C --> |Allenamento Terminato| D(Vista Riepilogo);
-    D --> |Utente clicca 'Torna al Calendario'| B;
+    A[Avvio App] --> B(Vista Calendario);
+
+    subgraph Flusso di Gestione
+        B --> |Clicca su un giorno vuoto o 'Modifica'| C(Editor Allenamento);
+        C --> |Salva modifiche| B;
+    end
+
+    subgraph Flusso di Esecuzione
+        B --> |Clicca 'Avvia Allenamento'| D(Player);
+        D --> |Fine Allenamento| E(Riepilogo);
+        E --> |Chiudi| B;
+    end
 ```
